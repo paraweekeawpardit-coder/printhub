@@ -36,7 +36,6 @@ export default function LoginFormShop({ setRegis }: RegisFormProps) {
 
         console.log("id",localStorage.getItem("shop_id"))
         console.log("name",localStorage.getItem("shop_name"))
-
         console.log("Log in success");
         router.push("/shop");
       } else {

@@ -175,20 +175,20 @@ export default function ShopServicesTab({
         {services.map((service, tIdx) => (
           <div
             key={service.id || tIdx}
-            className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs space-y-6"
+            className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6"
           >
             {/* Header: ชื่อประเภทบริการหลัก */}
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-4">
               <input
                 value={service.type}
                 onChange={(e) => updateServiceType(tIdx, e.target.value)}
                 placeholder="ชื่อบริการหลัก (เช่น พิมพ์เอกสาร, เข้าเล่ม)"
-                className="text-base font-bold text-[#0F2942] outline-none placeholder:text-slate-300 w-full"
+                className="w-full text-base font-semibold text-gray-900 outline-none placeholder:text-gray-300"
               />
               <button
                 type="button"
                 onClick={() => removeServiceType(tIdx)}
-                className="text-slate-400 hover:text-rose-500 transition-colors p-1"
+                className="p-1 text-gray-300 transition-colors hover:text-red-500"
               >
                 <Trash2 size={18} />
               </button>
@@ -199,19 +199,19 @@ export default function ShopServicesTab({
               {service.groups.map((group, gIdx) => (
                 <div
                   key={gIdx}
-                  className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3"
+                  className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/60 p-4"
                 >
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                  <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-2">
                     <input
                       value={group.group_name}
                       onChange={(e) => updateGroupName(tIdx, gIdx, e.target.value)}
                       placeholder="หัวข้อกลุ่มตัวเลือก (เช่น ขนาดกระดาษ, สี, การพิมพ์)"
-                      className="font-bold text-sm text-[#0F2942] bg-transparent outline-none w-full placeholder:text-slate-400"
+                      className="w-full bg-transparent text-sm font-semibold text-gray-900 outline-none placeholder:text-gray-400"
                     />
                     <button
                       type="button"
                       onClick={() => removeOptionGroup(tIdx, gIdx)}
-                      className="text-slate-400 hover:text-rose-500 transition-colors"
+                      className="text-gray-300 transition-colors hover:text-red-500"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -227,23 +227,23 @@ export default function ShopServicesTab({
                             updateRow(tIdx, gIdx, iIdx, "detail", e.target.value)
                           }
                           placeholder="รายละเอียด (เช่น A4, ขาวดำ, หน้าเดียว)"
-                          className="flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
+                          className="flex-1 rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
                         />
-                        <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 w-32">
+                        <div className="flex w-32 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-500/15">
                           <input
                             value={item.price}
                             onChange={(e) =>
                               updateRow(tIdx, gIdx, iIdx, "price", e.target.value)
                             }
                             placeholder="0"
-                            className="w-full text-right text-sm font-semibold text-[#0F2942] outline-none"
+                            className="w-full text-right text-sm font-semibold text-gray-900 outline-none"
                           />
-                          <span className="text-xs text-slate-400">บาท</span>
+                          <span className="text-xs text-gray-400">บาท</span>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeRow(tIdx, gIdx, iIdx)}
-                          className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
+                          className="p-1.5 text-gray-300 transition-colors hover:text-red-500"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -254,7 +254,7 @@ export default function ShopServicesTab({
                   <button
                     type="button"
                     onClick={() => addRow(tIdx, gIdx)}
-                    className="flex items-center gap-1 text-xs font-semibold text-[#2F6FED] hover:underline pt-1"
+                    className="flex items-center gap-1 pt-1 text-xs font-medium text-blue-500 hover:underline"
                   >
                     <Plus size={14} /> เพิ่มรายการในกลุ่มนี้
                   </button>
@@ -265,7 +265,7 @@ export default function ShopServicesTab({
             <button
               type="button"
               onClick={() => addOptionGroup(tIdx)}
-              className="w-full py-2.5 border border-dashed border-slate-300 rounded-xl text-xs font-semibold text-slate-600 hover:border-[#0F2942] hover:text-[#0F2942] transition-colors flex items-center justify-center gap-1"
+              className="flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-gray-300 py-2.5 text-xs font-medium text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-700"
             >
               <Plus size={14} /> เพิ่มกลุ่มรายละเอียดข้อมูล (เช่น ขนาดกระดาษ, สี)
             </button>
@@ -275,16 +275,16 @@ export default function ShopServicesTab({
         <button
           type="button"
           onClick={addServiceType}
-          className="flex items-center justify-center gap-2 w-full py-3 border border-slate-300 rounded-xl text-sm font-bold text-[#0F2942] hover:bg-slate-50 transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 py-3 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
         >
           <Plus size={16} /> เพิ่มประเภทบริการหลัก
         </button>
 
-        <div className="flex justify-end pt-4 border-t border-slate-100">
+        <div className="flex justify-end border-t border-gray-100 pt-4">
           <button
             onClick={onSave}
             disabled={saving}
-            className="rounded-xl bg-[#0F2942] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#16385c] transition-colors disabled:opacity-50"
+            className="rounded-lg bg-blue-500 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-600 disabled:opacity-50"
           >
             {saving ? "กำลังบันทึก..." : "บันทึกบริการพิมพ์"}
           </button>
@@ -293,10 +293,10 @@ export default function ShopServicesTab({
 
       {!isVerified && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/70 backdrop-blur-xs">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
             <Lock size={20} />
           </div>
-          <p className="text-sm font-bold text-[#0F2942] text-center px-6">
+          <p className="px-6 text-center text-sm font-semibold text-gray-900">
             คุณจะสามารถแก้ไขบริการพิมพ์ได้ เมื่อผ่านการยืนยันตัวตนจากผู้ดูแลระบบแล้ว
           </p>
         </div>
