@@ -225,6 +225,7 @@ export default function HomePage() {
   }, []);
 
   // ดึงข้อมูลร้านค้าจาก Backend
+  // ดึงข้อมูลร้านค้าจาก Backend
   const fetchShops = useCallback(async () => {
     setLoading(true);
     try {
@@ -243,6 +244,11 @@ export default function HomePage() {
       }
 
       const res = await fetch(`http://localhost:5000/api/customer/shops?${params.toString()}`);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
       const data = await res.json();
       if (data.success) {
         let result = data.data;
@@ -253,6 +259,7 @@ export default function HomePage() {
       }
     } catch (error) {
       console.error('Fetch error:', error);
+      setShops([]); // คืนค่าเป็นอาร์เรย์ว่างเพื่อไม่ให้ UI พัง
     } finally {
       setLoading(false);
     }
