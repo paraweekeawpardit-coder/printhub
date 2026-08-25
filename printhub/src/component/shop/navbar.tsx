@@ -10,7 +10,6 @@ export default function ShopNavbar() {
 
   useEffect(() => {
     const name = "PrintHub ลาดกระบัง";
-
     const id = "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9";
     setShopId(id);
 
