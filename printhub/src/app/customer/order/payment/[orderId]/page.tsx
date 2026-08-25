@@ -1,12 +1,18 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 
 export default function PaymentPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // ดึง orderId จาก Dynamic Path (/customer/order/payment/[orderId])
   const orderId = params?.orderId as string;
+
+  // ✅ ดึงราคาทั้งหมดที่ส่งมาจากหน้า Order ผ่าน Query Params
+  const queryTotalPrice = Number(searchParams.get('totalPrice')) || 0;
 
   // Countdown timer 5 minutes (300 seconds)
   const [timeLeft, setTimeLeft] = useState<number>(300);
@@ -18,13 +24,13 @@ export default function PaymentPage() {
   const [paymentStatus, setPaymentStatus] = useState<'IDLE' | 'PENDING' | 'REJECTED'>('IDLE');
 
   // ==========================================
-  // ข้อมูลจำลองสำหรับคำนวณค่าธรรมเนียมขั้นต่ำ
+  // คำนวณค่าธรรมเนียมขั้นต่ำจากยอดจริง
   // ==========================================
-  const printPrice = 1.00; // ยอดรวมงานพิมพ์จริง
-  const minOrderThreshold = 20.00; // ยอดสั่งซื้อขั้นต่ำของร้าน
+  const printPrice = queryTotalPrice; // ยอดรวมงานพิมพ์จริงจากหน้า Order
+  const minOrderThreshold = 20.00; // ยอดสั่งซื้อขั้นต่ำของร้าน (ตั้งค่าตามต้องการ)
 
   // คำนวณค่าธรรมเนียมส่วนต่างขั้นต่ำ
-  const minOrderFee = printPrice < minOrderThreshold ? minOrderThreshold - printPrice : 0;
+  const minOrderFee = printPrice < minOrderThreshold && printPrice > 0 ? minOrderThreshold - printPrice : 0;
   // ยอดสุทธิรวมทั้งหมด
   const totalPrice = printPrice + minOrderFee;
 
@@ -67,6 +73,11 @@ export default function PaymentPage() {
       setIsSubmitting(false);
       setPaymentStatus('PENDING');
       setErrorMessage(null);
+
+      // 🚀 เพิ่มส่วนนี้: รอให้ผู้ใช้เห็นสถานะ "กำลังรอ Admin ตรวจสอบ" 2 วินาที แล้วกลับหน้าหลัก
+      setTimeout(() => {
+        router.push('/customer'); // เปลี่ยนเป็น Path หน้าหลักของระบบคุณ เช่น '/customer' หรือ '/'
+      }, 2000);
     }, 1000);
   };
 
