@@ -51,7 +51,7 @@ async function countPdfPages(file: File): Promise<number> {
 
 export default function OrderPage() {
   const params = useParams();
-  const shopId = params?.shopId;
+  const shopId = params?.shop_id;
 
   const [shop, setShop] = useState<ShopInfo | null>(null);
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
@@ -83,49 +83,53 @@ export default function OrderPage() {
   }, []);
 
   useEffect(() => {
-    const fetchShopServices = async () => {
-      if (!shopId) return;
-      setLoading(true);
-      setFetchError('');
+  const fetchShopServices = async () => {
+    // 1. แปลง shopId ให้เป็น String ที่แน่นอนก่อนใช้
+    const currentShopId = Array.isArray(shopId) ? shopId[0] : shopId;
+    if (!currentShopId) return;
 
-      try {
-        const res = await fetch(`http://localhost:5000/api/customer/shops/${shopId}/services`);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    setLoading(true);
+    setFetchError('');
 
-        const result = await res.json();
-        if (result.success && result.data) {
-          const types: ServiceType[] = result.data.service_types || [];
-          setServiceTypes(types);
+    try {
+      const res = await fetch(`http://localhost:5000/api/customer/shops/${currentShopId}/services`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
 
-          if (result.data.shop) {
-            setShop({
-              id: result.data.shop.id,
-              shop_name: result.data.shop.shop_name,
-              open_time: result.data.shop.open_time ? result.data.shop.open_time.slice(0, 5) : '08:00',
-              close_time: result.data.shop.close_time ? result.data.shop.close_time.slice(0, 5) : '20:00',
-              rating: result.data.shop.rating || 5.0,
-            });
-          }
+      const result = await res.json();
 
-          if (types.length > 0) {
-            setSelectedTypeId(String(types[0].id));
-            if (types[0].details && types[0].details.length > 0) {
-              setSelectedDetailId(String(types[0].details[0].id));
-            }
-          }
-        } else {
-          setFetchError(result.message || 'ไม่สามารถโหลดข้อมูลบริการได้');
-        }
-      } catch (err) {
-        console.error('Fetch error:', err);
-        setFetchError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ Backend ได้');
-      } finally {
-        setLoading(false);
+      // 2. รองรับทั้งโครงสร้าง result.data หรือ result ตรงๆ
+      const responseData = result.data || result;
+      const types: ServiceType[] = responseData.service_types || responseData.services || [];
+      const shopData = responseData.shop || responseData;
+
+      setServiceTypes(types);
+
+      if (shopData && shopData.shop_name) {
+        setShop({
+          id: shopData.id,
+          shop_name: shopData.shop_name,
+          open_time: shopData.open_time ? String(shopData.open_time).slice(0, 5) : '08:00',
+          close_time: shopData.close_time ? String(shopData.close_time).slice(0, 5) : '20:00',
+          rating: shopData.rating || 5.0,
+        });
       }
-    };
 
-    fetchShopServices();
-  }, [shopId]);
+      if (types.length > 0) {
+        setSelectedTypeId(String(types[0].id));
+        if (types[0].details && types[0].details.length > 0) {
+          setSelectedDetailId(String(types[0].details[0].id));
+        }
+      }
+    } catch (err) {
+      console.error('Fetch error:', err);
+      setFetchError('ไม่สามารถเชื่อมต่อหรือโหลดข้อมูลจากระบบได้');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchShopServices();
+}, [shopId]);
 
   const currentServiceType = useMemo(() => {
     return serviceTypes.find((t) => String(t.id) === selectedTypeId);
@@ -304,7 +308,7 @@ export default function OrderPage() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
-              href="/"
+              href="/customer"
               className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3.5 py-2 rounded-xl transition active:scale-95"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
