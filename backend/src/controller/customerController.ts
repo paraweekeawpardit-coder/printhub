@@ -175,9 +175,15 @@ export const getShops = async (req: Request, res: Response) => {
 
 // 2. ฟังก์ชันดึง service_type และ service_detail ตามรหัสร้านค้าสำหรับหน้าสั่งพิมพ์
 export const getShopServices = async (req: Request, res: Response) => {
+  // ✅ ดึง shopId ออกมาจาก req.params
   const { shopId } = req.params;
 
   try {
+    // 🔍 ป้องกันกรณี shopId ไม่มีค่า หรือเป็น undefined/null
+    if (!shopId || shopId === 'undefined') {
+      return res.status(400).json({ success: false, message: 'กรุณาระบุ Shop ID' });
+    }
+
     const { data: shop, error } = await supabase
       .from('print_shop')
       .select(`
@@ -196,7 +202,9 @@ export const getShopServices = async (req: Request, res: Response) => {
           )
         )
       `)
-      .eq('id', shopId)
+      // ✅ แปลงเป็น Number ก่อนส่ง ถ้า ID ร้านค้าใน DB คุณเป็นตัวเลข (Integer)
+      // แต่ถ้า ID ร้านค้าใน DB เป็น UUID แบบ "2a1e1ec6-1abd-..." ให้ใช้ String(shopId) ครับ
+      .eq('id', isNaN(Number(shopId)) ? shopId : Number(shopId))
       .maybeSingle();
 
     if (error) {
