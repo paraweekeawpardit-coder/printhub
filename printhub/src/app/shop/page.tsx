@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import DashboardCard from "@/src/component/shop/dashboard-card";
 import OrderCard from "@/src/component/shop/order-card";
 import ShopNavbar from "@/src/component/shop/navbar";
-import { useParams } from "next/navigation";
 
 type Order = {
   id: string;
@@ -34,34 +33,69 @@ export default function ShopPage() {
   const [income, setIncome] = useState<string>("0.00 บาท");
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [shopId, setShopId] = useState<string>("");
 
   const router = useRouter();
-  
-  const params = useParams();
-  const shop_id = Array.isArray(params?.shop_id)
+
+  // =========================
+  // Get shop_id from localStorage
+  // =========================
+  useEffect(() => {
+    const id = "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9";
+
+    if (id) {
+      setShopId(id);
+    } else {
+      console.error("shop_id not found in localStorage");
+    }
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
+    if (!shopId) {
+      return;
+    }
+
     try {
       setLoading(true);
-      const headers = { shop_id: shop_id  };
 
-      const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.all([
-        axios.get("http://localhost:5000/shop/numWork", { headers }),
-        axios.get("http://localhost:5000/shop/getScore", { headers }),
-        axios.get("http://localhost:5000/shop/getIncome", { headers }),
-        axios.get("http://localhost:5000/shop/getTopOrder", { headers }),
-      ]);
+      const headers = {
+        shop_id: shopId,
+      };
+
+      console.log("Sending shop_id =", shopId);
+
+      const [numRes, scoreRes, incomeRes, ordersRes] =
+        await Promise.all([
+          axios.get("http://localhost:5000/shop/numWork", {
+            headers,
+          }),
+
+          axios.get("http://localhost:5000/shop/getScore", {
+            headers,
+          }),
+
+          axios.get("http://localhost:5000/shop/getIncome", {
+            headers,
+          }),
+
+          axios.get("http://localhost:5000/shop/getTopOrder", {
+            headers,
+          }),
+        ]);
 
       setNum(`${numRes.data.numWork ?? 0} รายการ`);
+
       setScore(`${scoreRes.data.score ?? 0.0} / 5.0`);
+
       setIncome(`${incomeRes.data.income ?? 0} บาท`);
+
       setOrders(ordersRes.data ?? []);
     } catch (err) {
       console.error("Fetch dashboard data error:", err);
     } finally {
       setLoading(false);
     }
-  }, [shop_id ]);
+  }, [shopId]);
 
   useEffect(() => {
     fetchDashboardData();
