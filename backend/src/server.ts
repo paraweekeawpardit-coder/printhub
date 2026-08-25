@@ -1,11 +1,13 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import Authroute from "./route/Auth.js";
-import supabase from "./config/supabase.js";
-// import Orderroute from "./route/order";
-import ShopRoute from "./route/Shop.js";
 import morgan from "morgan";
+import Authroute from "./route/Auth.js";
+import ShopRoute from "./route/Shop.js";
+import supabase from "./config/supabase.js";
+
+
+import customerRoute from "./route/customerRoute.js";
 
 dotenv.config();
 
@@ -36,9 +38,12 @@ app.get("/", (req: Request, res: Response) => {
   res.send("Backend is running!");
 });
 
+// Routes
 app.use("/auth", Authroute);
 app.use("/shop", ShopRoute);
-// app.use("/order", Orderroute);
+
+// Map Route Customer
+app.use("/api/customer", customerRoute);
 
 const PORT = process.env.PORT || 5000;
 
