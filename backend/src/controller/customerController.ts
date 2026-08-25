@@ -268,3 +268,72 @@ export const getAllServiceTypes = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// ดึงประวัติคำสั่งซื้อของลูกค้า (เรียงตามเวลาล่าสุด)
+export const getCustomerOrders = async (req: Request, res: Response) => {
+  const { customerId } = req.params;
+
+  try {
+    const { data: orders, error } = await supabase
+      .from('print_order')
+      .select(`
+        id,
+        order_date,
+        receive_date,
+        total_price,
+        description,
+        print_shop (
+          id,
+          shop_name,
+          phone,
+          profile_image
+        ),
+        work_status (
+          updated_at,
+          status (
+            state
+          )
+        ),
+        order_item (
+          id,
+          quantity,
+          unit_price,
+          subtotal,
+          service_detail (
+            detail
+          )
+        )
+      `)
+      .eq('customer_id', customerId)
+      .order('order_date', { ascending: false }); // เรียงจากเวลาล่าสุด
+
+    if (error) throw error;
+
+    const formattedOrders = (orders || []).map((order: any) => {
+      const latestWorkStatus = order.work_status && order.work_status.length > 0
+        ? order.work_status.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]
+        : null;
+
+      return {
+        id: order.id,
+        order_date: order.order_date,
+        receive_date: order.receive_date,
+        total_price: order.total_price,
+        description: order.description,
+        shop: order.print_shop || {},
+        current_status: latestWorkStatus?.status?.state || 'รอดำเนินการ',
+        items: (order.order_item || []).map((item: any) => ({
+          name: item.service_detail?.detail || 'บริการพิมพ์เอกสาร',
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          subtotal: item.subtotal,
+        })),
+      };
+    });
+
+    return res.status(200).json({ success: true, data: formattedOrders });
+  } catch (error: any) {
+    console.error('Error fetching customer orders:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

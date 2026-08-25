@@ -1,6 +1,8 @@
 import express from 'express';
 // นำเข้า controller ของคุณ (ปรับ path ตามจริงหากต่างจากนี้)
-import { getShops, getShopServices } from '../controller/customerController.js';
+import { getShops, getShopServices, getCustomerOrders } from '../controller/customerController.js';
+
+
 
 const router = express.Router();
 
@@ -8,5 +10,7 @@ const router = express.Router();
 router.get('/shops', getShops);
 
 router.get('/shops/:shopId/services', getShopServices);
+
+router.get('/customer/:customerId/orders', getCustomerOrders);
 
 export default router;

@@ -169,6 +169,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import ShopCard, { Shop } from '../../component/customer/ShopCard';
+import Link from 'next/link';
+
 
 // UR-04: รายการหมวดหมู่งานพิมพ์
 const PRINT_SERVICES = [
@@ -288,7 +290,9 @@ export default function HomePage() {
           <nav className="flex items-center gap-6 text-sm font-semibold">
             <a href="#" className="text-blue-600 border-b-2 border-blue-600 pb-0.5">หน้าแรก</a>
             <a href="#" className="text-slate-500 hover:text-slate-900 transition">เกี่ยวกับเรา</a>
-            <a href="#" className="text-slate-500 hover:text-slate-900 transition">คำสั่งซื้อของฉัน</a>
+            <Link href="/customer/orders" className="text-slate-500 hover:text-slate-900 transition">
+              คำสั่งซื้อของฉัน
+            </Link>
           </nav>
         </div>
       </header>
