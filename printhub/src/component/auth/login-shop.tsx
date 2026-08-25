@@ -31,8 +31,11 @@ export default function LoginFormShop({ setRegis }: RegisFormProps) {
 
       if (res.data.token) {
         localStorage.setItem("token", res.data.token);
-        localStorage.setItem("shop_id", res.data.shop_id);
-        localStorage.setItem("shop_name", res.data.shop_name);
+        localStorage.setItem("shop_id",res.data.id);
+        localStorage.setItem("shop_name",res.data.name);
+
+        console.log("id",localStorage.getItem("shop_id"))
+        console.log("name",localStorage.getItem("shop_name"))
 
         console.log("Log in success");
         router.push("/shop");
@@ -65,7 +68,8 @@ export default function LoginFormShop({ setRegis }: RegisFormProps) {
             value={logindata.contact}
             className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-navy placeholder:text-gray-400 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
             onChange={(e) =>
-              setData({ ...logindata, contact: e.target.value })
+              {setData({ ...logindata, contact: e.target.value })
+              console.log();}
             }
             required
           />

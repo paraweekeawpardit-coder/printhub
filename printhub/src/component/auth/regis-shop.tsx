@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState,useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import axios from "axios";
 import dynamic from "next/dynamic";
@@ -9,9 +9,9 @@ type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-const MapPicker = dynamic(() => import("../auth/map"), { ssr: false });
+const MapPicker = dynamic(() => import("./map"), { ssr: false });
 
-export default function RegisFormShop({ setRegis }: RegisFormProps) {
+export default function RegisFormShop({setRegis }: RegisFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [message, setMessage] = useState("");
@@ -99,23 +99,19 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
     try {
       const res = await axios.post(
         "http://localhost:5000/auth/registerShop",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
+        formData
       );
 
       if (res.data.message) {
-        alert("ลงทะเบียนสำเร็จ! กรุณาเข้าสู่ระบบ");
-        setRegis(false); // สลับกลับไปหน้า Login
+        setRegis(false);
+        setMessage("registed successed")
       } else {
-        setMessage(res.data.error || "เกิดข้อผิดพลาดในการลงทะเบียน");
+        setMessage(res.data.error || "Please try again");
       }
+
     } catch (err: any) {
       console.error(err);
-      setMessage(err.response?.data?.error || "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์");
+      setMessage(err.response?.data?.error || "server error");
     }
   }
 

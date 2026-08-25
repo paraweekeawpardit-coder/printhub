@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import LoginPanel from "../../component/auth/login-panel";
 import LoginFormCustomer from "../../component/auth/login-customer";
 import RegisFormCustomer from "../../component/auth/regis-customer";
-import LoginFormShop from "../../component/auth/regis-shop";
+import LoginFormShop from "../../component/auth/login-shop";
 import RegisFormShop from "../../component/auth/regis-shop";
 
 export default function Auth() {
@@ -13,13 +13,9 @@ export default function Auth() {
 
   return (
     <main className="flex min-h-screen">
-      {/* Left Panel */}
       <LoginPanel />
-
-      {/* Right Side */}
       <div className="flex flex-1 items-center justify-center bg-white px-8">
         <div className="w-full max-w-md">
-          {/* Role Switch */}
           <div className="mb-8 flex rounded-full bg-gray-100 p-1">
             <button
               onClick={() => setRole("customer")}

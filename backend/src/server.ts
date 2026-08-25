@@ -2,8 +2,9 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import Authroute from "./route/Auth.js";
+import supabase from "./config/supabase.js";
 // import Orderroute from "./route/order";
-// import Shoproute from "./route/Shop";
+import ShopRoute from "./route/Shop.js";
 import morgan from "morgan";
 
 dotenv.config();
@@ -36,7 +37,7 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 app.use("/auth", Authroute);
-// app.use("/shop", Shoproute);
+app.use("/shop", ShopRoute);
 // app.use("/order", Orderroute);
 
 const PORT = process.env.PORT || 5000;

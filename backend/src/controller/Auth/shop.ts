@@ -103,6 +103,7 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
           owner_name,
           email,
           phone: contact || null,
+          password: hashedPassword, // <-- FIX: password ไม่เคยถูกบันทึกลง DB มาก่อน ทำให้ login ไม่มี password ให้ตรวจสอบ
           profile_image: shopImagePath,
           address_id: newAddress.id,
           is_verify: false,
@@ -182,6 +183,20 @@ export const LoginShop = async (req: Request, res: Response): Promise<Response> 
       });
     }
 
+    // <-- FIX: เดิมไม่มีการตรวจสอบรหัสผ่านเลย ทำให้ login ผ่านได้ทันทีแค่มี contact ที่ถูกต้อง
+    if (!shop.password) {
+      return res.status(400).json({
+        error: "บัญชีนี้ยังไม่ได้ตั้งรหัสผ่าน",
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, shop.password);
+
+    if (!isPasswordValid) {
+      return res.status(400).json({
+        error: "Wrong password",
+      });
+    }
 
     const secretKey = process.env.JWT_SECRET;
     if (!secretKey) {
