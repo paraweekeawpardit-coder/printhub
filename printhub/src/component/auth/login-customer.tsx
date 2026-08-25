@@ -45,7 +45,7 @@ export default function LoginFormCustomer({ setRegis }: RegisFormProps) {
 
         console.log("login success");
 
-        router.push("/customer/home");
+        router.push("/customer");
 
       } else {
 
