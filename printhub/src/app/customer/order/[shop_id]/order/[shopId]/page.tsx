@@ -30,33 +30,48 @@ interface UploadedFileInfo {
   previewUrl: string;
   isImage: boolean;
   isPdf: boolean;
+  pageCount: number;
+}
+
+// นับจำนวนหน้า PDF อัตโนมัติ
+async function countPdfPages(file: File): Promise<number> {
+  try {
+    const text = await file.text();
+    const regex = /\/Type\s*\/Page[^s]/g;
+    const matches = text.match(regex);
+    if (matches && matches.length > 0) return matches.length;
+
+    const countMatch = text.match(/\/Count\s+(\d+)/);
+    if (countMatch && countMatch[1]) return parseInt(countMatch[1], 10);
+    return 1;
+  } catch {
+    return 1;
+  }
 }
 
 export default function OrderPage() {
   const params = useParams();
   const shopId = params?.shopId;
 
-  // Supabase Data States
   const [shop, setShop] = useState<ShopInfo | null>(null);
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string>('');
 
-  // Form Selections
   const [selectedTypeId, setSelectedTypeId] = useState<string>('');
   const [selectedDetailId, setSelectedDetailId] = useState<string>('');
   const [copies, setCopies] = useState<number>(1);
-  const [totalPages, setTotalPages] = useState<number>(1);
 
-  // Date & Time Validation States
+  const [pagePrintMode, setPagePrintMode] = useState<'ALL' | 'CUSTOM'>('ALL');
+  const [customPageRange, setCustomPageRange] = useState<string>('');
+  const [pageRangeError, setPageRangeError] = useState<string>('');
+
   const [pickupTime, setPickupTime] = useState<string>('');
   const [timeError, setTimeError] = useState<string>('');
 
-  // Upload States
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState<number>(0);
 
-  // คำนวณวันและเวลาปัจจุบันสำหรับป้องกันการเลือกย้อนหลัง
   const currentDateTimeString = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -67,7 +82,6 @@ export default function OrderPage() {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   }, []);
 
-  // 1. ดึงข้อมูล service_type และ service_detail เฉพาะร้านค้านี้จาก Backend
   useEffect(() => {
     const fetchShopServices = async () => {
       if (!shopId) return;
@@ -76,8 +90,9 @@ export default function OrderPage() {
 
       try {
         const res = await fetch(`http://localhost:5000/api/customer/shops/${shopId}/services`);
-        const result = await res.json();
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
 
+        const result = await res.json();
         if (result.success && result.data) {
           const types: ServiceType[] = result.data.service_types || [];
           setServiceTypes(types);
@@ -92,7 +107,6 @@ export default function OrderPage() {
             });
           }
 
-          // เลือกตัวเลือกแรกให้อัตโนมัติ
           if (types.length > 0) {
             setSelectedTypeId(String(types[0].id));
             if (types[0].details && types[0].details.length > 0) {
@@ -100,9 +114,9 @@ export default function OrderPage() {
             }
           }
         } else {
-          setFetchError(result.message || 'ไม่สามารถโหลดข้อมูลบริการของร้านนี้ได้');
+          setFetchError(result.message || 'ไม่สามารถโหลดข้อมูลบริการได้');
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error('Fetch error:', err);
         setFetchError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ Backend ได้');
       } finally {
@@ -113,17 +127,14 @@ export default function OrderPage() {
     fetchShopServices();
   }, [shopId]);
 
-  // หา Service Type ที่กำลังเลือก
   const currentServiceType = useMemo(() => {
     return serviceTypes.find((t) => String(t.id) === selectedTypeId);
   }, [serviceTypes, selectedTypeId]);
 
-  // หา Service Details ของ Type นั้นๆ
   const currentDetails = useMemo(() => {
     return currentServiceType?.details || [];
   }, [currentServiceType]);
 
-  // เมื่อเปลี่ยน service_type ให้สลับตัวเลือก detail แรกทันที
   const handleTypeChange = (typeId: string) => {
     setSelectedTypeId(typeId);
     const target = serviceTypes.find((t) => String(t.id) === typeId);
@@ -134,55 +145,28 @@ export default function OrderPage() {
     }
   };
 
-  // ตรวจสอบวันและเวลาเปิด-ปิดร้าน
-  const handlePickupTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setPickupTime(val);
-
-    if (!val) {
-      setTimeError('กรุณาระบุวันและเวลานัดหมายรับเอกสาร');
-      return;
-    }
-
-    const selectedDate = new Date(val);
-    const now = new Date();
-
-    // เช็คห้ามเลือกวัน/เวลาย้อนหลัง
-    if (selectedDate.getTime() < now.getTime()) {
-      setTimeError('❌ ไม่สามารถเลือกวันหรือเวลาย้อนหลังในอดีตได้');
-      return;
-    }
-
-    // เช็คช่วงเวลาเปิด-ปิดทำการของร้าน
-    if (shop) {
-      const selectedMinutes = selectedDate.getHours() * 60 + selectedDate.getMinutes();
-      const [openH, openM] = shop.open_time.split(':').map(Number);
-      const [closeH, closeM] = shop.close_time.split(':').map(Number);
-      const openMinutes = openH * 60 + openM;
-      const closeMinutes = closeH * 60 + closeM;
-
-      if (selectedMinutes < openMinutes || selectedMinutes > closeMinutes) {
-        setTimeError(`❌ ร้านเปิดให้บริการช่วง ${shop.open_time} - ${shop.close_time} น. เท่านั้น`);
-        return;
-      }
-    }
-
-    setTimeError('');
-  };
-
-  // จัดการอัปโหลดไฟล์
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
-      const newFiles: UploadedFileInfo[] = files.map((file) => ({
-        file,
-        previewUrl: URL.createObjectURL(file),
-        isImage: file.type.startsWith('image/'),
-        isPdf: file.type === 'application/pdf',
-      }));
+
+      const newFiles: UploadedFileInfo[] = await Promise.all(
+        files.map(async (file) => {
+          let count = 1;
+          if (file.type === 'application/pdf') {
+            count = await countPdfPages(file);
+          }
+
+          return {
+            file,
+            previewUrl: URL.createObjectURL(file),
+            isImage: file.type.startsWith('image/'),
+            isPdf: file.type === 'application/pdf',
+            pageCount: count,
+          };
+        })
+      );
 
       setUploadedFiles((prev) => [...prev, ...newFiles]);
-      setTotalPages((prev) => prev + files.length);
     }
   };
 
@@ -199,22 +183,123 @@ export default function OrderPage() {
     if (activeFileIndex >= updated.length) {
       setActiveFileIndex(Math.max(0, updated.length - 1));
     }
-    setTotalPages(Math.max(1, updated.length));
   };
 
-  // คำนวณราคาจริงจาก unit_price ของ Supabase
+  const totalFilePages = useMemo(() => {
+    if (uploadedFiles.length === 0) return 1;
+    return uploadedFiles.reduce((sum, item) => sum + item.pageCount, 0);
+  }, [uploadedFiles]);
+
+  const { actualPagesToPrint, rangeError } = useMemo(() => {
+    if (pagePrintMode === 'ALL') {
+      return { actualPagesToPrint: totalFilePages, rangeError: '' };
+    }
+
+    if (!customPageRange.trim()) {
+      return { actualPagesToPrint: 0, rangeError: 'กรุณาระบุหน้าที่ต้องการพิมพ์ เช่น 1-3' };
+    }
+
+    try {
+      const parts = customPageRange.split(',').map((p) => p.trim());
+      const selectedSet = new Set<number>();
+
+      for (const part of parts) {
+        if (!part) continue;
+
+        if (part.includes('-')) {
+          const [startStr, endStr] = part.split('-');
+          const start = Number(startStr);
+          const end = Number(endStr);
+
+          if (isNaN(start) || isNaN(end)) {
+            return { actualPagesToPrint: 0, rangeError: `❌ รูปแบบไม่ถูกต้อง: "${part}"` };
+          }
+          if (start < 1) {
+            return { actualPagesToPrint: 0, rangeError: '❌ เลขหน้าเริ่มต้นต้องไม่น้อยกว่า 1' };
+          }
+          if (start > end) {
+            return { actualPagesToPrint: 0, rangeError: `❌ หน้าเริ่มต้น (${start}) ต้องไม่มากกว่าหน้าสิ้นสุด (${end})` };
+          }
+          if (end > totalFilePages) {
+            return {
+              actualPagesToPrint: 0,
+              rangeError: `❌ ระบุหน้าเกิน! ไฟล์มีทั้งหมด ${totalFilePages} หน้า (คุณระบุถึงหน้า ${end})`,
+            };
+          }
+
+          for (let i = start; i <= end; i++) selectedSet.add(i);
+        } else {
+          const num = Number(part);
+          if (isNaN(num)) {
+            return { actualPagesToPrint: 0, rangeError: `❌ "${part}" ไม่ใช่ตัวเลขที่ถูกต้อง` };
+          }
+          if (num < 1) {
+            return { actualPagesToPrint: 0, rangeError: '❌ เลขหน้าต้องไม่น้อยกว่า 1' };
+          }
+          if (num > totalFilePages) {
+            return {
+              actualPagesToPrint: 0,
+              rangeError: `❌ หน้า ${num} เกินจำนวนหน้าในไฟล์! (ไฟล์มีทั้งหมด ${totalFilePages} หน้า)`,
+            };
+          }
+          selectedSet.add(num);
+        }
+      }
+
+      return { actualPagesToPrint: selectedSet.size, rangeError: '' };
+    } catch {
+      return { actualPagesToPrint: 0, rangeError: '❌ เกิดข้อผิดพลาดในการตรวจสอบหน้า' };
+    }
+  }, [pagePrintMode, customPageRange, totalFilePages]);
+
+  useEffect(() => {
+    setPageRangeError(rangeError);
+  }, [rangeError]);
+
+  const handlePickupTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setPickupTime(val);
+
+    if (!val) {
+      setTimeError('กรุณาระบุวันและเวลานัดหมายรับเอกสาร');
+      return;
+    }
+
+    const selectedDate = new Date(val);
+    const now = new Date();
+
+    if (selectedDate.getTime() < now.getTime()) {
+      setTimeError('❌ ไม่สามารถเลือกวันหรือเวลาย้อนหลังในอดีตได้');
+      return;
+    }
+
+    if (shop) {
+      const selectedMinutes = selectedDate.getHours() * 60 + selectedDate.getMinutes();
+      const [openH, openM] = shop.open_time.split(':').map(Number);
+      const [closeH, closeM] = shop.close_time.split(':').map(Number);
+      const openMinutes = openH * 60 + openM;
+      const closeMinutes = closeH * 60 + closeM;
+
+      if (selectedMinutes < openMinutes || selectedMinutes > closeMinutes) {
+        setTimeError(`❌ ร้านเปิดให้บริการช่วง ${shop.open_time} - ${shop.close_time} น. เท่านั้น`);
+        return;
+      }
+    }
+
+    setTimeError('');
+  };
+
   const calculatedPrice = useMemo(() => {
     const detail = currentDetails.find((d) => String(d.id) === selectedDetailId);
     const unitPrice = Number(detail?.unit_price) || 0;
-    const total = unitPrice * totalPages * Math.max(1, copies);
+    const total = unitPrice * actualPagesToPrint * Math.max(1, copies);
     return total.toFixed(2);
-  }, [currentDetails, selectedDetailId, totalPages, copies]);
+  }, [currentDetails, selectedDetailId, actualPagesToPrint, copies]);
 
   const currentFile = uploadedFiles[activeFileIndex];
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] font-sans pb-12">
-      {/* Top Bar */}
       <div className="bg-white border-b border-slate-200/80 sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -227,7 +312,6 @@ export default function OrderPage() {
               </svg>
               <span>ย้อนกลับ</span>
             </Link>
-
             <h1 className="font-bold text-lg text-slate-900 truncate">
               {shop ? shop.shop_name : 'กำลังโหลดข้อมูลร้านค้า...'}
             </h1>
@@ -244,9 +328,7 @@ export default function OrderPage() {
         </div>
       </div>
 
-      {/* Main Grid */}
       <main className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* ฝั่งซ้าย: Preview & Upload */}
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-white p-6 rounded-2xl border-2 border-dashed border-slate-300 hover:border-blue-500 transition cursor-pointer relative flex flex-col items-center justify-center text-center shadow-xs">
             <input
@@ -260,7 +342,7 @@ export default function OrderPage() {
               📤
             </div>
             <p className="font-bold text-sm text-slate-800">คลิกหรือลากไฟล์มาวางที่นี่เพื่ออัปโหลด</p>
-            <p className="text-xs text-slate-400 mt-0.5">รองรับไฟล์ PDF, รูปภาพ JPG, PNG (สูงสุด 50MB)</p>
+            <p className="text-xs text-slate-400 mt-0.5">รองรับไฟล์ PDF, รูปภาพ JPG, PNG</p>
           </div>
 
           {uploadedFiles.length > 0 && (
@@ -276,6 +358,7 @@ export default function OrderPage() {
                   }`}
                 >
                   <span className="truncate max-w-[120px]">{item.file.name}</span>
+                  <span className="text-[10px] text-slate-400">({item.pageCount} หน้า)</span>
                   <button
                     type="button"
                     onClick={(e) => {
@@ -292,7 +375,37 @@ export default function OrderPage() {
           )}
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
-            <h3 className="font-bold text-sm text-slate-800">ตัวอย่างเอกสาร (Preview)</h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm text-slate-800">ตัวอย่างเอกสาร (Preview)</h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {currentFile
+                    ? `ไฟล์นี้มี ${currentFile.pageCount} หน้า (รวมในออร์เดอร์: ${totalFilePages} หน้า)`
+                    : 'ยังไม่มีไฟล์ที่เลือก'}
+                </p>
+              </div>
+
+              {uploadedFiles.length > 1 && (
+                <div className="flex items-center gap-2 bg-slate-100 px-2.5 py-1 rounded-full text-xs font-semibold text-slate-600">
+                  <button
+                    onClick={() => setActiveFileIndex((prev) => Math.max(0, prev - 1))}
+                    disabled={activeFileIndex === 0}
+                    className="disabled:opacity-30 hover:text-blue-600"
+                  >
+                    ‹
+                  </button>
+                  <span>ไฟล์ {activeFileIndex + 1}/{uploadedFiles.length}</span>
+                  <button
+                    onClick={() => setActiveFileIndex((prev) => Math.min(uploadedFiles.length - 1, prev + 1))}
+                    disabled={activeFileIndex === uploadedFiles.length - 1}
+                    className="disabled:opacity-30 hover:text-blue-600"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="w-full h-[420px] bg-slate-900/5 border border-slate-200 rounded-xl flex items-center justify-center overflow-hidden relative">
               {currentFile ? (
                 currentFile.isImage ? (
@@ -322,7 +435,6 @@ export default function OrderPage() {
           </div>
         </div>
 
-        {/* ฝั่งขวา: รายละเอียดบริการจาก Supabase */}
         <div className="lg:col-span-5 space-y-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-5">
             <div className="bg-slate-100 -m-5 mb-0 p-3.5 rounded-t-2xl border-b border-slate-200 text-center font-bold text-sm text-slate-800">
@@ -335,16 +447,11 @@ export default function OrderPage() {
                 <p>กำลังดึงข้อมูลบริการจากร้านค้านี้...</p>
               </div>
             ) : fetchError ? (
-              <div className="py-8 text-center text-xs text-rose-500 font-medium">
-                {fetchError}
-              </div>
+              <div className="py-8 text-center text-xs text-rose-500 font-medium">{fetchError}</div>
             ) : serviceTypes.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">
-                ร้านค้านี้ยังไม่ได้ระบุประเภทบริการในระบบ
-              </div>
+              <div className="py-8 text-center text-xs text-slate-400">ร้านค้านี้ยังไม่ได้ระบุประเภทบริการในระบบ</div>
             ) : (
               <>
-                {/* 1. ประเภทงานพิมพ์ */}
                 <div className="space-y-1.5 pt-2">
                   <label className="text-xs font-bold text-slate-800 block">1. ประเภทงานพิมพ์</label>
                   <select
@@ -360,7 +467,6 @@ export default function OrderPage() {
                   </select>
                 </div>
 
-                {/* 2. ตัวเลือกย่อยและราคา */}
                 <div className="space-y-3">
                   <label className="text-xs font-bold text-slate-800 block">2. ตัวเลือกย่อยและราคา</label>
                   <select
@@ -379,43 +485,76 @@ export default function OrderPage() {
                     )}
                   </select>
 
-                  {/* จำนวนหน้า & จำนวนชุด */}
-                  <div className="flex items-center justify-between gap-3 text-xs pt-2">
-                    <span className="text-slate-600 font-medium shrink-0">• จำนวนหน้า</span>
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-2 pt-1 border-t border-slate-100">
+                    <span className="text-slate-700 font-bold text-xs block">• หน้าที่ต้องการพิมพ์</span>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
                       <button
                         type="button"
-                        onClick={() => setTotalPages(Math.max(1, totalPages - 1))}
-                        className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 font-bold hover:bg-slate-200 transition"
+                        onClick={() => {
+                          setPagePrintMode('ALL');
+                          setPageRangeError('');
+                        }}
+                        className={`py-2 px-3 rounded-xl border text-center transition font-medium ${
+                          pagePrintMode === 'ALL'
+                            ? 'bg-blue-50 border-blue-600 text-blue-700 font-bold'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
                       >
-                        -
+                        พิมพ์ทุกหน้า ({totalFilePages} หน้า)
                       </button>
-                      <span className="w-8 text-center font-bold text-slate-900">{totalPages}</span>
                       <button
                         type="button"
-                        onClick={() => setTotalPages(totalPages + 1)}
-                        className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 font-bold hover:bg-slate-200 transition"
+                        onClick={() => setPagePrintMode('CUSTOM')}
+                        className={`py-2 px-3 rounded-xl border text-center transition font-medium ${
+                          pagePrintMode === 'CUSTOM'
+                            ? 'bg-blue-50 border-blue-600 text-blue-700 font-bold'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
                       >
-                        +
+                        ระบุหน้าเอง
                       </button>
                     </div>
+
+                    {pagePrintMode === 'CUSTOM' && (
+                      <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <input
+                          type="text"
+                          placeholder={`เช่น 1-3 หรือ 1-3, 5 (จากทั้งหมด ${totalFilePages} หน้า)`}
+                          value={customPageRange}
+                          onChange={(e) => setCustomPageRange(e.target.value)}
+                          className={`w-full bg-white border rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-blue-500 transition ${
+                            pageRangeError ? 'border-rose-500 bg-rose-50/20' : 'border-slate-200'
+                          }`}
+                        />
+                        {pageRangeError ? (
+                          <p className="text-[11px] text-rose-600 font-medium leading-tight">{pageRangeError}</p>
+                        ) : (
+                          <p className="text-[10px] text-blue-600 font-medium">
+                            ✓ เลือกแล้ว {actualPagesToPrint} หน้า จากทั้งหมด {totalFilePages} หน้า
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex items-center justify-between gap-3 text-xs">
-                    <span className="text-slate-600 font-medium shrink-0">• จำนวนชุด</span>
+                  <div className="flex items-center justify-between gap-3 text-xs pt-2 border-t border-slate-100">
+                    <div>
+                      <span className="text-slate-700 font-bold block">• จำนวนชุดที่ต้องการ</span>
+                      <span className="text-[10px] text-slate-400">พิมพ์ซ้ำสำเนา</span>
+                    </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => setCopies(Math.max(1, copies - 1))}
-                        className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 font-bold hover:bg-slate-200 transition"
+                        className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 font-bold hover:bg-slate-200 transition text-sm"
                       >
                         -
                       </button>
-                      <span className="w-8 text-center font-bold text-slate-900">{copies}</span>
+                      <span className="w-8 text-center font-bold text-slate-900 text-sm">{copies}</span>
                       <button
                         type="button"
                         onClick={() => setCopies(copies + 1)}
-                        className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 font-bold hover:bg-slate-200 transition"
+                        className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 font-bold hover:bg-slate-200 transition text-sm"
                       >
                         +
                       </button>
@@ -423,8 +562,7 @@ export default function OrderPage() {
                   </div>
                 </div>
 
-                {/* 3. นัดหมายเวลารับ */}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 pt-2 border-t border-slate-100">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-bold text-slate-800 block">3. นัดหมายเวลารับเอกสาร</label>
                     {shop && (
@@ -451,21 +589,32 @@ export default function OrderPage() {
                   )}
                 </div>
 
-                {/* สรุปราคา */}
                 <div className="pt-4 border-t border-slate-100 space-y-3">
                   <div className="flex justify-between items-center text-sm">
                     <div>
                       <span className="font-medium text-slate-600 block">ราคารวมโดยประมาณ</span>
-                      <span className="text-[10px] text-slate-400">({totalPages} หน้า x {copies} ชุด)</span>
+                      <span className="text-[10px] text-slate-400">
+                        ({actualPagesToPrint} หน้า x {copies} ชุด = พิมพ์จริง {actualPagesToPrint * copies} หน้า)
+                      </span>
                     </div>
                     <span className="font-extrabold text-blue-600 text-2xl">฿{calculatedPrice}</span>
                   </div>
 
                   <button
-                    disabled={Boolean(timeError) || !pickupTime || currentDetails.length === 0}
+                    disabled={
+                      Boolean(timeError) ||
+                      Boolean(pageRangeError) ||
+                      !pickupTime ||
+                      currentDetails.length === 0 ||
+                      actualPagesToPrint === 0
+                    }
                     className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-sm py-3 rounded-xl transition shadow-md shadow-blue-500/20"
                   >
-                    {!pickupTime
+                    {pageRangeError
+                      ? 'เลขหน้าที่ต้องการพิมพ์ไม่ถูกต้อง'
+                      : actualPagesToPrint === 0
+                      ? 'กรุณาระบุหน้าที่ต้องการพิมพ์'
+                      : !pickupTime
                       ? 'กรุณาเลือกเวลานัดหมายรับเอกสาร'
                       : timeError
                       ? 'เวลาที่เลือกไม่ถูกต้อง'

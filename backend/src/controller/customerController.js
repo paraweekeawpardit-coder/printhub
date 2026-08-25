@@ -35,14 +35,14 @@ function checkIsOpen(openTime, closeTime) {
 exports.getShops = async (req, res) => {
   try {
     const {
-      search,
-      service_type,
-      min_price,
-      max_price,
-      user_lat,
-      user_lng,
-      is_open,
-      sort_by
+      search,        // UR-02: ค้นหาชื่อร้าน
+      service_type,  // UR-04: กรองประเภทบริการ
+      min_price,     // UR-03: ราคาต่ำสุด
+      max_price,     // UR-03: ราคาสูงสุด
+      user_lat,      // UR-01: พิกัดผู้ใช้ Lat
+      user_lng,      // UR-01: พิกัดผู้ใช้ Lng
+      is_open,       // UR-06: เฉพาะร้านที่เปิดอยู่ ('true')
+      sort_by        // UR-05: เรียงตาม 'rating' หรือ 'distance'
     } = req.query;
 
     let query = supabase
@@ -64,8 +64,10 @@ exports.getShops = async (req, res) => {
           province
         ),
         service_type (
+          id,
           type,
           service_detail (
+            id,
             price,
             detail
           )
@@ -109,15 +111,19 @@ exports.getShops = async (req, res) => {
         address: shop.address,
         distance,
         starting_price: startingPrice,
-        service_types: (shop.service_type || []).map((st) => st.type)
+        // ดึงรายการประเภทบริการที่มีในร้านนี้ออกมาเป็น Array
+        service_types: (shop.service_type || []).map((st) => st.type).filter(Boolean)
       };
     });
 
-    if (service_type) {
+    // ปรับปรุงการกรองประเภทบริการ (service_type)
+    if (service_type && service_type !== 'ทั้งหมด' && service_type !== 'all') {
+      const cleanFilter = service_type.trim().toLowerCase();
       formattedShops = formattedShops.filter((shop) =>
-        shop.service_types.some((t) =>
-          t.toLowerCase().includes(service_type.toLowerCase())
-        )
+        shop.service_types.some((t) => {
+          const cleanType = String(t).trim().toLowerCase();
+          return cleanType.includes(cleanFilter) || cleanFilter.includes(cleanType);
+        })
       );
     }
 
@@ -212,6 +218,30 @@ exports.getShopServices = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching shop services:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ดึงรายการประเภทบริการทั้งหมดที่มีอยู่ในระบบ Supabase (ไม่ซ้ำกัน)
+exports.getAllServiceTypes = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('service_type')
+      .select('type');
+
+    if (error) throw error;
+
+    // กรองเอาเฉพาะชื่อที่ไม่ซ้ำกัน และไม่ใช่ค่าว่าง
+    const uniqueTypes = Array.from(
+      new Set((data || []).map((item) => item.type?.trim()).filter(Boolean))
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: uniqueTypes,
+    });
+  } catch (error) {
+    console.error('Error fetching service types:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
