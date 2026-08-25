@@ -51,14 +51,22 @@ export default function ShopNavbar() {
         </Link>
 
         <Link
-          href="/shop/chat"
+          href={shopId ? `/shop/chat/${shopId}` : "/shop"}
           className="text-slate-500 hover:text-[#0F2942] transition-colors"
         >
           Chat
         </Link>
+
+          <Link
+          href={shopId ? `/shop/setting/${shopId}` : "/shop"}
+          className="text-slate-500 hover:text-[#0F2942] transition-colors"
+        >
+          Setting
+        </Link>
+
+
       </div>
 
-      {/* User */}
       <div className="flex items-center gap-2.5">
         <span className="text-sm font-medium text-slate-600">
           {username || "Shop"}

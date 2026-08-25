@@ -11,8 +11,10 @@ import OrderStatusTabs, {
 import OrderDetailCard, {
   OrderDetail,
 } from "@/src/component/shop/order-detail-card";
+import { useRouter } from "next/navigation";
 
 export default function OrderPage() {
+  const router = useRouter();
   const params = useParams();
   const shop_id = Array.isArray(params?.shop_id)
     ? params.shop_id[0]
@@ -64,7 +66,8 @@ export default function OrderPage() {
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {orders.length > 0 ? (
               orders.map((order) => (
-                <OrderDetailCard key={order.order_id} order={order} />
+                <OrderDetailCard key={order.order_id} order={order}  
+                onClick={() => router.push(`/shop/detail/${order.order_id}`)}/>
               ))
             ) : (
               <p className="col-span-full py-8 text-center text-slate-500">
