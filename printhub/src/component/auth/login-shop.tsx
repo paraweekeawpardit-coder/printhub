@@ -30,9 +30,9 @@ export default function LoginFormShop({ setRegis }: RegisFormProps) {
       );
 
       if (res.data.token) {
-        localStorage.setItem("token", res.data.token);
-        localStorage.setItem("shop_id",res.data.id);
-        localStorage.setItem("shop_name",res.data.name);
+        // localStorage.setItem("token", res.data.token);
+        localStorage.setItem("shop_id","2a1e1ec6-1abd-49df-bcfe-cc66e64521d9");
+        localStorage.setItem("shop_name","PrintHub ลาดกระบัง");
 
         console.log("id",localStorage.getItem("shop_id"))
         console.log("name",localStorage.getItem("shop_name"))

@@ -1,132 +1,174 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
-export const getOrder = async (
-  req: Request,
-  res: Response
-): Promise<Response> => {
+// 1. GET: ดึงรายละเอียดออเดอร์
+export const getOrder = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const order_id = (req.headers.order_id || req.headers["order_id"]) as string;
-
-    console.log("headers =", req.headers);
-    console.log("order_id =", order_id);
+    const order_id = (
+      req.params.id || 
+      req.query.order_id || 
+      req.headers.order_id || 
+      req.headers["order_id"]
+    ) as string;
 
     if (!order_id) {
-      return res.status(400).json({
-        error: "order_id is required",
-      });
+      return res.status(400).json({ error: "order_id is required" });
     }
 
     const { data: order, error } = await supabase
       .from("print_order")
-      .select("*")
+      .select(`
+        id,
+        order_no,
+        description,
+        total_price,
+        order_date,
+        receive_date,
+        customer:customer_id (
+          id,
+          first_name,
+          last_name,
+          contact,
+          address:address_id (
+            detail,
+            subdistrict,
+            district,
+            province,
+            postcode
+          )
+        ),
+        order_item (
+          id,
+          quantity,
+          unit_price,
+          subtotal,
+          service_detail:service_detail_id (
+            detail,
+            group_name,
+            service_type:service_type_id (
+              type
+            )
+          )
+        ),
+        print_file (
+          id,
+          filename,
+          file_url
+        ),
+        payment (
+          amount,
+          slip_url,
+          payment_date
+        ),
+        work_status (
+          updated_at,
+          status (
+            state
+          )
+        )
+      `)
       .eq("id", order_id)
       .single();
 
-    if (error) {
-      return res.status(400).json({
-        error: error.message,
-      });
+    if (error || !order) {
+      return res.status(404).json({ error: "Order not found" });
     }
 
-    if (!order) {
-      return res.status(404).json({
-        error: "Order not found",
-      });
-    }
+    // Map สถานะล่าสุด
+    const sortedStatuses = Array.isArray(order.work_status)
+      ? order.work_status.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      : [];
 
-    const { data: customer } = await supabase
-      .from("customer")
-      .select("first_name, last_name")
-      .eq("id", order.customer_id)
-      .single();
+    const firstStatusObj = sortedStatuses[0]?.status;
+    const latestStatus = Array.isArray(firstStatusObj)
+      ? firstStatusObj[0]?.state
+      : (firstStatusObj as any)?.state ?? "รอการดำเนินงาน";
 
-    const { data: orderItem } = await supabase
-      .from("order_item")
-      .select("quantity, unit_price, service_detail_id")
-      .eq("order_id", order.id)
-      .limit(1)
-      .single();
+    // Map Customer & Address
+    const formattedCustomer = Array.isArray(order.customer) ? order.customer[0] : order.customer;
+    const formattedAddress = Array.isArray(formattedCustomer?.address) 
+      ? formattedCustomer?.address[0] 
+      : formattedCustomer?.address;
 
-    let serviceDetail = null;
-    let serviceType = null;
+    // Map order_item
+    const items = (order.order_item || []).map((item: any) => {
+      const serviceDetail = Array.isArray(item.service_detail) ? item.service_detail[0] : item.service_detail;
 
-    if (orderItem?.service_detail_id) {
-      const { data: detail } = await supabase
-        .from("service_detail")
-        .select("detail, price, service_type_id")
-        .eq("id", orderItem.service_detail_id)
-        .single();
+      return {
+        id: item.id,
+        group_name: serviceDetail?.group_name || "รายการพิมพ์",
+        detail: serviceDetail?.detail || "",
+        quantity: item.quantity,
+        unit_price: Number(item.unit_price || 0),
+        subtotal: Number(item.subtotal || 0),
+      };
+    });
 
-      serviceDetail = detail;
-
-      if (detail?.service_type_id) {
-        const { data: stType } = await supabase
-          .from("service_type")
-          .select("type")
-          .eq("id", detail.service_type_id)
-          .single();
-
-        serviceType = stType;
-      }
-    }
-
-    const { data: file } = await supabase
-      .from("print_file")
-      .select("filename, file_url")
-      .eq("order_id", order.id)
-      .limit(1)
-      .single();
-
-    const { data: payment } = await supabase
-      .from("payment")
-      .select("amount")
-      .eq("order_id", order.id)
-      .single();
-
-    const { data: curStatus, error: statusError } = await supabase
-      .from("work_status")
-      .select("status_id, status(state)")
-      .eq("order_id", order.id)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (statusError && statusError.code !== "PGRST116") {
-      // PGRST116 = ไม่พบข้อมูล
-      return res.status(400).json({
-        error: statusError.message,
-      });
-    }
-
-    console.log("customer =", customer);
-    console.log("service =", serviceType);
-    console.log("detail =", serviceDetail);
-    console.log("file =", file);
-    console.log("payment =", payment);
-    console.log("status =", curStatus);
+    // Map Payment
+    const formattedPayment = Array.isArray(order.payment) ? order.payment[0] : order.payment;
 
     return res.status(200).json({
       order: {
-        order_id: order.id,
-        date: order.order_date,
-        customer_name: `${customer?.first_name ?? ""} ${
-          customer?.last_name ?? ""
-        }`.trim(),
-        qty: orderItem?.quantity ?? 0,
-        type: serviceType?.type ?? null,
-        detail: serviceDetail?.detail ?? order.description ?? null,
-        file_name: file?.filename ?? null,
-        file_url: file?.file_url ?? null,
-        status: (curStatus?.status as any)?.state ?? null,
-        price: orderItem?.unit_price ?? serviceDetail?.price ?? 0,
-        amount: payment?.amount ?? order.total_price ?? 0,
+        id: order.id,
+        order_no: order.order_no,
+        order_date: order.order_date,
+        receive_date: order.receive_date,
+        description: order.description,
+        total_price: Number(order.total_price || 0),
+        status_state: latestStatus,
+        customer: {
+          id: formattedCustomer?.id,
+          first_name: formattedCustomer?.first_name,
+          last_name: formattedCustomer?.last_name,
+          contact: formattedCustomer?.contact,
+          address: formattedAddress || null,
+        },
+        items: items,
+        files: order.print_file || [],
+        payment: formattedPayment || null,
       },
     });
+  } catch (err: any) {
+    console.error("Backend Error:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// 2. PATCH: อัปเดตสถานะออเดอร์
+export const updateOrderStatus = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const order_id = (req.params.id || req.headers.order_id || req.headers["order_id"]) as string;
+    const { status_state } = req.body;
+
+    if (!order_id || !status_state) {
+      return res.status(400).json({ error: "order_id and status_state are required" });
+    }
+
+    const { data: statusData, error: statusError } = await supabase
+      .from("status")
+      .select("id")
+      .eq("state", status_state)
+      .single();
+
+    if (statusError || !statusData) {
+      return res.status(400).json({ error: "Invalid status_state" });
+    }
+
+    const { error: insertError } = await supabase
+      .from("work_status")
+      .insert({
+        order_id: order_id,
+        status_id: statusData.id,
+        updated_at: new Date().toISOString()
+      });
+
+    if (insertError) {
+      return res.status(500).json({ error: insertError.message });
+    }
+
+    return res.status(200).json({ message: "Status updated successfully", status_state });
   } catch (err) {
     console.error("Backend Error:", err);
-    return res.status(500).json({
-      error: "Server Error",
-    });
+    return res.status(500).json({ error: "Server Error" });
   }
 };

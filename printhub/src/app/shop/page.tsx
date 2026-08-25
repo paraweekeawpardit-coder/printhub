@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import DashboardCard from "@/src/component/shop/dashboard-card";
 import OrderCard from "@/src/component/shop/order-card";
 import ShopNavbar from "@/src/component/shop/navbar";
+import { useParams } from "next/navigation";
 
 type Order = {
   id: string;
@@ -36,13 +37,13 @@ export default function ShopPage() {
 
   const router = useRouter();
   
-  // ควรปรับให้รับจาก Auth/Session หรือ Params ในอนาคต
-  const SHOP_ID = "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9"; 
+  const params = useParams();
+  const shop_id = Array.isArray(params?.shop_id)
 
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-      const headers = { shop_id: SHOP_ID };
+      const headers = { shop_id: shop_id  };
 
       const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.all([
         axios.get("http://localhost:5000/shop/numWork", { headers }),
@@ -60,7 +61,7 @@ export default function ShopPage() {
     } finally {
       setLoading(false);
     }
-  }, [SHOP_ID]);
+  }, [shop_id ]);
 
   useEffect(() => {
     fetchDashboardData();

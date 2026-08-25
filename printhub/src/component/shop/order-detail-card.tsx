@@ -19,11 +19,15 @@ export type OrderDetail = {
 
 type Props = {
   order: OrderDetail;
+  onClick?: () => void; // ✅ เพิ่ม onClick (ใส่ ? ไว้เพื่อไม่ให้พังหากบางจุดไม่ได้ส่งมา)
 };
 
-export default function OrderDetailCard({ order }: Props) {
+export default function OrderDetailCard({ order, onClick }: Props) {
   return (
-    <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div 
+      onClick={onClick} 
+      className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm cursor-pointer hover:border-slate-300 transition-colors"
+    >
       <div className="flex items-start justify-between">
         <div>
           <h3 className="font-semibold text-[#0F2942]">
@@ -48,19 +52,15 @@ export default function OrderDetailCard({ order }: Props) {
             <p>รูปแบบพิมพ์: {order.type}</p>
 
             <p className="flex items-center gap-1.5">
-              ไฟล์งาน:
-              <span>{order.file_name}</span>
-              {order.file_url && (
-                <a
-                  href={order.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-sky-600 hover:text-sky-700"
-                >
-                  <Eye size={12} />
-                  ดูไฟล์
-                </a>
-              )}
+              <a
+                href="แชทลูกค้า"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()} // ✅ ป้องกันไม่ให้การกดแชทไปสั่งงาน onClick ของการ์ด
+                className="inline-flex items-center gap-1 text-sky-600 hover:text-sky-700"
+              >
+                แชทกับลูกค้า
+              </a>
             </p>
           </div>
         </div>
@@ -77,7 +77,10 @@ export default function OrderDetailCard({ order }: Props) {
           </div>
         </div>
 
-        <OrderActions status={order.status} />
+        {/* ป้องกันไม่ให้การกด Action อื่นๆ ไปสั่งงาน onClick ของการ์ด */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <OrderActions status={order.status} />
+        </div>
       </div>
     </div>
   );
