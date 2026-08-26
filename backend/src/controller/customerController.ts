@@ -1020,3 +1020,109 @@ export const updateWorkStatus = async (req: Request, res: Response) => {
     });
   }
 };
+
+
+// ดึงรายละเอียดออร์เดอร์สำหรับหน้ารีวิว
+export const getReviewOrderDetail = async (req: Request, res: Response) => {
+  const { orderId } = req.params;
+
+  try {
+    const { data: order, error: orderError } = await supabase
+      .from("print_order")
+      .select(`
+        id,
+        order_date,
+        total_price,
+        description,
+        customer_id,
+        shop_id,
+        print_shop (
+          shop_name,
+          profile_image
+        ),
+        order_item (
+          id,
+          quantity,
+          unit_price,
+          subtotal
+        )
+      `)
+      .eq("id", orderId)
+      .single();
+
+    if (orderError || !order) {
+      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลออร์เดอร์" });
+    }
+
+    return res.status(200).json({ success: true, data: order });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// บันทึกการรีวิว (Review)
+export const submitOrderReview = async (req: Request, res: Response) => {
+  const { order_id, shop_id, customer_id, score, comment, image_url } = req.body;
+
+  if (!order_id || !score) {
+    return res.status(400).json({ success: false, message: "กรุณาระบุคะแนนรีวิว" });
+  }
+
+  try {
+    // ใช้ upsert เพื่ออัปเดตเมื่อมี order_id ซ้ำ
+    const { data, error } = await supabase
+      .from("review")
+      .upsert(
+        {
+          order_id,
+          shop_id,
+          customer_id,
+          score: Number(score),
+          comment: comment || null,
+          image_url: image_url || null,
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: "order_id" }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.status(201).json({ success: true, message: "บันทึกรีวิวสำเร็จ", data });
+  } catch (error: any) {
+    console.error("Submit review error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// บันทึกการรายงานปัญหา (Report)
+export const submitOrderReport = async (req: Request, res: Response) => {
+  const { order_id, shop_id, customer_id, severity, comment, image_url } = req.body;
+
+  if (!order_id || !severity) {
+    return res.status(400).json({ success: false, message: "กรุณาระบุระดับความรุนแรงของปัญหา" });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("report")
+      .insert({
+        order_id,
+        shop_id,
+        customer_id,
+        severity: Number(severity),
+        comment: comment || null,
+        image_url: image_url || null,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.status(201).json({ success: true, message: "บันทึกรายงานปัญหาสำเร็จ", data });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
