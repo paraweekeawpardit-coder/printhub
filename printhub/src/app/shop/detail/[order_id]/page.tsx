@@ -208,12 +208,12 @@ export default function OrderDetailPage() {
 
   const isConfirmed =
     order.status_state !==
-      "รอการดำเนินการ" &&
+      "รอการดำเนินงาน" &&
     order.status_state !==
       "ยกเลิกการพิมพ์";
 
   const statusStyles: Record<string, string> = {
-    "รอการดำเนินการ":
+    "รอการดำเนินงาน":
       "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
     "กำลังพิมพ์":
       "bg-blue-50 text-blue-700 ring-1 ring-blue-200",

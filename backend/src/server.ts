@@ -6,6 +6,8 @@ import dotenv from "dotenv";
 import morgan from "morgan";
 import Authroute from "./route/Auth.js";
 import ShopRoute from "./route/Shop.js";
+import supabase from "./config/supabase.js";
+
 import customerRoute from "./route/customerRoute.js";
 import mongoose, { Schema } from "mongoose";
 import connectDB from "./config/mongo.js";
@@ -22,6 +24,7 @@ app.use(
       "http://localhost:3000",
       "http://192.168.1.59:3000"
     ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",

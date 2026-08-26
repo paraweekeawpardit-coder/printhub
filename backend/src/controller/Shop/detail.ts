@@ -90,10 +90,7 @@ export const getOrder = async (
       .single();
 
     if (error || !order) {
-      console.error(
-        "Get order error:",
-        error
-      );
+      console.error("Get order error:", error);
 
       return res.status(404).json({
         error: "Order not found",
@@ -104,92 +101,50 @@ export const getOrder = async (
     // Latest Status
     // ==========================================
 
-    const sortedStatuses =
-      Array.isArray(
-        order.work_status
-      )
-        ? [...order.work_status].sort(
-            (
-              a: any,
-              b: any
-            ) =>
-              new Date(
-                b.updated_at
-              ).getTime() -
-              new Date(
-                a.updated_at
-              ).getTime()
-          )
-        : [];
+    const sortedStatuses = Array.isArray(order.work_status)
+      ? [...order.work_status].sort(
+          (a: any, b: any) =>
+            new Date(b.updated_at).getTime() -
+            new Date(a.updated_at).getTime()
+        )
+      : [];
 
-    const firstStatusObj =
-      sortedStatuses[0]?.status;
+    const firstStatusObj = sortedStatuses[0]?.status;
 
-    const latestStatus =
-      Array.isArray(
-        firstStatusObj
-      )
-        ? firstStatusObj[0]?.state
-        : (firstStatusObj as any)
-            ?.state ??
-          "รอการดำเนินการ";
+    const latestStatus = Array.isArray(firstStatusObj)
+      ? firstStatusObj[0]?.state
+      : (firstStatusObj as any)?.state ?? "รอการดำเนินงาน";
+    // NOTE: fixed the fallback spelling to match the rest of the app
+    // (was "รอการดำเนินการ", every other file uses "รอการดำเนินงาน")
 
     // ==========================================
     // Customer
     // ==========================================
 
-    const formattedCustomer =
-      Array.isArray(
-        order.customer
-      )
-        ? order.customer[0]
-        : order.customer;
+    const formattedCustomer = Array.isArray(order.customer)
+      ? order.customer[0]
+      : order.customer;
 
-    const formattedAddress =
-      Array.isArray(
-        formattedCustomer?.address
-      )
-        ? formattedCustomer.address[0]
-        : formattedCustomer?.address;
+    const formattedAddress = Array.isArray(formattedCustomer?.address)
+      ? formattedCustomer.address[0]
+      : formattedCustomer?.address;
 
     // ==========================================
     // Order Items
     // ==========================================
 
-    const items = (
-      order.order_item || []
-    ).map((item: any) => {
-
-      const serviceDetail =
-        Array.isArray(
-          item.service_detail
-        )
-          ? item.service_detail[0]
-          : item.service_detail;
+    const items = (order.order_item || []).map((item: any) => {
+      const serviceDetail = Array.isArray(item.service_detail)
+        ? item.service_detail[0]
+        : item.service_detail;
 
       return {
         id: item.id,
-
-        group_name:
-          serviceDetail?.group_name ||
-          "รายการพิมพ์",
-
-        detail:
-          serviceDetail?.detail ||
-          "",
-
-        quantity:
-          item.quantity,
-
-        unit_price:
-          Number(
-            item.unit_price || 0
-          ),
-
-        subtotal:
-          Number(
-            item.subtotal || 0
-          ),
+        group_name: serviceDetail?.group_name || "รายการพิมพ์",
+        detail: serviceDetail?.detail || "",
+        quantity: item.quantity,
+        unit_price: Number(item.unit_price || 0),
+        subtotal: Number(item.subtotal || 0),
       };
     });
 
@@ -197,12 +152,9 @@ export const getOrder = async (
     // Payment
     // ==========================================
 
-    const formattedPayment =
-      Array.isArray(
-        order.payment
-      )
-        ? order.payment[0]
-        : order.payment;
+    const formattedPayment = Array.isArray(order.payment)
+      ? order.payment[0]
+      : order.payment;
 
     // ==========================================
     // Response
@@ -211,59 +163,28 @@ export const getOrder = async (
     return res.status(200).json({
       order: {
         id: order.id,
-
-        order_no:
-          order.order_no,
-
-        order_date:
-          order.order_date,
-
-        receive_date:
-          order.receive_date,
-
-        description:
-          order.description,
-
-        total_price:
-          Number(
-            order.total_price || 0
-          ),
-
-        status_state:
-          latestStatus,
+        order_no: order.order_no,
+        order_date: order.order_date,
+        receive_date: order.receive_date,
+        description: order.description,
+        total_price: Number(order.total_price || 0),
+        status_state: latestStatus,
 
         customer: {
-          id:
-            formattedCustomer?.id,
-
-          first_name:
-            formattedCustomer?.first_name,
-
-          last_name:
-            formattedCustomer?.last_name,
-
-          contact:
-            formattedCustomer?.contact,
-
-          address:
-            formattedAddress || null,
+          id: formattedCustomer?.id,
+          first_name: formattedCustomer?.first_name,
+          last_name: formattedCustomer?.last_name,
+          contact: formattedCustomer?.contact,
+          address: formattedAddress || null,
         },
 
         items,
-
-        files:
-          order.print_file || [],
-
-        payment:
-          formattedPayment || null,
+        files: order.print_file || [],
+        payment: formattedPayment || null,
       },
     });
-
   } catch (err) {
-    console.error(
-      "Backend Error:",
-      err
-    );
+    console.error("Backend Error:", err);
 
     return res.status(500).json({
       error: "Server Error",
@@ -280,96 +201,120 @@ export const updateOrderStatus = async (
   res: Response
 ): Promise<Response> => {
   try {
-    const order_id =
-      req.params.id ||
-      (req.headers.order_id as string);
+    const { id } = req.params;
+    const { status_name } = req.body;
 
-    const {
-      status_state,
-    } = req.body;
+    // accept shop_id from query string OR header — the frontend now sends
+    // it as a query param (avoids a CORS preflight allow-list issue with
+    // custom headers), but keep the header path working too for anything
+    // else in the codebase that still sends it that way
+    const shop_id = (req.query.shop_id || req.headers.shop_id) as
+      | string
+      | undefined;
 
-    if (
-      !order_id ||
-      !status_state
-    ) {
+    // ==========================================
+    // Validate
+    // ==========================================
+
+    if (!id) {
       return res.status(400).json({
-        error:
-          "order_id and status_state are required",
+        error: "order_id is required",
+      });
+    }
+
+    if (!status_name) {
+      return res.status(400).json({
+        error: "status_name is required",
       });
     }
 
     // ==========================================
-    // Find Status
+    // ตรวจสอบ Order
     // ==========================================
 
-    const {
-      data: statusData,
-      error: statusError,
-    } = await supabase
+    const { data: order, error: orderError } = await supabase
+      .from("print_order")
+      .select("id, shop_id")
+      .eq("id", id)
+      .single();
+
+    if (orderError || !order) {
+      return res.status(404).json({
+        error: "Order not found",
+      });
+    }
+
+    // ==========================================
+    // ตรวจว่า Order เป็นของ Shop นี้
+    // ==========================================
+
+    if (shop_id && order.shop_id !== shop_id) {
+      return res.status(403).json({
+        error: "This order does not belong to this shop",
+      });
+    }
+
+    // ==========================================
+    // หา Status ID
+    // ==========================================
+
+    const { data: statusData, error: statusError } = await supabase
       .from("status")
-      .select("id")
-      .eq(
-        "state",
-        status_state
+      .select("id, state")
+      .eq("state", status_name)
+      .single();
+
+    if (statusError || !statusData) {
+      return res.status(404).json({
+        error: `Status '${status_name}' not found`,
+      });
+    }
+
+    // ==========================================
+    // Insert Work Status
+    // ==========================================
+
+    const { data: newWorkStatus, error: insertError } = await supabase
+      .from("work_status")
+      .insert([
+        {
+          order_id: id,
+          status_id: statusData.id,
+          updated_at: new Date().toISOString(),
+        },
+      ])
+      .select(
+        `
+        id,
+        order_id,
+        status_id,
+        updated_at,
+        status (
+          id,
+          state
+        )
+        `
       )
       .single();
 
-    if (
-      statusError ||
-      !statusData
-    ) {
-      return res.status(400).json({
-        error:
-          `Invalid status_state: ${status_state}`,
-      });
-    }
-
-    // ==========================================
-    // Insert New Work Status
-    // ==========================================
-
-    const {
-      data: newWorkStatus,
-      error: insertError,
-    } = await supabase
-      .from("work_status")
-      .insert({
-        order_id,
-        status_id:
-          statusData.id,
-        updated_at:
-          new Date().toISOString(),
-      })
-      .select()
-      .single();
-
     if (insertError) {
-      console.error(
-        "Insert work_status error:",
-        insertError
-      );
+      console.error("Insert work_status error:", insertError);
 
-      return res.status(500).json({
-        error:
-          insertError.message,
+      return res.status(400).json({
+        error: insertError.message,
       });
     }
+
+    // ==========================================
+    // Success
+    // ==========================================
 
     return res.status(200).json({
-      message:
-        "Status updated successfully",
-
-      status_state,
-
-      data:
-        newWorkStatus,
+      message: "Order status updated successfully",
+      data: newWorkStatus,
     });
-
   } catch (err) {
-    console.error(
-      "Update Status Error:",
-      err
-    );
+    console.error("Update Status Error:", err);
 
     return res.status(500).json({
       error: "Server Error",
