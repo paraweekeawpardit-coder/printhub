@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 
@@ -37,6 +37,9 @@ export default function ShopPage() {
 
   const router = useRouter();
 
+  // กันการยิงซ้ำซ้อนถ้ามีหลาย event (focus + visibilitychange) เด้งพร้อมกัน
+  const isFetchingRef = useRef(false);
+
   // =========================
   // Get shop_id from localStorage
   // =========================
@@ -50,55 +53,65 @@ export default function ShopPage() {
     }
   }, []);
 
-  const fetchDashboardData = useCallback(async () => {
-    if (!shopId) {
-      return;
-    }
+  const fetchDashboardData = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!shopId) {
+        return;
+      }
 
-    try {
-      setLoading(true);
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
 
-      const headers = {
-        shop_id: shopId,
-      };
+      try {
+        if (!opts?.silent) setLoading(true);
 
-      console.log("Sending shop_id =", shopId);
+        const headers = {
+          shop_id: shopId,
+        };
 
-      const [numRes, scoreRes, incomeRes, ordersRes] =
-        await Promise.all([
-          axios.get("http://localhost:5000/shop/numWork", {
-            headers,
-          }),
-
-          axios.get("http://localhost:5000/shop/getScore", {
-            headers,
-          }),
-
-          axios.get("http://localhost:5000/shop/getIncome", {
-            headers,
-          }),
-
-          axios.get("http://localhost:5000/shop/getTopOrder", {
-            headers,
-          }),
+        const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.all([
+          axios.get("http://localhost:5000/shop/numWork", { headers }),
+          axios.get("http://localhost:5000/shop/getScore", { headers }),
+          axios.get("http://localhost:5000/shop/getIncome", { headers }),
+          axios.get("http://localhost:5000/shop/getTopOrder", { headers }),
         ]);
 
-      setNum(`${numRes.data.numWork ?? 0} รายการ`);
+        setNum(`${numRes.data.numWork ?? 0} รายการ`);
+        setScore(`${scoreRes.data.score ?? 0.0} / 5.0`);
+        setIncome(`${incomeRes.data.income ?? 0} บาท`);
+        setOrders(ordersRes.data ?? []);
+      } catch (err) {
+        console.error("Fetch dashboard data error:", err);
+      } finally {
+        setLoading(false);
+        isFetchingRef.current = false;
+      }
+    },
+    [shopId]
+  );
 
-      setScore(`${scoreRes.data.score ?? 0.0} / 5.0`);
-
-      setIncome(`${incomeRes.data.income ?? 0} บาท`);
-
-      setOrders(ordersRes.data ?? []);
-    } catch (err) {
-      console.error("Fetch dashboard data error:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [shopId]);
-
+  // โหลดข้อมูลครั้งแรกตอนได้ shopId
   useEffect(() => {
     fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // โหลดข้อมูลใหม่แบบเงียบๆ (ไม่ขึ้น loading เต็มจอ) ทุกครั้งที่ผู้ใช้กลับมาที่แท็บ/หน้านี้อีกครั้ง
+  // เช่น กด back จากหน้า order detail หลังอัปเดตสถานะเสร็จ
+  useEffect(() => {
+    const handleFocus = () => fetchDashboardData({ silent: true });
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchDashboardData({ silent: true });
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [fetchDashboardData]);
 
   const handleOrderClick = (orderId: string) => {
