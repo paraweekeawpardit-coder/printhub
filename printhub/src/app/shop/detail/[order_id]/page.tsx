@@ -605,7 +605,7 @@ export default function OrderDetailPage() {
                   disabled={!isConfirmed}
                   onClick={() =>
                     router.push(
-                      `/chat?customer_id=${order.customer?.id}`
+                      `/shop/order/${order.shop_id || order.shop?.id}/chat?order_id=${orderId}`
                     )
                   }
                   className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors ${
