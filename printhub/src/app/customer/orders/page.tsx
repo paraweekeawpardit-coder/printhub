@@ -183,7 +183,7 @@ export default function CustomerOrdersPage() {
                   <span className="text-slate-500">ยอดรวมทั้งสิ้น:</span>
                   <span className="text-base font-extrabold text-blue-600">฿{Number(order.total_price).toFixed(2)}</span>
                   {/* ปุ่มแชตแสดงเฉพาะสถานะกำลังพิมพ์ */}
-                  {order.current_status === 'กำลังพิมพ์' && (
+                  {(order.current_status === 'กำลังพิมพ์' || order.current_status === 'พิมพ์เสร็จสิ้น') &&(
                     <Link
                       href={`/customer/order/${order.id}/chat`}
                       className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-3 py-1.5 rounded-xl transition"
