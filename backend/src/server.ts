@@ -4,7 +4,7 @@ import { Server } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
 import mongoose, { Schema, Document } from "mongoose";
-import connectDB from "./config/mongo";
+import connectDB from "./config/mongo.js";
 
 dotenv.config();
 
