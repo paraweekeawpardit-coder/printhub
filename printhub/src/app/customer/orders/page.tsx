@@ -30,23 +30,26 @@ export default function CustomerOrdersPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
 
-  const customerId = '50f1946f-79ed-47ad-939d-48d32b6a7547';
+  // กำหนด customer_id ให้ตรงกับที่สั่งซื้อจริงในฐานข้อมูล Supabase
+  const customerId = "50f1946f-79ed-47ad-939d-48d32b6a7547";
 
   useEffect(() => {
     const fetchOrders = async () => {
       setLoading(true);
+      setError("");
       try {
-        const res = await fetch(`http://localhost:5000/api/customer/${customerId}/orders`);
+        // ส่ง query param ?customerId=... ไปที่ Backend
+        const res = await fetch(`http://localhost:5000/api/customer/orders?customerId=${customerId}`);
         const result = await res.json();
 
-        if (result.success) {
+        if (res.ok && result.success) {
           setOrders(result.data || []);
         } else {
-          setError(result.message || 'ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้');
+          setError(result.message || "ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้");
         }
       } catch (err) {
-        console.error('Fetch orders error:', err);
-        setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+        console.error("Fetch orders error:", err);
+        setError("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
       } finally {
         setLoading(false);
       }

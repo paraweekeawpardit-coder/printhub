@@ -3,6 +3,10 @@ import http from "http";
 import { Server } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
+import morgan from "morgan";
+import Authroute from "./route/Auth.js";
+import ShopRoute from "./route/Shop.js";
+import customerRoute from "./route/customerRoute.js";
 import mongoose, { Schema, Document } from "mongoose";
 import connectDB from "./config/mongo.js";
 
@@ -10,6 +14,25 @@ dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
+
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "http://192.168.1.59:3000"
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "shop_id",
+      "order_id",
+      "customer_id",
+      "Accept"
+    ],
+    credentials: true
+  })
+);
 
 app.use(cors());
 app.use(express.json());
