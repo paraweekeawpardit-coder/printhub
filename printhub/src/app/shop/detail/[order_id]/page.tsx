@@ -117,7 +117,7 @@ export default function OrderDetailPage() {
       await axios.patch(
         `http://localhost:5000/shop/orders/${orderId}/status`,
         {
-          status_state:
+          status_name:
             nextStatus,
         }
       );
@@ -286,7 +286,7 @@ export default function OrderDetailPage() {
           <div className="flex items-center gap-2.5">
 
             {order.status_state ===
-              "รอการดำเนินการ" && (
+              "รอการดำเนินงาน" && (
               <>
                 <button
                   onClick={() =>
