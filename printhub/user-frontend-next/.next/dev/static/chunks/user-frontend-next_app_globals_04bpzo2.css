@@ -63,8 +63,6 @@
     --color-emerald-200: #a4f4cf;
     --color-emerald-600: #009767;
     --color-emerald-700: #007956;
-    --color-blue-50: #eff6ff;
-    --color-blue-100: #dbeafe;
     --color-blue-500: #3080ff;
     --color-blue-600: #155dfc;
     --color-blue-700: #1447e6;
@@ -122,8 +120,6 @@
       --color-emerald-200: lab(90.2247% -31.039 9.47084);
       --color-emerald-600: lab(55.0481% -49.9246 15.93);
       --color-emerald-700: lab(44.4871% -41.0396 11.0361);
-      --color-blue-50: lab(96.492% -1.14644 -5.11479);
-      --color-blue-100: lab(92.0301% -2.24757 -11.6453);
       --color-blue-500: lab(54.1736% 13.3369 -74.6839);
       --color-blue-600: lab(44.0605% 29.0279 -86.0352);
       --color-blue-700: lab(36.9089% 35.0961 -85.6872);
@@ -430,20 +426,8 @@
     margin-top: var(--spacing);
   }
 
-  .mt-2 {
-    margin-top: calc(var(--spacing) * 2);
-  }
-
   .mt-6 {
     margin-top: calc(var(--spacing) * 6);
-  }
-
-  .mr-1 {
-    margin-right: var(--spacing);
-  }
-
-  .mr-2 {
-    margin-right: calc(var(--spacing) * 2);
   }
 
   .mb-2 {
@@ -472,10 +456,6 @@
 
   .grid {
     display: grid;
-  }
-
-  .inline {
-    display: inline;
   }
 
   .h-3\.5 {
@@ -707,10 +687,6 @@
     border-style: dashed;
   }
 
-  .border-blue-100 {
-    border-color: var(--color-blue-100);
-  }
-
   .border-blue-600 {
     border-color: var(--color-blue-600);
   }
@@ -755,10 +731,6 @@
 
   .bg-\[\#0F2942\] {
     background-color: #0f2942;
-  }
-
-  .bg-blue-50 {
-    background-color: var(--color-blue-50);
   }
 
   .bg-blue-600 {
@@ -1143,10 +1115,6 @@
   .focus\:outline-none:focus {
     --tw-outline-style: none;
     outline-style: none;
-  }
-
-  .disabled\:bg-slate-400:disabled {
-    background-color: var(--color-slate-400);
   }
 
   .disabled\:opacity-60:disabled {

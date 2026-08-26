@@ -1227,9 +1227,7 @@ export default function OrderReviewPage() {
                 </div>
 
                 {/* Menu */}
-
                 <div className="flex gap-10 mx-auto text-[15px] font-medium">
-
                     <Link
                         href="/shop"
                         className="text-slate-500 hover:text-[#0F2942] transition-colors"
@@ -1238,11 +1236,7 @@ export default function OrderReviewPage() {
                     </Link>
 
                     <Link
-                        href={
-                            orderData?.shop_id
-                                ? `/shop/order/${orderData.shop_id}`
-                                : '/shop'
-                        }
+                        href={orderData?.shop_id ? `/shop/order/${orderData.shop_id}` : "/shop"}
                         className="text-[#0F2942] font-semibold transition-colors"
                     >
                         Order
@@ -1255,6 +1249,12 @@ export default function OrderReviewPage() {
                         Chat
                     </Link>
 
+                    <Link
+                        href="/shop/setting"
+                        className="text-slate-500 hover:text-[#0F2942] transition-colors"
+                    >
+                        Setting
+                    </Link>
                 </div>
 
                 {/* Profile */}
@@ -1331,10 +1331,7 @@ export default function OrderReviewPage() {
                         <div className="mb-6">
 
                             <h2 className="text-lg font-semibold text-slate-700 mb-3">
-
-                                {shopData?.shop_name ||
-                                    'กำลังโหลดชื่อร้าน...'}
-
+                                PrintHub ลาดกระบัง
                             </h2>
 
                             <div className="w-full h-64 rounded-2xl overflow-hidden shadow-sm border border-slate-200 bg-slate-100">
