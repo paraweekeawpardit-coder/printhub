@@ -31,6 +31,9 @@ import {
   getCustomerOrders,
   createOrder,
   updateWorkStatus, //นำเข้าฟังก์ชันนี้
+  getReviewOrderDetail,
+  submitOrderReview,
+  submitOrderReport,
 } from "../controller/customerController.js";
 
 const router = express.Router();
@@ -42,5 +45,9 @@ router.patch("/orders/:orderId/status", updateWorkStatus); //เพิ่ม Rou
 router.get("/shops", getShops); // หน้ารายการร้าน[cite: 1]
 router.get("/shops/:shopId/services", getShopServices); // หน้ารายละเอียดบริการ[cite: 1]
 router.get("/service-types", getAllServiceTypes); // รายการประเภทงานพิมพ์[cite: 1]
+
+router.get("/orders/:orderId/review-detail", getReviewOrderDetail);
+router.post("/reviews", submitOrderReview);
+router.post("/reports", submitOrderReport);
 
 export default router;

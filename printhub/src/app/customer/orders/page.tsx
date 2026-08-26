@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useParams, useRouter } from "next/navigation";
 
 interface OrderItem {
   name: string;
@@ -29,6 +30,7 @@ export default function CustomerOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
+  const router = useRouter();
 
   // กำหนด customer_id ให้ตรงกับที่สั่งซื้อจริงในฐานข้อมูล Supabase
   const customerId = "50f1946f-79ed-47ad-939d-48d32b6a7547";
@@ -163,7 +165,21 @@ export default function CustomerOrdersPage() {
                 <span className="text-slate-500">
                   🕒 นัดรับ: {order.receive_date ? new Date(order.receive_date).toLocaleString('th-TH') : 'ไม่ระบุ'}
                 </span>
+
                 <div className="flex items-center gap-3">
+                    {/* ⭐ Rating Button */}
+                    {order.current_status === 'พิมพ์เสร็จสิ้น' && (
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          router.push(`/customer/order/review`);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-600 text-[10px] font-semibold transition"
+                      >
+                        ⭐ Rating
+                      </button>
+                    )}
                   <span className="text-slate-500">ยอดรวมทั้งสิ้น:</span>
                   <span className="text-base font-extrabold text-blue-600">฿{Number(order.total_price).toFixed(2)}</span>
                 </div>
