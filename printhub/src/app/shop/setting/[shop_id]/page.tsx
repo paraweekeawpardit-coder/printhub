@@ -13,14 +13,15 @@ import ShopBankTab from "@/src/component/shop/ShopBankTab";
 type Tab = "profile" | "services" | "bank";
 
 export default function ShopSettingsPage() {
-  const params = useParams();
-  const shopId = Array.isArray(params?.shop_id)
-    ? params.shop_id[0]
-    : (params?.shop_id as string);
+    const params = useParams();
+    const shopId = Array.isArray(params?.shop_id)
+        ? params.shop_id[0]
+        : (params?.shop_id as string);
   const [tab, setTab] = useState<Tab>("profile");
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
 
+  // Profile & Address States
   const [isVerified, setIsVerified] = useState<boolean>(false);
   const [shopName, setShopName] = useState<string>("");
   const [ownerName, setOwnerName] = useState<string>("");
@@ -37,12 +38,14 @@ export default function ShopSettingsPage() {
     postcode: "",
   });
 
+  // Services & Bank States
   const [services, setServices] = useState<ServiceTypeGroup[]>([]);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
   const [bankName, setBankName] = useState<string>("");
   const [accountName, setAccountName] = useState<string>("");
   const [accountNumber, setAccountNumber] = useState<string>("");
 
+  // มีข้อมูลอยู่แล้วหรือไม่ -> ใช้ตัดสินว่าจะแสดงหน้าดูข้อมูล หรือฟอร์มกรอกข้อมูล
   const [hasProfileData, setHasProfileData] = useState<boolean>(false);
   const [hasBankData, setHasBankData] = useState<boolean>(false);
   const [isEditingProfile, setIsEditingProfile] = useState<boolean>(true);
@@ -95,32 +98,16 @@ export default function ShopSettingsPage() {
       setIsVerified(Boolean(verifyStatus?.is_verify));
 
       if (shopServices) {
-        const normalizedServices: ServiceTypeGroup[] = shopServices.map((group: any) => {
-          const rawDetails = group.service_detail ?? [];
-          const groupMap: { [key: string]: any[] } = {};
-
-          rawDetails.forEach((d: any) => {
-            const gName = d.group_name || "ตัวเลือกทั่วไป";
-            if (!groupMap[gName]) groupMap[gName] = [];
-            groupMap[gName].push({
-              id: d.id,
-              detail: d.detail ?? "",
-              price: d.price != null ? String(d.price) : "",
-            });
-          });
-
-          const groupsArr = Object.keys(groupMap).map((gName) => ({
-            group_name: gName,
-            items: groupMap[gName],
-          }));
-
-          return {
-            id: group.id,
-            type: group.type ?? "",
-            groups: groupsArr,
-          };
-        });
-
+        const normalizedServices: ServiceTypeGroup[] = shopServices.map((group: any) => ({
+          id: group.id,
+          type: group.type ?? "",
+          items: (group.service_detail ?? []).map((d: any) => ({
+            id: d.id,
+            detail: d.detail ?? "",
+            group_name: d.group_name ?? "",
+            price: d.price != null ? String(d.price) : "",
+          })),
+        }));
         setServices(normalizedServices);
       }
 
@@ -153,7 +140,7 @@ export default function ShopSettingsPage() {
       setSaving(true);
       const headers = { shop_id: shopId };
       await axios.put(
-        `${API_BASE}/profile`,
+        "http://localhost:5000/shop/profile",
         {
           shop_name: shopName,
           owner_name: ownerName,
@@ -164,6 +151,7 @@ export default function ShopSettingsPage() {
         },
         { headers }
       );
+      alert("บันทึกข้อมูลร้านค้าเรียบร้อยแล้ว");
       setHasProfileData(true);
       setIsEditingProfile(false);
     } catch (err) {
@@ -176,27 +164,13 @@ export default function ShopSettingsPage() {
   const handleSaveServices = async () => {
     try {
       setSaving(true);
-      const payloadServices = services.map((s) => ({
-        id: s.id,
-        type: s.type,
-        service_detail: s.groups.flatMap((g) =>
-          g.items.map((item) => ({
-            id: item.id,
-            detail: item.detail,
-            group_name: g.group_name,
-            price: Number(item.price) || 0,
-          }))
-        ),
-      }));
-
       const headers = { shop_id: shopId };
       await axios.post(
-        `${API_BASE}/services`,
-        { services: payloadServices },
+        "http://localhost:5000/shop/services",
+        { services },
         { headers }
       );
-
-      await fetchShopSettings();
+      alert("บันทึกข้อมูลบริการพิมพ์เรียบร้อยแล้ว");
     } catch (err) {
       console.error("Save services error:", err);
     } finally {
@@ -209,7 +183,7 @@ export default function ShopSettingsPage() {
       setSaving(true);
       const headers = { shop_id: shopId };
       await axios.put(
-        `${API_BASE}/bank`,
+        "http://localhost:5000/shop/bank",
         {
           id: bankAccountId,
           bank_name: bankName,
@@ -218,6 +192,7 @@ export default function ShopSettingsPage() {
         },
         { headers }
       );
+      alert("บันทึกข้อมูลบัญชีธนาคารเรียบร้อยแล้ว");
       setHasBankData(true);
       setIsEditingBank(false);
     } catch (err) {
@@ -240,7 +215,9 @@ export default function ShopSettingsPage() {
       <div className="mx-auto max-w-7xl px-12 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-lg font-bold text-[#0F2942]">ตั้งค่าร้านค้า</h2>
+            <h2 className="text-lg font-bold text-[#0F2942]">
+              ตั้งค่าร้านค้า
+            </h2>
             <p className="mt-1 text-sm text-slate-500">
               จัดการข้อมูลร้าน บริการพิมพ์ และช่องทางรับชำระเงิน
             </p>

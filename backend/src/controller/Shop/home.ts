@@ -99,6 +99,11 @@ export const getTodayInCome = async (
   }
 };
 
+// สถานะที่ถือว่า "รอการดำเนินการ" — ใช้ค่าเดียวกับที่ getTopOrder ใช้เทียบ
+// (ก่อนหน้านี้ฟังก์ชันนี้เทียบกับ "รอการดำเนินงาน" ซึ่งสะกดไม่ตรงกับที่อื่น
+// ถ้า state จริงใน DB สะกดต่างจากนี้ ให้แก้ค่านี้ให้ตรงกับข้อมูลจริงในตาราง status)
+const PENDING_STATE = "รอการดำเนินการ";
+
 export const getNumOrderUnAccept = async (
   req: Request,
   res: Response
@@ -110,35 +115,40 @@ export const getNumOrderUnAccept = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
-    const { data: statusData } = await supabase
-      .from("status")
-      .select("id")
-      .eq("state", "รอการดำเนินงาน")
-      .single();
-
-    if (!statusData) {
-      return res.status(200).json({ numWork: 0 });
-    }
-
-    const { count, error } = await supabase
-      .from("work_status")
+    // ดึงออเดอร์ของร้าน พร้อมประวัติ work_status ทั้งหมดของแต่ละออเดอร์
+    // เพราะ work_status เป็นตารางประวัติ (insert แถวใหม่ทุกครั้งที่เปลี่ยนสถานะ
+    // ไม่ได้ update แถวเดิม) จึงต้องดูว่า "สถานะล่าสุด" ของแต่ละออเดอร์คืออะไร
+    // แทนที่จะนับทุกแถวที่เคยมีสถานะรอดำเนินการ (ซึ่งจะไม่มีวันลดลงเลย)
+    const { data: orders, error } = await supabase
+      .from("print_order")
       .select(
         `
         id,
-        print_order!inner(shop_id)
-        `,
-        { count: "exact", head: true }
+        work_status (
+          updated_at,
+          status (state)
+        )
+        `
       )
-      .eq("status_id", statusData.id)
-      .eq("print_order.shop_id", shop_id);
+      .eq("shop_id", shop_id);
 
     if (error) {
       return res.status(400).json({ error: error.message });
     }
 
-    return res.status(200).json({
-      numWork: count ?? 0,
-    });
+    const numWork = (orders ?? []).filter((order: any) => {
+      const statuses = order.work_status || [];
+      if (statuses.length === 0) return false;
+
+      const latest = [...statuses].sort(
+        (a: any, b: any) =>
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      )[0];
+
+      return latest?.status?.state === PENDING_STATE;
+    }).length;
+
+    return res.status(200).json({ numWork });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Server Error" });
@@ -185,7 +195,7 @@ export const getTopOrder = async (
 
     const formattedOrders = orders.map((order: any) => {
       const statuses = order.work_status || [];
-      
+
       statuses.sort(
         (a: any, b: any) =>
           new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
@@ -200,7 +210,7 @@ export const getTopOrder = async (
     });
 
     const pendingOrders = formattedOrders.filter(
-      (order) => order.latest_status === "รอการดำเนินการ"
+      (order) => order.latest_status === PENDING_STATE
     );
     let resultOrders = [];
     if (pendingOrders.length < 3) {
@@ -215,7 +225,6 @@ export const getTopOrder = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
-
 
 export const updateOrderStatus = async (
   req: Request,
