@@ -24,11 +24,12 @@ __turbopack_context__.s([
     "default",
     ()=>__TURBOPACK__default__export__
 ]);
-const __TURBOPACK__default__export__ = {
+const config = {
     plugins: {
         "@tailwindcss/postcss": {}
     }
 };
+const __TURBOPACK__default__export__ = config;
 }),
 "[turbopack-node]/transforms/postcss.ts?config=[project]/postcss.config.mjs { CONFIG => \"[project]/postcss.config.mjs [postcss] (ecmascript)\" } [postcss] (ecmascript)", ((__turbopack_context__) => {
 "use strict";
