@@ -4,9 +4,6 @@ import dotenv from "dotenv";
 import morgan from "morgan";
 import Authroute from "./route/Auth.js";
 import ShopRoute from "./route/Shop.js";
-import supabase from "./config/supabase.js";
-
-
 import customerRoute from "./route/customerRoute.js";
 
 dotenv.config();
@@ -25,7 +22,8 @@ app.use(
       "Authorization",
       "shop_id",
       "order_id",
-      "customer_id"
+      "customer_id",
+      "Accept"
     ],
     credentials: true
   })

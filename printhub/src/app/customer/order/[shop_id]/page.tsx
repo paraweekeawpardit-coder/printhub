@@ -33,12 +33,10 @@ interface UploadedFileInfo {
   pageCount: number;
 }
 
-// นับจำนวนหน้า PDF อัตโนมัติ
 async function countPdfPages(file: File): Promise<number> {
   try {
     const text = await file.text();
-    const regex = /\/Type\s*\/Page[^s]/g;
-    const matches = text.match(regex);
+    const matches = text.match(/\/Type\s*\/Page[^s]/g);
     if (matches && matches.length > 0) return matches.length;
 
     const countMatch = text.match(/\/Count\s+(\d+)/);
@@ -52,12 +50,13 @@ async function countPdfPages(file: File): Promise<number> {
 export default function OrderPage() {
   const params = useParams();
   const router = useRouter();
-  const shopId = params?.shop_id;
+  const shopId = params?.shop_id || params?.shopId;
 
   const [shop, setShop] = useState<ShopInfo | null>(null);
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const [selectedTypeId, setSelectedTypeId] = useState<string>("");
   const [selectedDetailId, setSelectedDetailId] = useState<string>("");
@@ -83,6 +82,7 @@ export default function OrderPage() {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   }, []);
 
+  // ดึงข้อมูลบริการของร้านค้าตอนเปิดหน้าเว็บ
   useEffect(() => {
     const fetchShopServices = async () => {
       const currentShopId = Array.isArray(shopId) ? shopId[0] : shopId;
@@ -93,7 +93,7 @@ export default function OrderPage() {
 
       try {
         const res = await fetch(
-          `http://localhost:5000/api/customer/shops/${currentShopId}/services`,
+          `http://localhost:5000/api/customer/shops/${currentShopId}/services`
         );
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
 
@@ -172,7 +172,7 @@ export default function OrderPage() {
             isPdf: file.type === "application/pdf",
             pageCount: count,
           };
-        }),
+        })
       );
 
       setUploadedFiles((prev) => [...prev, ...newFiles]);
@@ -313,7 +313,7 @@ export default function OrderPage() {
 
       if (selectedMinutes < openMinutes || selectedMinutes > closeMinutes) {
         setTimeError(
-          `❌ ร้านเปิดให้บริการช่วง ${shop.open_time} - ${shop.close_time} น. เท่านั้น`,
+          `❌ ร้านเปิดให้บริการช่วง ${shop.open_time} - ${shop.close_time} น. เท่านั้น`
         );
         return;
       }
@@ -324,27 +324,82 @@ export default function OrderPage() {
 
   const calculatedPrice = useMemo(() => {
     const detail = currentDetails.find(
-      (d) => String(d.id) === selectedDetailId,
+      (d) => String(d.id) === selectedDetailId
     );
     const unitPrice = Number(detail?.unit_price) || 0;
     const total = unitPrice * actualPagesToPrint * Math.max(1, copies);
     return total.toFixed(2);
   }, [currentDetails, selectedDetailId, actualPagesToPrint, copies]);
 
-  // ✅ ฟังก์ชันส่งข้อมูลคำสั่งซื้อไปยังหน้า Payment
-  const handleConfirmOrder = () => {
-    const queryParams = new URLSearchParams({
-      shopId: String(shopId || ""),
-      typeId: selectedTypeId,
-      detailId: selectedDetailId,
-      pages: String(actualPagesToPrint),
-      copies: String(copies),
-      pickupTime: pickupTime,
-      totalPrice: calculatedPrice,
-    }).toString();
+  // ✅ ส่งคำสั่งซื้อไปยัง Backend แล้วพาวิ่งไปหน้า Payment ของเพื่อน
+  const handleConfirmOrder = async () => {
+    const currentShopId = Array.isArray(shopId) ? shopId[0] : shopId;
+    if (!currentShopId || isSubmitting) return;
 
-    // ส่ง id ไปแทนคำว่า new หรือใช้คำว่า new ก็ได้หากรันผ่าน [orderId]
-    router.push(`/customer/order/payment/new?${queryParams}`);
+    const customerId = "50f1946f-79ed-47ad-939d-48d32b6a7547";
+    const selectedDetail = currentDetails.find((d) => String(d.id) === selectedDetailId);
+    const unitPrice = Number(selectedDetail?.unit_price) || 0;
+    const totalQuantity = actualPagesToPrint * Math.max(1, copies);
+
+    const payload = {
+      customer_id: customerId,
+      shop_id: currentShopId,
+      description: `พิมพ์ ${actualPagesToPrint} หน้า, จำนวน ${copies} ชุด (${
+        pagePrintMode === "ALL" ? "ทุกหน้า" : `หน้า ${customPageRange}`
+      })`,
+      receive_date: pickupTime,
+      total_price: parseFloat(calculatedPrice),
+      items: [
+        {
+          service_detail_id: selectedDetailId,
+          quantity: totalQuantity,
+          unit_price: unitPrice,
+          subtotal: parseFloat(calculatedPrice),
+        },
+      ],
+      files: uploadedFiles.map((f) => ({
+        filename: f.file.name,
+        file_url: f.previewUrl,
+      })),
+    };
+
+    try {
+      setIsSubmitting(true);
+      const res = await fetch("http://localhost:5000/api/customer/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const rawText = await res.text();
+        console.error("Backend Error Response (Raw):", rawText);
+        alert(`❌ เซิร์ฟเวอร์ตอบกลับสถานะ ${res.status}`);
+        return;
+      }
+
+      const result = await res.json();
+
+      if (result.success) {
+        alert("✅ สั่งพิมพ์งานสำเร็จแล้ว! กำลังพานำทางไปหน้าชำระเงิน...");
+        
+        // 1. ดึง order_id ที่ Supabase สร้างขึ้นจริง
+        const newOrderId = result.data?.order_id || result.data?.id;
+
+        // 2. 🚀 นำทางไปหน้าชำระเงินของเพื่อน พร้อมส่ง totalPrice ผ่าน Query Params
+        router.push(`/customer/order/payment/${newOrderId}?totalPrice=${calculatedPrice}`);
+      } else {
+        alert(`❌ ไม่สามารถสั่งพิมพ์ได้: ${result.message || "เกิดข้อผิดพลาด"}`);
+      }
+    } catch (err) {
+      console.error("Create order error:", err);
+      alert("❌ เชื่อมต่อเซิร์ฟเวอร์เพื่อบันทึกคำสั่งซื้อไม่สำเร็จ");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const currentFile = uploadedFiles[activeFileIndex];
@@ -475,7 +530,7 @@ export default function OrderPage() {
                   <button
                     onClick={() =>
                       setActiveFileIndex((prev) =>
-                        Math.min(uploadedFiles.length - 1, prev + 1),
+                        Math.min(uploadedFiles.length - 1, prev + 1)
                       )
                     }
                     disabled={activeFileIndex === uploadedFiles.length - 1}
@@ -720,6 +775,7 @@ export default function OrderPage() {
                     type="button"
                     onClick={handleConfirmOrder}
                     disabled={
+                      isSubmitting ||
                       Boolean(timeError) ||
                       Boolean(pageRangeError) ||
                       !pickupTime ||
@@ -728,15 +784,17 @@ export default function OrderPage() {
                     }
                     className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-sm py-3 rounded-xl transition shadow-md shadow-blue-500/20"
                   >
-                    {pageRangeError
+                    {isSubmitting
+                      ? "กำลังบันทึกคำสั่งซื้อ..."
+                      : pageRangeError
                       ? "เลขหน้าที่ต้องการพิมพ์ไม่ถูกต้อง"
                       : actualPagesToPrint === 0
-                        ? "กรุณาระบุหน้าที่ต้องการพิมพ์"
-                        : !pickupTime
-                          ? "กรุณาเลือกเวลานัดหมายรับเอกสาร"
-                          : timeError
-                            ? "เวลาที่เลือกไม่ถูกต้อง"
-                            : `ยืนยันการสั่งปริ้นท์งาน (฿${calculatedPrice})`}
+                      ? "กรุณาระบุหน้าที่ต้องการพิมพ์"
+                      : !pickupTime
+                      ? "กรุณาเลือกเวลานัดหมายรับเอกสาร"
+                      : timeError
+                      ? "เวลาที่เลือกไม่ถูกต้อง"
+                      : `ยืนยันการสั่งปริ้นท์งาน (฿${calculatedPrice})`}
                   </button>
                 </div>
               </>
