@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import http from "http";
 import { Server } from "socket.io";
 import cors from "cors";
@@ -7,7 +7,7 @@ import morgan from "morgan";
 import Authroute from "./route/Auth.js";
 import ShopRoute from "./route/Shop.js";
 import customerRoute from "./route/customerRoute.js";
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema } from "mongoose";
 import connectDB from "./config/mongo.js";
 
 dotenv.config();
@@ -15,13 +15,14 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
+// 1. ตั้งค่า CORS และ Middleware
 app.use(
   cors({
     origin: [
       "http://localhost:3000",
       "http://192.168.1.59:3000"
     ],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
       "Authorization",
@@ -34,12 +35,24 @@ app.use(
   })
 );
 
-app.use(cors());
 app.use(express.json());
+app.use(morgan("dev"));
 
-// 1. เชื่อมต่อฐานข้อมูลผ่าน config/mongo.ts
+// 2. เชื่อมต่อ MongoDB สำหรับระบบแชท
 connectDB();
 
+// 3. แมป Routes หลักของระบบ (จุดที่ตกหล่นไป)
+app.get("/", (req: Request, res: Response) => {
+  res.send("PrintHub Backend is running!");
+});
+
+app.use("/auth", Authroute);                // 👈 ระบบเข้าสู่ระบบ/สมัครสมาชิก (Login / Register)
+app.use("/shop", ShopRoute);                // 👈 ระบบร้านค้า
+app.use("/api/customer", customerRoute);    // 👈 ระบบลูกค้าและสั่งพิมพ์
+
+// ==========================================
+// 4. Socket.io & MongoDB Real-time Chat
+// ==========================================
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -47,9 +60,6 @@ const io = new Server(server, {
   },
 });
 
-// ==========================================
-// 2. MongoDB Schema & Model Configuration
-// ==========================================
 interface IMessage {
   orderId: string;
   sender: "customer" | "shop";
@@ -72,13 +82,9 @@ const MessageSchema = new Schema<IMessage>(
 
 const Message = mongoose.model<IMessage>("Message", MessageSchema);
 
-// ==========================================
-// 3. Socket.io Real-time Chat Logic
-// ==========================================
 io.on("connection", (socket) => {
   console.log(`⚡ User connected: ${socket.id}`);
 
-  // เข้าร่วมห้อง และดึงประวัติข้อความจาก MongoDB
   socket.on("join_order_chat", async (orderId: string) => {
     socket.join(orderId);
     console.log(`📌 User ${socket.id} joined order room: ${orderId}`);
@@ -91,7 +97,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // รับข้อความ บันทึกลง MongoDB แล้วกระจายให้ทุกคนในห้อง
   socket.on("send_message", async (data: IMessage) => {
     console.log(`💬 [Order #${data.orderId}] ${data.sender}: ${data.text}`);
 
@@ -111,7 +116,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // อัปเดตสถานะ "อ่านแล้ว" ใน MongoDB
   socket.on("mark_as_read", async (data: { orderId: string; reader: string }) => {
     try {
       const senderToUpdate = data.reader === "customer" ? "shop" : "customer";
@@ -132,10 +136,8 @@ io.on("connection", (socket) => {
   });
 });
 
-// ==========================================
-// 4. REST API Endpoints
-// ==========================================
-app.get("/api/messages/:orderId", async (req, res) => {
+// REST API สำหรับดึงข้อความแชท
+app.get("/api/messages/:orderId", async (req: Request, res: Response) => {
   try {
     const messages = await Message.find({ orderId: req.params.orderId }).sort({ createdAt: 1 });
     res.json({ success: true, count: messages.length, data: messages });

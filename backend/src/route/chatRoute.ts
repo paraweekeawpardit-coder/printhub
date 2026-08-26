@@ -1,8 +1,9 @@
 import express from 'express';
-import chatController from '../controller/chatController.js';
+import { getChatHistory } from '../controller/chatController.js';
 
 const router = express.Router();
 
-router.get('/:print_order_id', chatController.getChatHistory);
+// ต้องใช้ :print_order_id ให้ตรงกับที่ Controller รับค่า req.params
+router.get('/history/:print_order_id', getChatHistory);
 
 export default router;

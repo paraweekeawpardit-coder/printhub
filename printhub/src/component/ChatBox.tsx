@@ -4,13 +4,17 @@ import React, { useState, useEffect, useRef, FormEvent, ChangeEvent } from 'reac
 import io, { Socket } from 'socket.io-client';
 
 interface Message {
+  _id?: string;
   id?: string;
   print_order_id: string;
-  sender_id: string;
-  sender_role: 'customer' | 'shop';
-  message: string;
+  sender_id?: string;
+  sender_role?: 'customer' | 'shop';
+  sender: 'customer' | 'shop'; // ตรงกับ Mongoose Schema
+  message?: string;
+  text?: string; // รองรับกรณี Schema ใช้ text
   image_url?: string | null;
-  timestamp?: string;
+  time?: string;
+  createdAt?: string;
 }
 
 interface ChatBoxProps {
@@ -25,35 +29,35 @@ const ChatBox: React.FC<ChatBoxProps> = ({ orderId, currentUserId, currentUserRo
   const [socket, setSocket] = useState<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll ลงล่างสุดเมื่อมีข้อความใหม่
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    // 1. ดึงประวัติแชตจาก MongoDB Backend
-    if (orderId) {
-      fetch(`http://localhost:5000/api/chat/${orderId}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setMessages(data);
-        })
-        .catch((err) => console.error('Error fetching chat history:', err));
-    }
+    if (!orderId) return;
+
+    // 1. ดึงประวัติแชตจาก API ล่าสุด (/api/chat/history/:print_order_id)
+    fetch(`http://localhost:5000/api/chat/history/${orderId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setMessages(data);
+      })
+      .catch((err) => console.error('Error fetching chat history:', err));
 
     // 2. เชื่อมต่อ Socket.io
     const newSocket: Socket = io('http://localhost:5000');
     setSocket(newSocket);
 
-    // เข้าร่วมห้องเฉพาะของออเดอร์นี้
-    newSocket.emit('join_room', orderId);
+    // 3. เข้าร่วมห้องเฉพาะออเดอร์ (ตรงกับ Backend: join_order_chat)
+    newSocket.emit('join_order_chat', orderId);
 
-    // 3. รอรับข้อความ Real-time
-    newSocket.on('chat message', (msg: Message) => {
+    // 4. รอรับข้อความ Real-time (ตรงกับ Backend: receive_message)
+    newSocket.on('receive_message', (msg: Message) => {
       setMessages((prev) => [...prev, msg]);
     });
 
     return () => {
+      newSocket.off('receive_message');
       newSocket.disconnect();
     };
   }, [orderId]);
@@ -65,16 +69,17 @@ const ChatBox: React.FC<ChatBoxProps> = ({ orderId, currentUserId, currentUserRo
   const sendMessage = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (socket && input.trim()) {
-      const msgData: Message = {
+      const msgData = {
         print_order_id: orderId,
         sender_id: currentUserId,
-        sender_role: currentUserRole,
+        sender: currentUserRole, // ส่งไปตรงกับ Mongoose Schema
         message: input.trim(),
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        text: input.trim(),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
-      // ยิงข้อความไป Backend (ไม่ต้อง setMessages เอง เดี๋ยว Socket จะกระจายกลับมาให้อัตโนมัติ)
-      socket.emit('chat message', msgData);
+      // ยิงข้อความไป Backend (ตรงกับ Backend: send_message)
+      socket.emit('send_message', msgData);
       setInput('');
     }
   };
@@ -93,14 +98,18 @@ const ChatBox: React.FC<ChatBoxProps> = ({ orderId, currentUserId, currentUserRo
       {/* ข้อความในห้องแชต */}
       <div className="messages overflow-y-auto flex-1 mb-3 space-y-3 pr-1">
         {messages.map((m, index) => {
-          const isMe = m.sender_role === currentUserRole;
+          const senderRole = m.sender || m.sender_role;
+          const isMe = senderRole === currentUserRole;
+          const msgText = m.message || m.text;
+          const displayTime = m.time || (m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+
           return (
             <div
-              key={m.id || index}
+              key={m._id || m.id || index}
               className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
             >
               <span className="text-[10px] text-slate-400 mb-0.5 px-1">
-                {isMe ? 'คุณ' : m.sender_role === 'shop' ? 'ร้านค้า' : 'ลูกค้า'}
+                {isMe ? 'คุณ' : senderRole === 'shop' ? 'ร้านค้า' : 'ลูกค้า'}
               </span>
               <div
                 className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
@@ -109,11 +118,11 @@ const ChatBox: React.FC<ChatBoxProps> = ({ orderId, currentUserId, currentUserRo
                     : 'bg-slate-100 text-slate-800 rounded-bl-none'
                 }`}
               >
-                {m.message}
+                {msgText}
               </div>
-              {m.timestamp && (
+              {displayTime && (
                 <span className="text-[9px] text-slate-400 mt-0.5 px-1">
-                  {m.timestamp}
+                  {displayTime}
                 </span>
               )}
             </div>
