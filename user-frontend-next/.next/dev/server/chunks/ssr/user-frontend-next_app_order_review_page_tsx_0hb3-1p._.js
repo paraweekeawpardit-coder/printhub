@@ -580,8 +580,8 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$user$2d$frontend$2d$next$2f$
 // ==============================
 // Supabase Client
 // ==============================
-const supabaseUrl = ("TURBOPACK compile-time value", "https://bhypxtuezgawvnluktvn.supabase.co") || '';
-const supabaseAnonKey = ("TURBOPACK compile-time value", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJoeXB4dHVlemdhd3ZubHVrdHZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NDA2NzIsImV4cCI6MjEwMDExNjY3Mn0.17LOlvG_tUv_s68jXn0eeyEMDWuI7uaQtt1sGMELCJk") || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$user$2d$frontend$2d$next$2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$index$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__$3c$locals$3e$__["createClient"])(supabaseUrl, supabaseAnonKey);
 function OrderReviewPage() {
     // Order ID ที่ต้องการดึง

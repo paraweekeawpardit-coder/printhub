@@ -131,7 +131,7 @@ export default function PaymentPage() {
 
               {paymentStatus === 'PENDING' && (
                 <div className="mb-4 p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-sm font-medium">
-                  ⏳ ส่งหลักฐานเรียบร้อยแล้ว กำลังรอ Admin ตรวจสอบความถูกต้อง...
+                  ⏳ ส่งหลักฐานเรียบร้อยแล้ว กำลังรอตรวจสอบความถูกต้อง...
                 </div>
               )}
 
@@ -208,7 +208,7 @@ export default function PaymentPage() {
                     : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
                 }`}
               >
-                {isSubmitting ? 'กำลังส่งข้อมูลให้ Admin ตรวจสอบ...' : 'ยืนยันการชำระเงิน'}
+                {isSubmitting ? 'กำลังส่งข้อมูลให้ร้านตรวจสอบ...' : 'ยืนยันการชำระเงิน'}
               </button>
             </div>
           </div>
