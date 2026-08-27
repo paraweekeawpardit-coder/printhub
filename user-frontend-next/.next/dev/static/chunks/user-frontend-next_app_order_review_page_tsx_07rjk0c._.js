@@ -582,8 +582,8 @@ var _s = __turbopack_context__.k.signature();
 // ==============================
 // Supabase Client
 // ==============================
-const supabaseUrl = ("TURBOPACK compile-time value", "https://bhypxtuezgawvnluktvn.supabase.co") || '';
-const supabaseAnonKey = ("TURBOPACK compile-time value", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJoeXB4dHVlemdhd3ZubHVrdHZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NDA2NzIsImV4cCI6MjEwMDExNjY3Mn0.17LOlvG_tUv_s68jXn0eeyEMDWuI7uaQtt1sGMELCJk") || '';
+const supabaseUrl = __TURBOPACK__imported__module__$5b$project$5d2f$user$2d$frontend$2d$next$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = __TURBOPACK__imported__module__$5b$project$5d2f$user$2d$frontend$2d$next$2f$node_modules$2f$next$2f$dist$2f$build$2f$polyfills$2f$process$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$user$2d$frontend$2d$next$2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$index$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["createClient"])(supabaseUrl, supabaseAnonKey);
 function OrderReviewPage() {
     _s();
@@ -1916,7 +1916,7 @@ function OrderReviewPage() {
         columnNumber: 9
     }, this);
 }
-_s(OrderReviewPage, "/yaQ0VrbJ3jkbj517cO6Xj1jHwE=");
+_s(OrderReviewPage, "cfqu9VhW0mE6pcolV7fLssAWfuo=");
 _c = OrderReviewPage;
 var _c;
 __turbopack_context__.k.register(_c, "OrderReviewPage");
