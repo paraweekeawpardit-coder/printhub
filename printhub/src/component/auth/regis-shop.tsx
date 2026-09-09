@@ -1,7 +1,7 @@
 "use client";
 
-import { useState,useEffect } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Eye, EyeOff, FileText, X } from "lucide-react";
 import axios from "axios";
 import dynamic from "next/dynamic";
 
@@ -11,9 +11,10 @@ type RegisFormProps = {
 
 const MapPicker = dynamic(() => import("./map"), { ssr: false });
 
-export default function RegisFormShop({setRegis }: RegisFormProps) {
+export default function RegisFormShop({ setRegis }: RegisFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showExampleModal, setShowExampleModal] = useState(false); // State สำหรับ Modal ตัวอย่างบัตร
   const [message, setMessage] = useState("");
   const [shopData, setShopData] = useState({
     shop_name: "",
@@ -37,22 +38,29 @@ export default function RegisFormShop({setRegis }: RegisFormProps) {
     confirmPassword: "",
   });
 
-  const banks = [
-    { code: "BBL", name: "ธนาคารกรุงเทพ" },
-    { code: "KBANK", name: "ธนาคารกสิกรไทย" },
-    { code: "KTB", name: "ธนาคารกรุงไทย" },
-    { code: "SCB", name: "ธนาคารไทยพาณิชย์" },
-    { code: "BAY", name: "ธนาคารกรุงศรีอยุธยา" },
-    { code: "TTB", name: "ธนาคารทหารไทยธนชาต" },
-    { code: "GSB", name: "ธนาคารออมสิน" },
-    { code: "BAAC", name: "ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร" },
-    { code: "GHB", name: "ธนาคารอาคารสงเคราะห์" },
-    { code: "UOB", name: "ธนาคารยูโอบี" },
-    { code: "CIMB", name: "ธนาคารซีไอเอ็มบี ไทย" },
-    { code: "KKP", name: "ธนาคารเกียรตินาคินภัทร" },
-    { code: "TISCO", name: "ธนาคารทิสโก้" },
-    { code: "LHBANK", name: "ธนาคารแลนด์ แอนด์ เฮ้าส์" },
-    { code: "ICBC", name: "ธนาคารไอซีบีซี (ไทย)" },
+const banks = [
+    { code: "BBL", name: "ธนาคารกรุงเทพ (BBL)" },
+    { code: "KBANK", name: "ธนาคารกสิกรไทย (KBANK)" },
+    { code: "KTB", name: "ธนาคารกรุงไทย (KTB)" },
+    { code: "SCB", name: "ธนาคารไทยพาณิชย์ (SCB)" },
+    { code: "BAY", name: "ธนาคารกรุงศรีอยุธยา (BAY)" },
+    { code: "TTB", name: "ธนาคารทหารไทยธนชาต (ttb)" },
+    { code: "CIMBT", name: "ธนาคารซีไอเอ็มบี ไทย (CIMBT)" },
+    { code: "UOB", name: "ธนาคารยูโอบี (UOB)" },
+    { code: "KKP", name: "ธนาคารเกียรตินาคินภัทร (KKP)" },
+    { code: "TISCO", name: "ธนาคารทิสโก้ (TISCO)" },
+    { code: "LHFG", name: "ธนาคารแลนด์ แอนด์ เฮ้าส์ (LH Bank)" },
+    { code: "ICBC", name: "ธนาคารไอซีบีซี (ไทย) (ICBC)" },
+    { code: "BOC", name: "ธนาคารแห่งประเทศจีน (ไทย) (BOC)" },
+    { code: "SMBC", name: "ธนาคารซูมิโตโม มิตซุย แบงกิ้ง คอร์ปอเรชั่น (SMBC)" },
+
+    { code: "GSB", name: "ธนาคารออมสิน (GSB)" },
+    { code: "BAAC", name: "ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)" },
+    { code: "GHB", name: "ธนาคารอาคารสงเคราะห์ (ธอส.)" },
+    { code: "EXIM", name: "ธนาคารเพื่อการส่งออกและนำเข้าแห่งประเทศไทย (EXIM)" },
+    { code: "SME", name: "ธนาคารพัฒนาวิสาหกิจขนาดกลางและขนาดย่อม (SME Bank)" },
+    { code: "IBANK", name: "ธนาคารอิสลามแห่งประเทศไทย (iBank)" },
+
   ];
 
   async function handleSubmit(e: React.FormEvent) {
@@ -69,7 +77,6 @@ export default function RegisFormShop({setRegis }: RegisFormProps) {
       return;
     }
 
-    // แปลงข้อมูลใส่ FormData เพื่อส่งไฟล์และข้อมูลไปยัง Express Backend
     const formData = new FormData();
     formData.append("shop_name", shopData.shop_name);
     formData.append("owner_name", shopData.owner_name);
@@ -88,7 +95,6 @@ export default function RegisFormShop({setRegis }: RegisFormProps) {
     formData.append("bank_number", shopData.bank_number);
     formData.append("password", shopData.password);
 
-    // อัปโหลดไฟล์รูปภาพ
     if (shopData.image_card) {
       formData.append("image_card", shopData.image_card);
     }
@@ -104,11 +110,10 @@ export default function RegisFormShop({setRegis }: RegisFormProps) {
 
       if (res.data.message) {
         setRegis(false);
-        setMessage("registed successed")
+        setMessage("registed successed");
       } else {
         setMessage(res.data.error || "Please try again");
       }
-
     } catch (err: any) {
       console.error(err);
       setMessage(err.response?.data?.error || "server error");
@@ -131,28 +136,6 @@ export default function RegisFormShop({setRegis }: RegisFormProps) {
         <form className="space-y-4" onSubmit={handleSubmit}>
           <input
             type="text"
-            placeholder="ชื่อร้าน"
-            value={shopData.shop_name}
-            onChange={(e) =>
-              setShopData({ ...shopData, shop_name: e.target.value })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-            required
-          />
-
-          <input
-            type="text"
-            placeholder="ชื่อเจ้าของร้าน"
-            value={shopData.owner_name}
-            onChange={(e) =>
-              setShopData({ ...shopData, owner_name: e.target.value })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-            required
-          />
-
-          <input
-            type="text"
             placeholder="เลขบัตรประชาชนของเจ้าของ"
             value={shopData.id_card}
             onChange={(e) =>
@@ -167,16 +150,31 @@ export default function RegisFormShop({setRegis }: RegisFormProps) {
             placeholder="ชื่อในบัตรประชาชน (ของเจ้าของร้าน)"
             value={shopData.id_name}
             onChange={(e) =>
-              setShopData({ ...shopData, id_name: e.target.value })
+              setShopData({
+                ...shopData,
+                id_name: e.target.value,
+                owner_name: e.target.value,
+              })
             }
             className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
             required
           />
 
+          {/* ส่วนอัปโหลดบัตรประชาชน + ปุ่มดูตัวอย่าง */}
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              รูปภาพบัตรประชาชนพร้อมลายเซ็น
-            </label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">
+                รูปภาพบัตรประชาชนพร้อมลายเซ็น
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowExampleModal(true)}
+                className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+              >
+                <FileText size={14} />
+                ดูตัวอย่าง
+              </button>
+            </div>
             <input
               type="file"
               accept="image/*"
@@ -347,6 +345,46 @@ export default function RegisFormShop({setRegis }: RegisFormProps) {
           </span>
         </p>
       </div>
+
+      {/* Modal แสดงรูปภาพตัวอย่างบัตรประชาชน */}
+      {showExampleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in duration-200">
+            <button
+              type="button"
+              onClick={() => setShowExampleModal(false)}
+              className="absolute right-4 top-4 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"
+            >
+              <X size={20} />
+            </button>
+
+            <h3 className="mb-4 text-center text-lg font-semibold text-gray-800">
+              ตัวอย่างการแนบสำเนาบัตรประชาชน
+            </h3>
+
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+              {/* เปลี่ยน src เป็น path รูปตัวอย่างจริงของคุณ เช่น "/images/id-card-example.png" */}
+              <img
+                src="/mockup_id.png"
+                alt="ตัวอย่างสำเนาบัตรประชาชน"
+                className="w-full h-auto object-cover"
+              />
+            </div>
+
+            <p className="mt-4 text-center text-xs text-gray-500">
+              * ขีดฆ่าตัวบัตรและเซ็นชื่อรับรอง "ใช้สำหรับสมัครสมาชิกร้านค้าเท่านั้น"
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowExampleModal(false)}
+              className="mt-5 w-full rounded-xl bg-gray-100 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition"
+            >
+              เข้าใจแล้ว
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
