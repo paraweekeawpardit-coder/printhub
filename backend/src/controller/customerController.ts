@@ -499,7 +499,7 @@ export const createOrder = async (req: Request, res: Response) => {
           description: description || null,
           receive_date: receive_date || null,
           appointment_time: appointment_time || null,
-          current_status_id: statusRow?.id || null,
+          current_status_id: "8c416cf8-140c-4563-a912-6a4a6c0a4d9f",
           subtotal_price: pricing.subtotal_price,
           small_order_fee: pricing.small_order_fee,
           platform_fee: pricing.platform_fee,
