@@ -23,7 +23,32 @@ interface ShopCardProps {
   shop: Shop;
 }
 
+// 🌟 ฟังก์ชันคำนวณสถานะเปิด-ปิดร้านจากเวลาจริง
+export const checkIsShopOpen = (shop: Shop): boolean => {
+  const shopData = shop as any;
+  
+  // ถ้าร้านปิดแบบ Manual ไว้ ให้คืนค่า false ทันที
+  if (shopData.is_open === false) return false;
+
+  // ถ้ามีเวลาเปิด-ปิด ให้เปรียบเทียบกับเวลาปัจจุบัน
+  if (shopData.open_time && shopData.close_time) {
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const openTime = shopData.open_time.slice(0, 5);
+    const closeTime = shopData.close_time.slice(0, 5);
+
+    return currentTime >= openTime && currentTime <= closeTime;
+  }
+
+  return Boolean(shopData.is_open);
+};
+
 export default function ShopCard({ shop }: ShopCardProps) {
+  const shopData = shop as any;
+
+  // 🌟 คำนวณสถานะเปิด-ปิดจริงตามเวลาปัจจุบัน
+  const isOpen = checkIsShopOpen(shop);
+
   // ฟอร์แมตแสดงเวลาเปิด-ปิด
   const businessHours =
     shop.open_time && shop.close_time
@@ -35,8 +60,6 @@ export default function ShopCard({ shop }: ShopCardProps) {
     shop.distance !== undefined && shop.distance !== null
       ? `${Number(shop.distance).toFixed(1)} กม.`
       : "ไม่ระบุระยะทาง";
-
-  const shopData = shop as any;
 
   return (
     <Link
@@ -51,12 +74,10 @@ export default function ShopCard({ shop }: ShopCardProps) {
             alt={shop.shop_name || "รูปร้านค้า"}
             className="w-full h-full object-cover"
             onError={(e) => {
-              // ถ้ารูปโหลดไม่ได้/ลิงก์เสีย ให้ซ่อนรูปแล้วกลับไปใช้ไอคอนเครื่องพิมพ์
               (e.target as HTMLElement).style.display = "none";
             }}
           />
         ) : (
-          /* Fallback: กรณีไม่มี URL รูปภาพ */
           <span className="text-4xl">🖨️</span>
         )}
 
@@ -64,17 +85,17 @@ export default function ShopCard({ shop }: ShopCardProps) {
         <div className="absolute top-2.5 left-2.5 z-10">
           <span
             className={`text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-md ${
-              shopData.is_open
+              isOpen
                 ? "bg-emerald-500/90 text-white"
                 : "bg-slate-700/80 text-white"
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                shopData.is_open ? "bg-white animate-pulse" : "bg-slate-400"
+                isOpen ? "bg-white animate-pulse" : "bg-slate-400"
               }`}
             />
-            {shopData.is_open ? "เปิดอยู่" : "ปิดทำการ"}
+            {isOpen ? "เปิดอยู่" : "ปิดทำการ"}
           </span>
         </div>
       </div>

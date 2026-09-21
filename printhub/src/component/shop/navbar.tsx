@@ -9,21 +9,22 @@ export default function ShopNavbar() {
   const [shopId, setShopId] = useState("");
 
   useEffect(() => {
-    const name = "PrintHub ลาดกระบัง";
-    const id = "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9";
-    setShopId(id);
+    if (typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") ||
+        localStorage.getItem("id") ||
+        "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9";
+      const storedName = localStorage.getItem("shop_name") || "PrintHub ลาดกระบัง";
 
-    if (name) setUsername(name);
-    if (id) setShopId(id);
-
-    console.log("username:", name);
-    console.log("shop_id:", id);
+      setShopId(storedShopId);
+      setUsername(storedName);
+    }
   }, []);
 
   return (
     <nav className="bg-white h-20 flex items-center px-10 border-b border-slate-200">
       {/* Logo */}
-      <div className="flex items-center gap-2.5">
+      <Link href="/shop" className="flex items-center gap-2.5">
         <div className="w-9 h-9 rounded-lg bg-[#0F2942] flex items-center justify-center">
           <Printer size={18} className="text-white" />
         </div>
@@ -31,51 +32,47 @@ export default function ShopNavbar() {
         <span className="text-[#0F2942] font-bold text-2xl tracking-tight">
           PrintHub
         </span>
-      </div>
+      </Link>
 
-      {/* Menu */}
+      {/* Menu ภาษาไทย */}
       <div className="flex gap-10 mx-auto text-[15px] font-medium">
         <Link
           href="/shop"
           className="text-slate-500 hover:text-[#0F2942] transition-colors"
         >
-          Home
+          หน้าแรก
         </Link>
 
         <Link
           href={shopId ? `/shop/order/${shopId}` : "/shop"}
           className="text-slate-500 hover:text-[#0F2942] transition-colors"
         >
-          Order
+          คำสั่งพิมพ์
+        </Link>
+
+        {/* ✅ แก้ไขจุดนี้: ใส่ path ให้ตรงตามโครงสร้างไฟล์จริง */}
+        <Link
+          href={shopId ? `/shop/order/${shopId}/chat` : "/shop"}
+          className="text-slate-500 hover:text-[#0F2942] transition-colors"
+        >
+          แชท
         </Link>
 
         <Link
-          href={shopId ? `/shop/chat/${shopId}` : "/shop"}
-          className="text-slate-500 hover:text-[#0F2942] transition-colors"
-        >
-          Chat
-        </Link>
-
-          <Link
           href={shopId ? `/shop/setting/${shopId}` : "/shop"}
           className="text-slate-500 hover:text-[#0F2942] transition-colors"
         >
-          Setting
+          ตั้งค่าร้านค้า
         </Link>
-
-
       </div>
 
       <div className="flex items-center gap-2.5">
         <span className="text-sm font-medium text-slate-600">
-          {username || "Shop"}
+          {username || "ร้านค้า"}
         </span>
 
         <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
-          <CircleUserRound
-            size={20}
-            className="text-slate-500"
-          />
+          <CircleUserRound size={20} className="text-slate-500" />
         </div>
       </div>
     </nav>

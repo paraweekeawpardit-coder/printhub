@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import ShopNavbar from "@/src/component/shop/navbar";
 import PageHeading from "@/src/component/shop/Pageheading";
 import OrderStatusTabs, {
@@ -11,39 +11,66 @@ import OrderStatusTabs, {
 import OrderDetailCard, {
   OrderDetail,
 } from "@/src/component/shop/order-detail-card";
-import { useRouter } from "next/navigation";
 
 export default function OrderPage() {
   const router = useRouter();
   const params = useParams();
-  const shop_id = Array.isArray(params?.shop_id)
+
+  // 1. ดึง shop_id จาก params หรือ localStorage เป็นค่าสำรอง
+  const paramShopId = Array.isArray(params?.shop_id)
     ? params.shop_id[0]
     : (params?.shop_id as string);
 
+  const [shopId, setShopId] = useState<string>(paramShopId || "");
   const [activeFilter, setActiveFilter] =
     useState<OrderStatusFilter>("ทั้งหมด");
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!shopId && typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") || localStorage.getItem("id");
+      if (storedShopId) setShopId(storedShopId);
+    }
+  }, [shopId]);
+
+  // 2. ฟังก์ชันดึงรายการออเดอร์ตามสถานะ
   const getOrder = useCallback(async () => {
-    if (!shop_id) return;
+    if (!shopId) return;
 
     try {
       setLoading(true);
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+      const headers = {
+        shop_id: String(shopId),
+        "shop-id": String(shopId),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
       const response = await axios.get(
         "http://localhost:5000/shop/getOrderByStatus",
         {
-          headers: { shop_id },
+          headers,
           params: { status: activeFilter },
         }
       );
-      setOrders(response.data.orders ?? []);
+
+      // รองรับโครงสร้าง Response ทั้งแบบ response.data, response.data.orders และ response.data.data
+      const resultData =
+        Array.isArray(response.data)
+          ? response.data
+          : response.data.orders || response.data.data || [];
+
+      setOrders(resultData);
     } catch (error) {
       console.error("Get order error:", error);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
-  }, [shop_id, activeFilter]);
+  }, [shopId, activeFilter]);
 
   useEffect(() => {
     getOrder();
@@ -66,8 +93,17 @@ export default function OrderPage() {
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {orders.length > 0 ? (
               orders.map((order) => (
-                <OrderDetailCard key={order.order_id} order={order}  
-                onClick={() => router.push(`/shop/detail/${order.order_id}`)}/>
+                <OrderDetailCard
+                  key={order.order_id || (order as any).id}
+                  order={order}
+                  onClick={() =>
+                    router.push(
+                      `/shop/detail/${order.order_id || (order as any).id}`
+                    )
+                  }
+                  // ส่ง callback getOrder เพื่อให้โหลดหน้าใหม่เมื่อมีการกด อนุมัติ/ปฏิเสธ ออเดอร์
+                  onStatusChange={getOrder} 
+                />
               ))
             ) : (
               <p className="col-span-full py-8 text-center text-slate-500">

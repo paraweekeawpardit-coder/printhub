@@ -1,4 +1,3 @@
-import { Eye } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions from "./order-action";
 
@@ -19,10 +18,11 @@ export type OrderDetail = {
 
 type Props = {
   order: OrderDetail;
-  onClick?: () => void; // ✅ เพิ่ม onClick (ใส่ ? ไว้เพื่อไม่ให้พังหากบางจุดไม่ได้ส่งมา)
+  onClick?: () => void;
+  onStatusChange?: () => void; // ✅ เพิ่ม onStatusChange รองรับการ callback แก้ปัญหา TypeScript Error
 };
 
-export default function OrderDetailCard({ order, onClick }: Props) {
+export default function OrderDetailCard({ order, onClick, onStatusChange }: Props) {
   return (
     <div 
       onClick={onClick} 
@@ -79,7 +79,11 @@ export default function OrderDetailCard({ order, onClick }: Props) {
 
         {/* ป้องกันไม่ให้การกด Action อื่นๆ ไปสั่งงาน onClick ของการ์ด */}
         <div onClick={(e) => e.stopPropagation()}>
-          <OrderActions status={order.status} />
+          <OrderActions 
+            status={order.status} 
+            orderId={order.order_id} 
+            onStatusChange={onStatusChange} 
+          />
         </div>
       </div>
     </div>

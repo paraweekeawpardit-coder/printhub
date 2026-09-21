@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import ShopCard, { Shop } from "../../component/customer/ShopCard";
+// 🌟 1. นำเข้า checkIsShopOpen จาก ShopCard
+import ShopCard, { Shop, checkIsShopOpen } from "../../component/customer/ShopCard";
 import SearchBar from "../../component/customer/SearchBar";
 import ServiceCategoryList from "../../component/customer/ServiceCategoryList";
 import FilterPillsBar from "../../component/customer/FilterPillsBar";
@@ -26,19 +27,16 @@ export default function CustomerHomePage() {
   // States ค้นหาและกรอง (FR-1.1, FR-1.3)
   const [keyword, setKeyword] = useState("");
   const [selectedService, setSelectedService] = useState("ทั้งหมด");
-  // ✅ 1. ปรับ selectedFinishing ให้เป็น string[] ตาม FilterPillsBar
   const [selectedFinishing, setSelectedFinishing] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<string>("distance"); // "distance" หรือ "rating"
-  // ✅ 2. ปรับ minPrice / maxPrice ให้เป็น number | undefined
   const [minPrice, setMinPrice] = useState<number | undefined>(undefined);
   const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined);
   
-  // ✅ ข้อ 2: ให้เปิดให้บริการเป็น Default (true)
-  const [isOpenOnly, setIsOpenOnly] = useState(true);
+  // ให้เปิดให้บริการเป็น Default (true)
+  const [isOpenOnly, setIsOpenOnly] = useState(false);
 
-  const [isNearest, setIsNearest] = useState(true);
+  const [isNearest, setIsNearest] = useState(false);
   const [isTopRated, setIsTopRated] = useState(false);
-
 
   // หมวดหมู่งานพิมพ์หลัก
   const [serviceCategories, setServiceCategories] = useState<{ name: string; icon: string }[]>([
@@ -96,7 +94,7 @@ export default function CustomerHomePage() {
     fetchServiceTypes();
   }, [fetchCurrentGps, fetchServiceTypes]);
 
-  // คิวรีร้านค้าตามเงื่อนไข (FR-1.1, FR-1.3, FR-1.4)
+  // 🌟 2. คิวรีและกรองร้านค้าตามเงื่อนไขเวลาจริง (FR-1.1, FR-1.3, FR-1.4)
   const fetchShops = useCallback(async () => {
     setLoading(true);
     try {
@@ -104,18 +102,13 @@ export default function CustomerHomePage() {
       if (keyword) params.append("search", keyword);
       if (selectedService && selectedService !== "ทั้งหมด") params.append("service_type", selectedService);
       
-      // ส่ง finishing_service คั่นด้วยจุลภาค
       if (selectedFinishing && selectedFinishing.length > 0) {
         params.append("finishing_service", selectedFinishing.join(", "));
       }
 
-      // แปลงตัวเลขราคาเป็น string
       if (minPrice !== undefined && minPrice !== null) params.append("min_price", minPrice.toString());
       if (maxPrice !== undefined && maxPrice !== null) params.append("max_price", maxPrice.toString());
 
-      if (isOpenOnly) params.append("is_open", "true");
-
-      // กำหนดโหมดการจัดเรียง (รองรับการเปิดพร้อมกันทั้งคู่)
       let sortMode = "";
       if (isNearest && isTopRated) {
         sortMode = "both";
@@ -135,7 +128,13 @@ export default function CustomerHomePage() {
       const res = await fetch(`http://localhost:5000/api/customer/shops?${params.toString()}`);
       const json = await res.json();
       if (json.success) {
-        const list: Shop[] = json.data || [];
+        let list: Shop[] = json.data || [];
+        
+        // กรองเฉพาะร้านที่เปิดจริงตามเวลาปัจจุบัน เมื่อเปิดใช้งานตัวกรอง isOpenOnly
+        if (isOpenOnly) {
+          list = list.filter((shop) => checkIsShopOpen(shop));
+        }
+
         setShops(list);
       }
     } catch (err) {
@@ -170,7 +169,6 @@ export default function CustomerHomePage() {
     setKeyword("");
   };
 
-  // ✅ 3. ล้างตัวกรองย่อยด้วย [] แทน ""
   const handleServiceChange = (serviceName: string) => {
     setSelectedService(serviceName);
     setSelectedFinishing([]); 
@@ -178,7 +176,6 @@ export default function CustomerHomePage() {
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col font-sans text-slate-800 antialiased pb-12">
-    {/*<div className="min-h-screen bg-sky-50 flex flex-col font-sans text-slate-800 antialiased"></div> */}
       <NavBar />
 
       <main className="max-w-5xl w-full mx-auto px-4 py-4 space-y-4 flex-1">
