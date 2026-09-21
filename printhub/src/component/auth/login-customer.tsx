@@ -39,7 +39,8 @@ export default function LoginFormCustomer({ setRegis }: RegisFormProps) {
 
         localStorage.setItem("token", res.data.token);
         localStorage.setItem("id", res.data.id);
-        localStorage.setItem("username", res.data.name);
+        localStorage.setItem("customer_id", res.data.id);
+        localStorage.setItem("username", res.data.name);  //key
 
         setMessage(res.data.message || "Login success");
 

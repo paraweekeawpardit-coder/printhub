@@ -20,7 +20,7 @@ const server = http.createServer(app);
 // 1. ตั้งค่า CORS และ Middleware
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://192.168.1.59:3000"],
+    origin: ["http://localhost:3000", "http://192.168.1.59:3000","http://34.143.209.183:3000","http://34.143.209.183"],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",

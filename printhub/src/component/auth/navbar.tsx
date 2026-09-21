@@ -13,28 +13,11 @@ export default function Navbar() {
             PrintHub
           </h1>
         </Link>
-
-        <ul className="hidden items-center gap-9 text-sm font-medium text-gray-500 md:flex">
-          {[
-            { href: "/", label: "Home" },
-            { href: "/order", label: "Order" },
-            { href: "/chat", label: "Chat" },
-            { href: "/setting", label: "Setting" },
-            { href: "/contact", label: "Contact" },
-          ].map((item) => (
-            <li key={item.href}>
-              <Link href={item.href} className="transition-colors hover:text-navy">
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-
         <Link
           href="/auth"
           className="rounded-full bg-navy px-5 py-2 text-sm font-medium text-white transition hover:bg-black"
         >
-          Sign Up
+         เข้าสู่ระบบ
         </Link>
       </div>
     </nav>
