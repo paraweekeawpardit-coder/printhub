@@ -1,230 +1,121 @@
-// 'use client';
+"use client";
 
-// import React from 'react';
-// import Link from 'next/link';
-
-// export interface Shop {
-//   id: string;
-//   shop_name: string;
-//   profile_image: string | null;
-//   rating: number;
-//   open_time: string | null;
-//   close_time: string | null;
-//   is_open: boolean;
-//   distance: number | null;
-//   starting_price: number;
-//   service_types: string[];
-// }
-
-// export default function ShopCard({ shop }: { shop: Shop }) {
-//   return (
-//     <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
-//       <div>
-//         {/* รูปภาพร้านค้า และ Badge เปิด/ปิด */}
-//         <div className="w-full h-40 bg-slate-100 rounded-xl mb-3 overflow-hidden relative border border-slate-100">
-//           {shop.profile_image ? (
-//             <img
-//               src={shop.profile_image}
-//               alt={shop.shop_name}
-//               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-//             />
-//           ) : (
-//             <div className="w-full h-full flex items-center justify-center bg-blue-50/50 text-blue-500 font-bold text-3xl">
-//               🖨️
-//             </div>
-//           )}
-
-//           <span
-//             className={`absolute top-2.5 right-2.5 text-[11px] px-2.5 py-0.5 rounded-full font-semibold shadow-sm backdrop-blur-md ${
-//               shop.is_open
-//                 ? 'bg-emerald-500/95 text-white'
-//                 : 'bg-rose-500/95 text-white'
-//             }`}
-//           >
-//             {shop.is_open ? '● เปิดให้บริการ' : '○ ปิดทำการ'}
-//           </span>
-//         </div>
-
-//         {/* ชื่อร้านค้าและคะแนนรีวิว */}
-//         <div className="flex items-start justify-between gap-2 mb-1.5">
-//           <h3 className="font-bold text-base text-slate-900 truncate">{shop.shop_name}</h3>
-//           <div className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md shrink-0 border border-amber-200/50">
-//             <span>★</span>
-//             <span>{shop.rating > 0 ? shop.rating.toFixed(1) : '5.0'}</span>
-//           </div>
-//         </div>
-
-//         {/* ระยะทาง และ เวลาเปิด-ปิด */}
-//         <div className="flex items-center gap-2.5 text-xs text-slate-500 mb-3">
-//           <span className="flex items-center gap-1 text-blue-600 font-medium text-xs">
-//             📍 {shop.distance !== null && shop.distance !== undefined
-//                   ? `${shop.distance} กม.`
-//                   : 'ใกล้ฉัน'}
-//           </span>
-//           <span>•</span>
-//           <span>
-//             🕒 {shop.open_time && shop.close_time ? `${shop.open_time.slice(0, 5)} - ${shop.close_time.slice(0, 5)} น.` : 'ไม่ระบุเวลา'}
-//           </span>
-//         </div>
-
-//         {/* รายการประเภทบริการ */}
-//         <div className="space-y-1 mb-4">
-//           <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">บริการเด่น</p>
-//           <div className="flex flex-wrap gap-1">
-//             {shop.service_types && shop.service_types.length > 0 ? (
-//               shop.service_types.map((type, idx) => (
-//                 <span
-//                   key={idx}
-//                   className="bg-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium"
-//                 >
-//                   {type}
-//                 </span>
-//               ))
-//             ) : (
-//               <span className="text-xs text-slate-400">ปริ้นท์งานทั่วไป</span>
-//             )}
-//           </div>
-//         </div>
-//       </div>
-
-//       {/* ราคาเริ่มต้น และ ลิงก์ไปหน้าสั่งงาน */}
-//       <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-//         <div>
-//           <span className="text-[10px] text-slate-400 block leading-tight">ราคาเริ่มต้น</span>
-//           <p className="text-base font-bold text-blue-600">฿{shop.starting_price}</p>
-//         </div>
-        
-
-//         <Link
-//             href={`/customer/order/${shop.id || (shop as any).shop_id || '1'}`}
-//             className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-sm shadow-blue-200 inline-block text-center"
-//         >
-//         สั่งปริ้นท์งาน
-//         </Link>
-//       </div>
-//     </div>
-//   );
-// }
-
-'use client';
-
-import React from 'react';
-import Link from 'next/link';
+import React from "react";
+import Link from "next/link";
+import { Star, MapPin, Clock } from "lucide-react";
 
 export interface Shop {
-  id: string;
-  shop_name: string;
-  profile_image: string | null;
-  rating: number;
-  open_time: string | null;
-  close_time: string | null;
-  is_open: boolean;
-  distance: number | null;
-  starting_price: number;
-  service_types: string[];
-  address?: {
-    detail?: string;
-    subdistrict?: string;
-    district?: string;
-    province?: string;
-  };
+  id: string | number;
+  name: string;              // ชื่อร้าน (FR-1.4)
+  image_url?: string;
+  distance?: number | string;// ระยะทางจากจุดค้นหา กิโลเมตร (FR-1.4)
+  rating: number;            // คะแนนรีวิวเฉลี่ย (FR-1.4)
+  review_count?: number;
+  open_time?: string;        // เวลาเปิดทำการ (FR-1.4)
+  close_time?: string;       // เวลาปิดทำการ (FR-1.4)
+  is_open?: boolean;         // สถานะเปิด-ปิด
+  starting_price?: number;
+  profile_image?: string | null;
+  shop_name?: string;
 }
 
-export default function ShopCard({ shop }: { shop: Shop }) {
+interface ShopCardProps {
+  shop: Shop;
+}
+
+export default function ShopCard({ shop }: ShopCardProps) {
+  // ฟอร์แมตแสดงเวลาเปิด-ปิด
+  const businessHours =
+    shop.open_time && shop.close_time
+      ? `${shop.open_time.slice(0, 5)} - ${shop.close_time.slice(0, 5)} น.`
+      : "ไม่ระบุเวลาทำการ";
+
+  // ฟอร์แมตระยะทาง (ปัดทศนิยม 1 ตำแหน่ง)
+  const formattedDistance =
+    shop.distance !== undefined && shop.distance !== null
+      ? `${Number(shop.distance).toFixed(1)} กม.`
+      : "ไม่ระบุระยะทาง";
+
+  const shopData = shop as any;
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group">
-      <div>
-        {/* รูปภาพหน้าร้าน และ ป้ายเปิด/ปิด */}
-        <Link href={`/customer/shop/${shop.id}`} className="block">
-          <div className="w-full h-40 bg-slate-100 rounded-xl mb-3 overflow-hidden relative border border-slate-100 cursor-pointer">
-            {shop.profile_image ? (
-              <img
-                src={shop.profile_image}
-                alt={shop.shop_name}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-blue-50/50 text-blue-500 font-bold text-3xl">
-                🖨️
-              </div>
-            )}
+    <Link
+      href={`/customer/shop/${shopData.id}`}
+      className="group bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-blue-400 transition-all flex flex-col cursor-pointer"
+    >
+      {/* รูปภาพหน้าร้าน พร้อม Badge สถานะเปิด-ปิด */}
+      <div className="relative w-full h-44 bg-blue-50/60 border-b border-blue-100 flex items-center justify-center overflow-hidden shrink-0">
+        {shop?.profile_image || shop?.image_url ? (
+          <img
+            src={shop.profile_image || shop.image_url} 
+            alt={shop.shop_name || "รูปร้านค้า"}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              // ถ้ารูปโหลดไม่ได้/ลิงก์เสีย ให้ซ่อนรูปแล้วกลับไปใช้ไอคอนเครื่องพิมพ์
+              (e.target as HTMLElement).style.display = "none";
+            }}
+          />
+        ) : (
+          /* Fallback: กรณีไม่มี URL รูปภาพ */
+          <span className="text-4xl">🖨️</span>
+        )}
 
+        {/* ป้ายสถานะเปิด-ปิดทำการ */}
+        <div className="absolute top-2.5 left-2.5 z-10">
+          <span
+            className={`text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-md ${
+              shopData.is_open
+                ? "bg-emerald-500/90 text-white"
+                : "bg-slate-700/80 text-white"
+            }`}
+          >
             <span
-              className={`absolute top-2.5 right-2.5 text-[11px] px-2.5 py-0.5 rounded-full font-semibold shadow-xs backdrop-blur-md ${
-                shop.is_open
-                  ? 'bg-emerald-500/95 text-white'
-                  : 'bg-rose-500/95 text-white'
+              className={`w-1.5 h-1.5 rounded-full ${
+                shopData.is_open ? "bg-white animate-pulse" : "bg-slate-400"
               }`}
-            >
-              {shop.is_open ? '● เปิดให้บริการ' : '○ ปิดทำการ'}
-            </span>
-          </div>
-        </Link>
-
-        {/* ชื่อร้านค้าและคะแนนรีวิว */}
-        <div className="flex items-start justify-between gap-2 mb-1.5">
-          <Link href={`/customer/shop/${shop.id}`} className="hover:text-blue-600 transition">
-            <h3 className="font-bold text-base text-slate-900 truncate">{shop.shop_name}</h3>
-          </Link>
-          <div className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md shrink-0 border border-amber-200/50">
-            <span>★</span>
-            <span>{shop.rating > 0 ? shop.rating.toFixed(1) : '5.0'}</span>
-          </div>
-        </div>
-
-        {/* ระยะทาง และ เวลาทำการ[cite: 1] */}
-        <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
-          <span className="flex items-center gap-1 text-blue-600 font-medium">
-            📍 {shop.distance !== null ? `${shop.distance} กม.` : 'ใกล้คุณ'}
-          </span>
-          <span>•</span>
-          <span>
-            🕒 {shop.open_time && shop.close_time ? `${shop.open_time.slice(0, 5)} - ${shop.close_time.slice(0, 5)} น.` : 'เปิดทำการ'}
+            />
+            {shopData.is_open ? "เปิดอยู่" : "ปิดทำการ"}
           </span>
         </div>
+      </div>
 
-        {/* บริการเด่น[cite: 1] */}
-        <div className="space-y-1 mb-4">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">บริการเด่น</p>
-          <div className="flex flex-wrap gap-1">
-            {shop.service_types && shop.service_types.length > 0 ? (
-              shop.service_types.slice(0, 3).map((type, idx) => (
-                <span
-                  key={idx}
-                  className="bg-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium"
-                >
-                  {type}
-                </span>
-              ))
-            ) : (
-              <span className="text-xs text-slate-400">ปริ้นท์งานทั่วไป</span>
+      {/* เนื้อหาสรุปข้อมูลร้านค้า (FR-1.4) */}
+      <div className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
+        <div className="space-y-1">
+          {/* 1. ชื่อร้าน */}
+          <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition truncate">
+            {shopData.shop_name || shopData.name}
+          </h3>
+
+          {/* 2. คะแนนรีวิวเฉลี่ย */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-600">
+            <div className="flex items-center gap-0.5 text-amber-500 font-bold">
+              <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-500" />
+              <span>{shopData.rating ? Number(shopData.rating).toFixed(1) : "0.0"}</span>
+            </div>
+            {shopData.review_count !== undefined && (
+              <span className="text-[11px] text-slate-400">
+                ({shopData.review_count})
+              </span>
             )}
           </div>
         </div>
-      </div>
 
-      {/* ราคาเริ่มต้น และปุ่มดูข้อมูลร้าน / สั่งปริ้นท์[cite: 1] */}
-      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-        <div>
-          <span className="text-[10px] text-slate-400 block leading-tight">ราคาเริ่มต้น</span>
-          <p className="text-base font-bold text-blue-600">฿{shop.starting_price}</p>
-        </div>
+        {/* ข้อมูลระยะทาง และ เวลาเปิด-ปิดทำการ */}
+        <div className="pt-2 border-t border-slate-100 space-y-1 text-xs text-slate-500">
+          {/* 3. ระยะทางจากจุดค้นหา (กิโลเมตร) */}
+          <div className="flex items-center gap-1.5 truncate">
+            <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span className="truncate">{formattedDistance}</span>
+          </div>
 
-        <div className="flex items-center gap-1.5">
-          <Link
-            href={`/customer/shop/${shop.id}`}
-            className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl transition active:scale-95 text-center"
-          >
-            ดูข้อมูลร้าน
-          </Link>
-          <Link
-            href={`/customer/order/${shop.id}`}
-            className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition shadow-xs text-center"
-          >
-            สั่งพิมพ์
-          </Link>
+          {/* 4. เวลาเปิด-ปิดทำการ */}
+          <div className="flex items-center gap-1.5 truncate">
+            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="text-[11px] text-slate-500 truncate">{businessHours}</span>
+          </div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }

@@ -173,7 +173,7 @@ export default function CustomerOrdersPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          router.push(`/customer/order/review`);
+                          router.push(`/customer/orders/${order.id}/review`);
                         }}
                         className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-600 text-[10px] font-semibold transition"
                       >
