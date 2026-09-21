@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import NavBar from '../../../component/customer/NavBar';
 
 interface OrderItem {
   id?: string;
@@ -104,22 +105,16 @@ export default function CustomerOrdersPage() {
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] font-sans pb-12">
-      <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30">
-        <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/customer"
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3.5 py-2 rounded-xl transition"
-            >
-              ← หน้าแรก
-            </Link>
-            <h1 className="font-bold text-lg text-slate-900">คำสั่งซื้อของฉัน</h1>
-          </div>
-          <span className="text-xs text-slate-400">เรียงตามเวลาล่าสุด</span>
-        </div>
-      </header>
+      {/* Navbar สดใสใช้ร่วมกันทุกหน้า */}
+      <NavBar />
 
       <main className="max-w-4xl mx-auto px-6 py-6 space-y-4">
+        {/* แถบส่วนหัวของหน้าคำสั่งซื้อ */}
+        <div className="flex items-center justify-between pb-2">
+          <h1 className="font-bold text-xl text-slate-900">คำสั่งซื้อของฉัน</h1>
+          <span className="text-xs text-slate-400 font-medium">เรียงตามเวลาล่าสุด</span>
+        </div>
+
         {loading ? (
           <div className="py-20 text-center text-xs text-slate-400 space-y-2">
             <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -225,9 +220,9 @@ export default function CustomerOrdersPage() {
                         onClick={() => {
                           router.push(`/customer/orders/${order.id}/review`);
                         }}
-                        className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-600 text-[10px] font-semibold transition cursor-pointer"
+                        className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-semibold transition cursor-pointer"
                       >
-                        ⭐ Rating
+                        ⭐ ให้คะแนนร้านค้า
                       </button>
                     )}
 

@@ -36,28 +36,33 @@ export default function ShopPage() {
   const [shopId, setShopId] = useState<string>("");
 
   const router = useRouter();
-
-  // กันการยิงซ้ำซ้อนถ้ามีหลาย event (focus + visibilitychange) เด้งพร้อมกัน
   const isFetchingRef = useRef(false);
 
-  // =========================
-  // Get shop_id from localStorage
-  // =========================
+  // ==========================================
+  // 1. ดึง shop_id จาก localStorage
+  // ==========================================
   useEffect(() => {
-    const id = "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9";
+    if (typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") ||
+        localStorage.getItem("id") ||
+        "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9";
 
-    if (id) {
-      setShopId(id);
-    } else {
-      console.error("shop_id not found in localStorage");
+      if (storedShopId && storedShopId !== "undefined" && storedShopId !== "null") {
+        setShopId(storedShopId);
+      } else {
+        console.error("shop_id not found in localStorage");
+        setLoading(false);
+      }
     }
   }, []);
 
+  // ==========================================
+  // 2. ฟังก์ชันดึงข้อมูล Dashboard
+  // ==========================================
   const fetchDashboardData = useCallback(
     async (opts?: { silent?: boolean }) => {
-      if (!shopId) {
-        return;
-      }
+      if (!shopId) return;
 
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
@@ -65,21 +70,43 @@ export default function ShopPage() {
       try {
         if (!opts?.silent) setLoading(true);
 
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
         const headers = {
-          shop_id: shopId,
+          shop_id: String(shopId),
+          "shop-id": String(shopId),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
 
-        const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.all([
-          axios.get("http://localhost:5000/shop/numWork", { headers }),
-          axios.get("http://localhost:5000/shop/getScore", { headers }),
-          axios.get("http://localhost:5000/shop/getIncome", { headers }),
-          axios.get("http://localhost:5000/shop/getTopOrder", { headers }),
+        const baseURL = "http://localhost:5000/shop";
+
+        // ใช้ Promise.allSettled เพื่อป้องกันไม่ให้ทั้งหน้าพังเมื่อ API ตัวใดตัวหนึ่งมีปัญหา
+        const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.allSettled([
+          axios.get(`${baseURL}/numWork`, { headers }),
+          axios.get(`${baseURL}/getScore`, { headers }),
+          axios.get(`${baseURL}/getIncome`, { headers }),
+          axios.get(`${baseURL}/getTopOrder`, { headers }),
         ]);
 
-        setNum(`${numRes.data.numWork ?? 0} รายการ`);
-        setScore(`${scoreRes.data.score ?? 0.0} / 5.0`);
-        setIncome(`${incomeRes.data.income ?? 0} บาท`);
-        setOrders(ordersRes.data ?? []);
+        if (numRes.status === "fulfilled") {
+          const val = numRes.value.data;
+          setNum(`${val?.numWork ?? val?.count ?? 0} รายการ`);
+        }
+
+        if (scoreRes.status === "fulfilled") {
+          const val = scoreRes.value.data;
+          setScore(`${val?.score ?? 0.0} / 5.0`);
+        }
+
+        if (incomeRes.status === "fulfilled") {
+          const val = incomeRes.value.data;
+          setIncome(`${val?.income ?? 0} บาท`);
+        }
+
+        if (ordersRes.status === "fulfilled") {
+          const val = ordersRes.value.data;
+          setOrders(Array.isArray(val) ? val : val?.orders || []);
+        }
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
       } finally {
@@ -90,13 +117,12 @@ export default function ShopPage() {
     [shopId]
   );
 
-  // โหลดข้อมูลครั้งแรกตอนได้ shopId
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    if (shopId) {
+      fetchDashboardData();
+    }
+  }, [shopId, fetchDashboardData]);
 
-  // โหลดข้อมูลใหม่แบบเงียบๆ (ไม่ขึ้น loading เต็มจอ) ทุกครั้งที่ผู้ใช้กลับมาที่แท็บ/หน้านี้อีกครั้ง
-  // เช่น กด back จากหน้า order detail หลังอัปเดตสถานะเสร็จ
   useEffect(() => {
     const handleFocus = () => fetchDashboardData({ silent: true });
     const handleVisibility = () => {

@@ -30,6 +30,7 @@ interface ServiceOptionModalProps {
     finishing_option: string;
     quantity: number;
     unit_price: number;
+    subtotal: number;
     file_url: string;
     total_pages: number;
   }) => void;
@@ -63,17 +64,55 @@ export default function ServiceOptionModal({
     return uploadedFiles.reduce((sum, f) => sum + f.pageCount, 0);
   }, [uploadedFiles]);
 
-  // คำนวณราคาต่อหน่วย: รวม Options x (ถ้าพิมพ์หน้า-หลัง x2)
-  const basePricePerUnit = useMemo(() => {
-    let base = Object.values(modalOptions).reduce(
-      (sum, item) => sum + Number(item.unit_price || 0),
-      0
-    );
-    if (service.type_name === "เอกสาร" && isDoubleSided) {
-      base = base * 2;
-    }
-    return base;
-  }, [modalOptions, service, isDoubleSided]);
+  // ฟังก์ชันสลับเลือก/ยกเลิกตัวเลือก (Toggle Selection)
+  const handleToggleOption = (group: string, opt: OptionItem) => {
+    setModalOptions((prev) => {
+      // ถ้าเลือกตัวเลือกเดิมอยู่แล้ว ให้ทำการลบออก (ยกเลิกการเลือก)
+      if (prev[group]?.id === opt.id) {
+        const updated = { ...prev };
+        delete updated[group];
+        return updated;
+      }
+      // ถ้ายังไม่ได้เลือก ให้ตั้งค่าตัวเลือกนั้น
+      return { ...prev, [group]: opt };
+    });
+  };
+
+  // 🧮 คำนวณราคาแบบแยกประเภทการพิมพ์และตัวเลือกเสริม
+  const priceCalculations = useMemo(() => {
+    let perPageOptionsSum = 0;
+    let finishingOptionsSum = 0;
+
+    Object.entries(modalOptions).forEach(([groupName, item]) => {
+      const price = Number(item.unit_price || 0);
+      // แยก Option สำหรับเข้าเล่ม/ตกแต่งออกจากราคาพิมพ์ต่อหน้า
+      if (groupName.includes("เข้าเล่ม") || groupName.includes("ตกแต่ง") || groupName.includes("finishing")) {
+        finishingOptionsSum += price;
+      } else {
+        perPageOptionsSum += price;
+      }
+    });
+
+    // หากเลือกพิมพ์หน้า-หลัง เพิ่มตัวคูณ 2 ในกรณีบริการเอกสาร
+    const printMultiplier = service.type_name === "เอกสาร" && isDoubleSided ? 2 : 1;
+    
+    // ราคาต่อหน้า/หน่วย
+    const pricePerPage = perPageOptionsSum * printMultiplier;
+    
+    // ราคารวม 1 ชุด = (ราคาต่อหน้า x จำนวนหน้า) + ค่าเข้าเล่ม
+    const singleSetPrice = service.type_name === "เอกสาร" 
+      ? (pricePerPage * totalPages) + finishingOptionsSum
+      : (pricePerPage + finishingOptionsSum);
+
+    // ราคารวมสุทธิทั้งหมด = ราคา 1 ชุด x จำนวนชุดที่สั่ง
+    const finalTotalPrice = singleSetPrice * quantity;
+
+    return {
+      pricePerPage,
+      singleSetPrice,
+      finalTotalPrice,
+    };
+  }, [modalOptions, service.type_name, isDoubleSided, totalPages, quantity]);
 
   // ฟังก์ชันคำนวณจำนวนหน้าของ PDF
   const countPdfPages = async (file: File): Promise<number> => {
@@ -100,7 +139,6 @@ export default function ServiceOptionModal({
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
-      // ตรวจสอบขนาดไฟล์ไม่เกิน 100MB
       if (file.size > 100 * 1024 * 1024) {
         setFileError(`ไฟล์ ${file.name} มีขนาดเกิน 100MB`);
         continue;
@@ -126,7 +164,7 @@ export default function ServiceOptionModal({
 
     setUploadedFiles((prev) => [...prev, ...newItems]);
     setIsProcessingFile(false);
-    e.target.value = ""; // รีเซ็ต input file
+    e.target.value = "";
   };
 
   const handleRemoveFile = (index: number) => {
@@ -141,7 +179,6 @@ export default function ServiceOptionModal({
   };
 
   const handleSubmit = () => {
-    // รวมชื่อไฟล์คั่นด้วยคอมมา หรือเก็บชื่อไฟล์แรก
     const fileNames = uploadedFiles.map((f) => f.file.name).join(", ");
 
     onAddToCart({
@@ -149,15 +186,24 @@ export default function ServiceOptionModal({
       selected_size:
         modalOptions["ขนาดกระดาษ"]?.option_name ||
         modalOptions["ขนาดมาตรฐาน"]?.option_name ||
+        modalOptions["size"]?.option_name ||
         "A4",
-      color_type: modalOptions["รูปแบบสีการพิมพ์"]?.option_name || "ขาว-ดำ",
-      paper_type: modalOptions["ความหนาและชนิดกระดาษ"]?.option_name || "80 แกรม",
-      finishing_option: `${modalOptions["รูปแบบการเข้าเล่ม/ตกแต่ง"]?.option_name || "ไม่มี"}${
-        service.type_name === "เอกสาร" && isDoubleSided ? " (พิมพ์หน้า-หลัง)" : ""
-      }`,
+      color_type:
+        modalOptions["รูปแบบสีการพิมพ์"]?.option_name ||
+        modalOptions["color"]?.option_name ||
+        "ขาว-ดำ",
+      paper_type:
+        modalOptions["ความหนาและชนิดกระดาษ"]?.option_name ||
+        modalOptions["paper"]?.option_name ||
+        "80 แกรม",
+      finishing_option: `${
+        modalOptions["รูปแบบการเข้าเล่ม/ตกแต่ง"]?.option_name ||
+        modalOptions["finishing"]?.option_name ||
+        "ไม่มี"
+      }${service.type_name === "เอกสาร" && isDoubleSided ? " (พิมพ์หน้า-หลัง)" : ""}`,
       quantity: Number(quantity),
-      // ราคารวม = (ราคาต่อหน้าตาม Options) x (จำนวนหน้าทั้งหมด)
-      unit_price: basePricePerUnit * (service.type_name === "เอกสาร" ? totalPages : 1),
+      unit_price: priceCalculations.singleSetPrice,
+      subtotal: priceCalculations.finalTotalPrice,
       file_url: fileNames || "https://example.com/demo.pdf",
       total_pages: totalPages,
     });
@@ -181,7 +227,7 @@ export default function ServiceOptionModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition"
+            className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -189,8 +235,7 @@ export default function ServiceOptionModal({
 
         {/* Content 2 คอลัมน์ */}
         <div className="flex-1 grid grid-cols-1 md:grid-cols-12 overflow-hidden">
-          
-          {/* 🌟 ฝั่งซ้าย: อัปโหลดหลายไฟล์ + รายการไฟล์ + พรีวิว */}
+          {/* ฝั่งซ้าย: อัปโหลดหลายไฟล์ + รายการไฟล์ + พรีวิว */}
           <div className="md:col-span-6 p-5 sm:p-6 bg-slate-50/70 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col overflow-y-auto space-y-4">
             <div>
               <span className="text-xs font-bold text-slate-700 block mb-1.5">
@@ -231,7 +276,7 @@ export default function ServiceOptionModal({
               )}
             </div>
 
-            {/* รายการไฟล์ที่อัปโหลดแล้ว พร้อมบอกจำนวนหน้า */}
+            {/* รายการไฟล์ที่อัปโหลดแล้ว */}
             {uploadedFiles.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
@@ -271,7 +316,7 @@ export default function ServiceOptionModal({
                             e.stopPropagation();
                             handleRemoveFile(idx);
                           }}
-                          className="p-1 text-slate-400 hover:text-rose-500 transition"
+                          className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -282,7 +327,7 @@ export default function ServiceOptionModal({
               </div>
             )}
 
-            {/* กล่อง Preview เอกสารไฟล์ที่เลือกอยู่ */}
+            {/* กล่อง Preview เอกสาร */}
             <div className="flex-1 flex flex-col min-h-[220px]">
               <span className="text-xs font-bold text-slate-700 block mb-1">
                 ตัวอย่างเอกสาร: {currentPreviewFile?.file.name || "(ยังไม่มีไฟล์)"}
@@ -318,9 +363,9 @@ export default function ServiceOptionModal({
             </div>
           </div>
 
-          {/* 🌟 ฝั่งขวา: กำหนดสเปกย่อย & จำนวนชุด */}
+          {/* ฝั่งขวา: กำหนดสเปกย่อย & จำนวนชุด */}
           <div className="md:col-span-6 p-5 sm:p-6 overflow-y-auto space-y-4 bg-white">
-            {/* เงื่อนไขหน้าเดียว vs หน้า-หลัง สำหรับเอกสาร */}
+            {/* หน้าเดียว vs หน้า-หลัง */}
             {service.type_name === "เอกสาร" && (
               <div className="space-y-1.5 bg-blue-50/60 p-3.5 rounded-2xl border border-blue-100">
                 <span className="text-xs font-bold text-blue-900 block">หน้าที่ต้องการพิมพ์</span>
@@ -351,7 +396,7 @@ export default function ServiceOptionModal({
               </div>
             )}
 
-            {/* รายการสเปกย่อยตาม Template */}
+            {/* รายการสเปกย่อยตาม Template พร้อมปุ่มกดสลับ Toggle */}
             {Array.from(new Set(service.options.map((o) => o.group_type))).map((group) => {
               const groupItems = service.options.filter((o) => o.group_type === group);
               return (
@@ -364,9 +409,7 @@ export default function ServiceOptionModal({
                         <button
                           key={opt.id}
                           type="button"
-                          onClick={() =>
-                            setModalOptions((prev) => ({ ...prev, [group]: opt }))
-                          }
+                          onClick={() => handleToggleOption(group, opt)}
                           className={`p-2.5 rounded-xl text-left border text-xs transition cursor-pointer flex items-center justify-between ${
                             isSelected
                               ? "bg-blue-50 border-blue-600 text-blue-700 font-bold shadow-2xs"
@@ -393,15 +436,15 @@ export default function ServiceOptionModal({
                 <button
                   type="button"
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-8 h-8 rounded-lg border border-slate-200 font-bold hover:bg-slate-100 cursor-pointer"
+                  className="w-8 h-8 rounded-lg border border-slate-200 font-bold hover:bg-slate-100 cursor-pointer text-slate-700"
                 >
                   -
                 </button>
-                <span className="text-xs font-bold w-6 text-center">{quantity}</span>
+                <span className="text-xs font-bold w-6 text-center text-slate-800">{quantity}</span>
                 <button
                   type="button"
                   onClick={() => setQuantity(quantity + 1)}
-                  className="w-8 h-8 rounded-lg border border-slate-200 font-bold hover:bg-slate-100 cursor-pointer"
+                  className="w-8 h-8 rounded-lg border border-slate-200 font-bold hover:bg-slate-100 cursor-pointer text-slate-700"
                 >
                   +
                 </button>
@@ -410,7 +453,7 @@ export default function ServiceOptionModal({
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer คำนวณราคาถูกต้อง */}
         <div className="p-4 sm:px-6 border-t border-slate-100 bg-white flex items-center justify-between">
           <div>
             <span className="text-[11px] text-slate-400 block">
@@ -419,11 +462,7 @@ export default function ServiceOptionModal({
                 : "ราคาคำนวณสุทธิ"}
             </span>
             <span className="text-base font-extrabold text-blue-600">
-              ฿{(
-                basePricePerUnit *
-                (service.type_name === "เอกสาร" ? totalPages : 1) *
-                quantity
-              ).toFixed(2)}
+              ฿{priceCalculations.finalTotalPrice.toFixed(2)}
             </span>
           </div>
 
