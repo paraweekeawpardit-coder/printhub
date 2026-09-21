@@ -2,10 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from 'next/navigation';
 
 interface OrderItem {
-  name: string;
+  id?: string;
+  category?: string;
+  selected_size?: string;
+  color_type?: string;
+  paper_type?: string;
   quantity: number;
   unit_price: number;
   subtotal: number;
@@ -13,17 +17,21 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  order_no?: number | string;
   order_date: string;
   receive_date: string;
   total_price: number;
   description: string;
-  shop: {
+  print_shop?: {
+    id?: string;
     shop_name: string;
-    phone: string;
     profile_image: string | null;
   };
-  current_status: string;
-  items: OrderItem[];
+  status?: {
+    id?: string;
+    state: string;
+  };
+  print_order_item?: OrderItem[];
 }
 
 export default function CustomerOrdersPage() {
@@ -32,45 +40,62 @@ export default function CustomerOrdersPage() {
   const [error, setError] = useState<string>('');
   const router = useRouter();
 
-  // กำหนด customer_id ให้ตรงกับที่สั่งซื้อจริงในฐานข้อมูล Supabase
-  const customerId = "50f1946f-79ed-47ad-939d-48d32b6a7547";
-
   useEffect(() => {
     const fetchOrders = async () => {
+      // 1. ดึง customer_id จริงจากการเข้าสู่ระบบ
+      const customerId =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('customer_id') || localStorage.getItem('id')
+          : null;
+
+      // ป้องกันกรณีไม่ได้ล็อกอิน หรือมีค่าเป็นสตริง "undefined"
+      if (!customerId || customerId === 'undefined' || customerId === 'null') {
+        setLoading(false);
+        setError('กรุณาเข้าสู่ระบบก่อนดูรายการคำสั่งซื้อ');
+        return;
+      }
+
       setLoading(true);
-      setError("");
+      setError('');
+
       try {
-        // ส่ง query param ?customerId=... ไปที่ Backend
-        const res = await fetch(`http://localhost:5000/api/customer/orders?customerId=${customerId}`);
+        // 2. ส่ง query param เป็น customer_id ให้ตรงกับ Backend Controller
+        const res = await fetch(
+          `http://localhost:5000/api/customer/orders?customer_id=${customerId}`
+        );
         const result = await res.json();
 
         if (res.ok && result.success) {
           setOrders(result.data || []);
         } else {
-          setError(result.message || "ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้");
+          setError(result.message || 'ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้');
         }
       } catch (err) {
-        console.error("Fetch orders error:", err);
-        setError("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
+        console.error('Fetch orders error:', err);
+        setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
       } finally {
         setLoading(false);
       }
     };
 
     fetchOrders();
-  }, [customerId]);
+  }, [router]);
 
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
+  const getStatusBadgeStyle = (state: string) => {
+    switch (state) {
+      case 'รอการดำเนินงาน':
       case 'รอดำเนินการ':
+      case 'Pending':
         return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'กำลังพิมพ์':
+      case 'In Progress':
         return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'พิมพ์เสร็จสิ้น':
       case 'พร้อมรับเอกสาร':
+      case 'Completed':
         return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'สำเร็จ':
-        return 'bg-slate-100 text-slate-700 border-slate-200';
       case 'ยกเลิก':
+      case 'Cancelled':
         return 'bg-rose-100 text-rose-800 border-rose-200';
       default:
         return 'bg-slate-100 text-slate-700 border-slate-200';
@@ -108,93 +133,126 @@ export default function CustomerOrdersPage() {
           <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-3">
             <span className="text-4xl">📦</span>
             <p className="text-sm font-bold text-slate-700">ยังไม่มีประวัติคำสั่งซื้อ</p>
-            <p className="text-xs text-slate-400">คุณยังไม่ได้ส่งไฟล์พิมพ์งานกับร้านค้าใดๆ ในขณะนี้</p>
+            <p className="text-xs text-slate-400">
+              คุณยังไม่ได้ส่งไฟล์พิมพ์งานกับร้านค้าใดๆ ในขณะนี้
+            </p>
           </div>
         ) : (
-          orders.map((order) => (
-            <div
-              key={order.id}
-              className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-blue-600 overflow-hidden border border-slate-200">
-                    {order.shop.profile_image ? (
-                      <img src={order.shop.profile_image} alt={order.shop.shop_name} className="w-full h-full object-cover" />
+          orders.map((order) => {
+            const currentStatus = order.status?.state || 'รอการดำเนินงาน';
+            const items = order.print_order_item || [];
+
+            return (
+              <div
+                key={order.id}
+                className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition space-y-4"
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-blue-600 overflow-hidden border border-slate-200">
+                      {order.print_shop?.profile_image ? (
+                        <img
+                          src={order.print_shop.profile_image}
+                          alt={order.print_shop.shop_name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        '🖨️'
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900">
+                        {order.print_shop?.shop_name || 'ร้านพิมพ์เอกสาร'}
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        สั่งซื้อเมื่อ:{' '}
+                        {order.order_date
+                          ? new Date(order.order_date).toLocaleString('th-TH')
+                          : '-'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`text-xs px-3 py-1 rounded-full font-semibold border ${getStatusBadgeStyle(
+                      currentStatus
+                    )}`}
+                  >
+                    ● {currentStatus}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-slate-700">รายการพิมพ์:</p>
+                  <div className="bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-100">
+                    {items.length === 0 ? (
+                      <p className="text-xs text-slate-400">ไม่มีรายละเอียดสินค้า</p>
                     ) : (
-                      '🖨️'
+                      items.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-xs">
+                          <span className="text-slate-600">
+                            • {item.category || 'งานพิมพ์'}{' '}
+                            {item.selected_size ? `(${item.selected_size})` : ''}{' '}
+                            <span className="text-slate-400">(x{item.quantity})</span>
+                          </span>
+                          <span className="font-semibold text-slate-800">
+                            ฿{Number(item.subtotal).toFixed(2)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                    {order.description && (
+                      <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-200/60">
+                        หมายเหตุ: {order.description}
+                      </p>
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-900">{order.shop.shop_name || 'ร้านพิมพ์เอกสาร'}</h3>
-                    <p className="text-[11px] text-slate-400">
-                      สั่งซื้อเมื่อ: {new Date(order.order_date).toLocaleString('th-TH')}
-                    </p>
-                  </div>
                 </div>
 
-                <span
-                  className={`text-xs px-3 py-1 rounded-full font-semibold border ${getStatusBadgeStyle(
-                    order.current_status
-                  )}`}
-                >
-                  ● {order.current_status}
-                </span>
-              </div>
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                  <span className="text-slate-500">
+                    🕒 นัดรับ:{' '}
+                    {order.receive_date
+                      ? new Date(order.receive_date).toLocaleDateString('th-TH')
+                      : 'ไม่ระบุ'}
+                  </span>
 
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-700">รายการพิมพ์:</p>
-                <div className="bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-100">
-                  {order.items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600">
-                        • {item.name} <span className="text-slate-400">(x{item.quantity})</span>
-                      </span>
-                      <span className="font-semibold text-slate-800">฿{Number(item.subtotal).toFixed(2)}</span>
-                    </div>
-                  ))}
-                  {order.description && (
-                    <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-200/60">
-                      หมายเหตุ: {order.description}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                <span className="text-slate-500">
-                  🕒 นัดรับ: {order.receive_date ? new Date(order.receive_date).toLocaleString('th-TH') : 'ไม่ระบุ'}
-                </span>
-
-                <div className="flex items-center gap-3">
-                    {/* ⭐ Rating Button */}
-                    {order.current_status === 'พิมพ์เสร็จสิ้น' && (
-                      
+                  <div className="flex items-center gap-3">
+                    {/* ปุ่มรีวิว แสดงเมื่อพิมพ์เสร็จสิ้น */}
+                    {(currentStatus === 'พิมพ์เสร็จสิ้น' || currentStatus === 'Completed') && (
                       <button
                         type="button"
                         onClick={() => {
                           router.push(`/customer/orders/${order.id}/review`);
                         }}
-                        className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-600 text-[10px] font-semibold transition"
+                        className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-600 text-[10px] font-semibold transition cursor-pointer"
                       >
                         ⭐ Rating
                       </button>
                     )}
-                  <span className="text-slate-500">ยอดรวมทั้งสิ้น:</span>
-                  <span className="text-base font-extrabold text-blue-600">฿{Number(order.total_price).toFixed(2)}</span>
-                  {/* ปุ่มแชตแสดงเฉพาะสถานะกำลังพิมพ์ */}
-                  {(order.current_status === 'กำลังพิมพ์' || order.current_status === 'พิมพ์เสร็จสิ้น') &&(
-                    <Link
-                      href={`/customer/order/${order.id}/chat`}
-                      className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-3 py-1.5 rounded-xl transition"
-                    >
-                      แชตกับร้านค้า
-                    </Link>
-                  )}
+
+                    <span className="text-slate-500">ยอดรวมทั้งสิ้น:</span>
+                    <span className="text-base font-extrabold text-blue-600">
+                      ฿{Number(order.total_price).toFixed(2)}
+                    </span>
+
+                    {/* ปุ่มแชตแสดงเมื่อร้านรับงานหรือพิมพ์เสร็จ */}
+                    {(currentStatus === 'กำลังพิมพ์' ||
+                      currentStatus === 'In Progress' ||
+                      currentStatus === 'พิมพ์เสร็จสิ้น' ||
+                      currentStatus === 'Completed') && (
+                      <Link
+                        href={`/customer/order/${order.id}/chat`}
+                        className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-3 py-1.5 rounded-xl transition"
+                      >
+                        แชตกับร้านค้า
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </main>
     </div>
