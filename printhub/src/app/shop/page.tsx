@@ -8,6 +8,15 @@ import DashboardCard from "@/src/component/shop/dashboard-card";
 import OrderCard from "@/src/component/shop/order-card";
 import ShopNavbar from "@/src/component/shop/navbar";
 
+// 1. อัปเดต Type ให้ตรงกับข้อมูลที่ Backend (home.ts) ส่งกลับมา
+type FileItem = {
+  id: string;
+  category: string;
+  filename: string;
+  url: string;
+  page_count?: number;
+};
+
 type Order = {
   id: string;
   customer_id: string;
@@ -15,10 +24,12 @@ type Order = {
   description: string | null;
   order_date: string;
   total_price: number;
+  latest_status?: string;
   customer?: {
     first_name: string;
     last_name: string;
   };
+  files?: FileItem[];
   work_status?: {
     updated_at: string;
     status: {
@@ -38,15 +49,13 @@ export default function ShopPage() {
   const router = useRouter();
   const isFetchingRef = useRef(false);
 
-  // ==========================================
-  // 1. ดึง shop_id จาก localStorage
-  // ==========================================
+  // 1. ดึง shop_id จาก localStorage (แก้ Fallback ให้เป็น ID จริงใน Supabase)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedShopId =
         localStorage.getItem("shop_id") ||
         localStorage.getItem("id") ||
-        "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9";
+        "cd04a0a0-9a52-49ff-a84c-df32288ca384"; // <--- แก้ ID ตรงนี้ให้ตรงกับ Database
 
       if (storedShopId && storedShopId !== "undefined" && storedShopId !== "null") {
         setShopId(storedShopId);
@@ -57,9 +66,7 @@ export default function ShopPage() {
     }
   }, []);
 
-  // ==========================================
   // 2. ฟังก์ชันดึงข้อมูล Dashboard
-  // ==========================================
   const fetchDashboardData = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!shopId) return;
@@ -80,32 +87,35 @@ export default function ShopPage() {
 
         const baseURL = "http://localhost:5000/shop";
 
-        // ใช้ Promise.allSettled เพื่อป้องกันไม่ให้ทั้งหน้าพังเมื่อ API ตัวใดตัวหนึ่งมีปัญหา
         const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.allSettled([
-          axios.get(`${baseURL}/numWork`, { headers }),
-          axios.get(`${baseURL}/getScore`, { headers }),
-          axios.get(`${baseURL}/getIncome`, { headers }),
-          axios.get(`${baseURL}/getTopOrder`, { headers }),
+          axios.get(`${baseURL}/numWork`, { headers, params: { shop_id: shopId } }),
+          axios.get(`${baseURL}/getScore`, { headers, params: { shop_id: shopId } }),
+          axios.get(`${baseURL}/getIncome`, { headers, params: { shop_id: shopId } }),
+          axios.get(`${baseURL}/getTopOrder`, { headers, params: { shop_id: shopId } }),
         ]);
 
         if (numRes.status === "fulfilled") {
           const val = numRes.value.data;
-          setNum(`${val?.numWork ?? val?.count ?? 0} รายการ`);
+          const count = typeof val === "number" ? val : (val?.numWork ?? val?.count ?? 0);
+          setNum(`${count} รายการ`);
         }
 
         if (scoreRes.status === "fulfilled") {
           const val = scoreRes.value.data;
-          setScore(`${val?.score ?? 0.0} / 5.0`);
+          const scoreVal = typeof val === "number" ? val : (val?.score ?? 0.0);
+          setScore(`${Number(scoreVal).toFixed(1)} / 5.0`);
         }
 
         if (incomeRes.status === "fulfilled") {
           const val = incomeRes.value.data;
-          setIncome(`${val?.income ?? 0} บาท`);
+          const incomeVal = typeof val === "number" ? val : (val?.income ?? val?.total_income ?? 0);
+          setIncome(`${Number(incomeVal).toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท`);
         }
 
         if (ordersRes.status === "fulfilled") {
           const val = ordersRes.value.data;
-          setOrders(Array.isArray(val) ? val : val?.orders || []);
+          const orderList = Array.isArray(val) ? val : val?.orders || val?.data || [];
+          setOrders(orderList);
         }
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
@@ -163,13 +173,13 @@ export default function ShopPage() {
           <DashboardCard
             title="รายได้วันนี้"
             value={income}
-            subtitle="0 คำสั่งพิมพ์"
+            subtitle="สรุปรายได้สะสม"
           />
 
           <DashboardCard
             title="คะแนนรีวิวเฉลี่ย"
             value={score}
-            subtitle="0 รีวิว"
+            subtitle="คะแนนจากลูกค้า"
           />
         </div>
 

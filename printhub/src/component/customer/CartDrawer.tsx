@@ -5,14 +5,25 @@ import { useRouter } from 'next/navigation';
 import { ShoppingBag, X } from 'lucide-react';
 
 interface CartItem {
-  fileName: string;
-  paperSize: string;
-  colorType: string;
-  printSide: string;
-  pagesPerSet: number;
-  pricePerPage: number;
-  quantity: number;
-  totalPrice: number;
+  id?: string;
+  fileName?: string;
+  file_url?: string;
+  paperSize?: string;
+  selected_size?: string;
+  paper_type?: string;
+  category?: string;
+  colorType?: string;
+  color_type?: string;
+  printSide?: string;
+  side_type?: string;
+  pagesPerSet?: number;
+  page_count?: number;
+  pricePerPage?: number;
+  unit_price?: number;
+  price?: number;
+  quantity?: number;
+  totalPrice?: number;
+  subtotal?: number;
 }
 
 interface CartDrawerProps {
@@ -21,27 +32,27 @@ interface CartDrawerProps {
   items?: CartItem[];
 }
 
-export default function CartDrawer({ isOpen, onClose, items }: CartDrawerProps) {
+export default function CartDrawer({ isOpen, onClose, items = [] }: CartDrawerProps) {
   const router = useRouter();
 
   if (!isOpen) return null;
 
-  // รายการสินค้าในตะกร้า (ถ้าไม่มีส่งมา ให้ใช้รายการสติ๊กเกอร์ 82 บาท)
-  const cartItems: CartItem[] = items && items.length > 0 ? items : [
-    {
-      fileName: 'logo_printhub.png',
-      paperSize: 'แผ่นสติ๊กเกอร์ (เนื้อ PP)',
-      colorType: '5x5 ซม.',
-      printSide: 'ไม่มี',
-      pagesPerSet: 1,
-      pricePerPage: 82.00,
-      quantity: 1,
-      totalPrice: 82.00,
-    }
-  ];
+  const cartItems = items;
 
-  // คำนวณราคารวม
-  const subtotal = cartItems.reduce((sum, item) => sum + item.totalPrice, 0);
+  // ฟังก์ชันคำนวณราคาต่อรายการอย่างปลอดภัย
+  const getItemPrice = (item: CartItem) => {
+    if (typeof item.totalPrice === 'number' && item.totalPrice > 0) return item.totalPrice;
+    if (typeof item.subtotal === 'number' && item.subtotal > 0) return item.subtotal;
+
+    const unitPrice = Number(item.unit_price || item.price || item.pricePerPage || 0);
+    const quantity = Number(item.quantity || 1);
+    const pageCount = Number(item.page_count || item.pagesPerSet || 1);
+
+    return unitPrice * quantity * pageCount;
+  };
+
+  // คำนวณราคารวมทั้งหมด
+  const subtotal = cartItems.reduce((sum, item) => sum + getItemPrice(item), 0);
 
   // ฟังก์ชันกด "ไปที่หน้าชำระเงิน"
   const handleGoToPayment = () => {
@@ -52,10 +63,7 @@ export default function CartDrawer({ isOpen, onClose, items }: CartDrawerProps) 
       smallOrderFeeThreshold: 50,
     };
 
-    // 1. ฝากข้อมูลตะกร้าไว้ใน sessionStorage
     sessionStorage.setItem('pending_order_data', JSON.stringify(orderPayload));
-
-    // 2. ปิด Drawer แล้วย้ายไปหน้า Payment
     onClose();
     router.push(`/customer/order/payment/${orderPayload.id}`);
   };
@@ -81,18 +89,37 @@ export default function CartDrawer({ isOpen, onClose, items }: CartDrawerProps) 
 
           {/* รายการสินค้า */}
           <div className="mt-4 space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-            {cartItems.map((item, idx) => (
-              <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-                <div className="font-bold text-sm text-slate-800">{item.fileName}</div>
-                <div className="text-xs text-slate-500">
-                  {item.paperSize} ({item.colorType})
-                </div>
-                <div className="flex justify-between items-center pt-2 text-xs font-semibold text-slate-700 border-t border-slate-200/60">
-                  <span>จำนวน {item.quantity} ชุด</span>
-                  <span className="text-blue-600 text-sm font-bold">฿{item.totalPrice.toFixed(2)}</span>
-                </div>
+            {cartItems.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">
+                ยังไม่มีสินค้าในตะกร้า
               </div>
-            ))}
+            ) : (
+              cartItems.map((item, idx) => {
+                const itemTitle = item.category || item.fileName || item.file_url?.split('/').pop() || 'รายการงานพิมพ์';
+                const itemDetail = [
+                  item.paperSize || item.selected_size,
+                  item.paper_type,
+                  item.colorType || item.color_type
+                ].filter(Boolean).join(' • ');
+
+                const itemPrice = getItemPrice(item);
+
+                return (
+                  <div key={item.id || idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                    <div className="font-bold text-sm text-slate-800">{itemTitle}</div>
+                    {itemDetail && (
+                      <div className="text-xs text-slate-500">
+                        {itemDetail}
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center pt-2 text-xs font-semibold text-slate-700 border-t border-slate-200/60">
+                      <span>จำนวน {item.quantity || 1} ชุด</span>
+                      <span className="text-blue-600 text-sm font-bold">฿{itemPrice.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -105,7 +132,8 @@ export default function CartDrawer({ isOpen, onClose, items }: CartDrawerProps) 
 
           <button
             onClick={handleGoToPayment}
-            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+            disabled={cartItems.length === 0}
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
           >
             <span>ไปที่หน้าชำระเงิน</span>
             <span>→</span>
