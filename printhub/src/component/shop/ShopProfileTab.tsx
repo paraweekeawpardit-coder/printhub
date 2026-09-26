@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Clock, Pencil } from "lucide-react";
+import { Camera, Clock, Pencil, Lock } from "lucide-react";
 
 type AddressData = {
   detail: string;
@@ -11,6 +11,10 @@ type AddressData = {
 };
 
 type Props = {
+  isVerified: boolean;
+  isOpen: boolean;
+  onToggleOpen: () => void;
+  togglingOpen: boolean;
   shopName: string;
   setShopName: (v: string) => void;
   ownerName: string;
@@ -32,6 +36,10 @@ type Props = {
 };
 
 export default function ShopProfileTab({
+  isVerified,
+  isOpen,
+  onToggleOpen,
+  togglingOpen,
   shopName,
   setShopName,
   ownerName,
@@ -51,217 +59,272 @@ export default function ShopProfileTab({
   isEditing,
   onToggleEdit,
 }: Props) {
-  // มีข้อมูลอยู่แล้ว และยังไม่ได้กดแก้ไข -> แสดงเป็นข้อมูลอย่างเดียว พร้อมปุ่มแก้ไข
-  if (hasData && !isEditing) {
-    const addressText = [
-      address.detail,
-      address.subdistrict,
-      address.district,
-      address.province,
-      address.postcode,
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    return (
-      <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#EAF1FF] text-xl font-bold text-[#2F6FED]">
-              {shopName ? shopName.charAt(0) : "S"}
-            </div>
-            <div>
-              <p className="text-sm font-bold text-[#0F2942]">{shopName || "-"}</p>
-              <p className="text-xs text-slate-400">เจ้าของร้าน: {ownerName || "-"}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onToggleEdit}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-[#0F2942] hover:border-[#0F2942] transition-colors"
-          >
-            <Pencil size={14} /> แก้ไขข้อมูล
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-slate-400">เบอร์โทรศัพท์</p>
-            <p className="mt-1 text-sm text-[#0F2942]">{phone || "-"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400">อีเมล</p>
-            <p className="mt-1 text-sm text-[#0F2942]">{email || "-"}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400">เวลาทำการ</p>
-            <p className="mt-1 text-sm text-[#0F2942] flex items-center gap-1.5">
-              <Clock size={14} className="text-slate-400" />
-              {openTime} — {closeTime}
-            </p>
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs font-semibold text-slate-400">ที่อยู่ร้านค้า</p>
-          <p className="mt-1 text-sm text-[#0F2942]">{addressText || "-"}</p>
-        </div>
-      </div>
-    );
-  }
+  const addressText = [
+    address.detail,
+    address.subdistrict,
+    address.district,
+    address.province,
+    address.postcode,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      {/* Profile Image */}
-      <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
-        <div className="relative">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#EAF1FF] text-xl font-bold text-[#2F6FED]">
-            {shopName ? shopName.charAt(0) : "S"}
+    <div className="relative">
+      <div
+        className={`space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm ${
+          !isVerified ? "pointer-events-none blur-[2px] select-none" : ""
+        }`}
+      >
+        {/* สถานะร้าน: เปิด / ปิดชั่วคราว */}
+        <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isOpen ? "bg-emerald-500" : "bg-slate-400"
+              }`}
+            />
+            <div>
+              <p className="text-sm font-bold text-[#0F2942]">
+                {isOpen ? "ร้านเปิดให้บริการ" : "ปิดร้านชั่วคราว"}
+              </p>
+              <p className="text-xs text-slate-400">
+                {isOpen
+                  ? "ลูกค้าสามารถสั่งพิมพ์กับร้านคุณได้ตามปกติ"
+                  : "ลูกค้าจะไม่สามารถสั่งพิมพ์กับร้านคุณได้ชั่วคราว"}
+              </p>
+            </div>
           </div>
+
           <button
             type="button"
-            className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#0F2942] text-white hover:bg-[#16385c] transition-colors"
+            onClick={onToggleOpen}
+            disabled={togglingOpen}
+            aria-pressed={isOpen}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+              isOpen ? "bg-emerald-500" : "bg-slate-300"
+            }`}
           >
-            <Camera size={12} />
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                isOpen ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
           </button>
         </div>
-        <div>
-          <p className="text-sm font-bold text-[#0F2942]">รูปโปรไฟล์ร้านค้า</p>
-          <p className="text-xs text-slate-400">แนะนำขนาด 400 x 400 px</p>
-        </div>
-      </div>
 
-      {/* Info Form */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="text-xs font-semibold text-slate-600">ชื่อร้านค้า</label>
-          <input
-            type="text"
-            value={shopName}
-            onChange={(e) => setShopName(e.target.value)}
-            placeholder="เช่น ตั๋วปริ้น ลาดกระบัง"
-            className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-600">ชื่อเจ้าของร้าน</label>
-          <input
-            type="text"
-            value={ownerName}
-            onChange={(e) => setOwnerName(e.target.value)}
-            placeholder="ชื่อ-นามสกุล"
-            className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-600">เบอร์โทรศัพท์</label>
-          <input
-            type="text"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="08x-xxx-xxxx"
-            className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-600">อีเมล</label>
-          <input
-            type="text"
-            value={email}
-            disabled
-            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-400 cursor-not-allowed"
-          />
-        </div>
-      </div>
+        {/* Default Mode: View Mode */}
+        {!isEditing ? (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#EAF1FF] text-xl font-bold text-[#2F6FED]">
+                  {shopName ? shopName.charAt(0) : "S"}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-[#0F2942]">{shopName || "-"}</p>
+                  <p className="text-xs text-slate-400">เจ้าของร้าน: {ownerName || "-"}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onToggleEdit}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-[#0F2942] hover:border-[#0F2942] transition-colors"
+              >
+                <Pencil size={14} /> แก้ไขข้อมูล
+              </button>
+            </div>
 
-      {/* Business Hours */}
-      <div>
-        <label className="text-xs font-semibold text-slate-600 mb-2 block">เวลาทำการ</label>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 flex-1 rounded-xl border border-slate-200 px-3.5 py-2">
-            <Clock size={16} className="text-slate-400" />
-            <input
-              type="time"
-              value={openTime}
-              onChange={(e) => setOpenTime(e.target.value)}
-              className="w-full text-sm text-[#0F2942] outline-none bg-transparent"
-            />
-          </div>
-          <span className="text-slate-400">—</span>
-          <div className="flex items-center gap-2 flex-1 rounded-xl border border-slate-200 px-3.5 py-2">
-            <Clock size={16} className="text-slate-400" />
-            <input
-              type="time"
-              value={closeTime}
-              onChange={(e) => setCloseTime(e.target.value)}
-              className="w-full text-sm text-[#0F2942] outline-none bg-transparent"
-            />
-          </div>
-        </div>
-      </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-semibold text-slate-400">เบอร์โทรศัพท์</p>
+                <p className="mt-1 text-sm text-[#0F2942]">{phone || "-"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400">อีเมล</p>
+                <p className="mt-1 text-sm text-[#0F2942]">{email || "-"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400">เวลาทำการ</p>
+                <p className="mt-1 text-sm text-[#0F2942] flex items-center gap-1.5">
+                  <Clock size={14} className="text-slate-400" />
+                  {openTime} — {closeTime}
+                </p>
+              </div>
+            </div>
 
-      {/* Address */}
-      <div>
-        <label className="text-xs font-semibold text-slate-600 mb-2 block">ที่อยู่ร้านค้า</label>
-        <div className="space-y-3">
-          <textarea
-            value={address.detail}
-            onChange={(e) => setAddress((prev) => ({ ...prev, detail: e.target.value }))}
-            placeholder="เลขที่ อาคาร ซอย ถนน"
-            rows={2}
-            className="w-full rounded-xl border border-slate-200 p-3 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED] resize-none"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              type="text"
-              value={address.subdistrict}
-              onChange={(e) => setAddress((prev) => ({ ...prev, subdistrict: e.target.value }))}
-              placeholder="ตำบล / แขวง"
-              className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-            />
-            <input
-              type="text"
-              value={address.district}
-              onChange={(e) => setAddress((prev) => ({ ...prev, district: e.target.value }))}
-              placeholder="อำเภอ / เขต"
-              className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-            />
-            <input
-              type="text"
-              value={address.province}
-              onChange={(e) => setAddress((prev) => ({ ...prev, province: e.target.value }))}
-              placeholder="จังหวัด"
-              className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-            />
-            <input
-              type="text"
-              value={address.postcode}
-              onChange={(e) => setAddress((prev) => ({ ...prev, postcode: e.target.value }))}
-              placeholder="รหัสไปรษณีย์"
-              className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-            />
+            <div>
+              <p className="text-xs font-semibold text-slate-400">ที่อยู่ร้านค้า</p>
+              <p className="mt-1 text-sm text-[#0F2942]">{addressText || "-"}</p>
+            </div>
           </div>
-        </div>
-      </div>
-      <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-        {hasData && (
-          <button
-            type="button"
-            onClick={onToggleEdit}
-            disabled={saving}
-            className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-semibold text-slate-500 hover:border-slate-300 transition-colors disabled:opacity-50"
-          >
-            ยกเลิก
-          </button>
+        ) : (
+          /* Edit Mode Form */
+          <div className="space-y-6">
+            {/* Profile Image */}
+            <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+              <div className="relative">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#EAF1FF] text-xl font-bold text-[#2F6FED]">
+                  {shopName ? shopName.charAt(0) : "S"}
+                </div>
+                <button
+                  type="button"
+                  className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#0F2942] text-white hover:bg-[#16385c] transition-colors"
+                >
+                  <Camera size={12} />
+                </button>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#0F2942]">รูปโปรไฟล์ร้านค้า</p>
+                <p className="text-xs text-slate-400">แนะนำขนาด 400 x 400 px</p>
+              </div>
+            </div>
+
+            {/* Inputs Form */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-600">ชื่อร้านค้า</label>
+                <input
+                  type="text"
+                  value={shopName}
+                  onChange={(e) => setShopName(e.target.value)}
+                  placeholder="เช่น ตั๋วปริ้น ลาดกระบัง"
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">ชื่อเจ้าของร้าน</label>
+                <input
+                  type="text"
+                  value={ownerName}
+                  onChange={(e) => setOwnerName(e.target.value)}
+                  placeholder="ชื่อ-นามสกุล"
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">เบอร์โทรศัพท์</label>
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="08x-xxx-xxxx"
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">อีเมล</label>
+                <input
+                  type="text"
+                  value={email}
+                  disabled
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-400 cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            {/* Business Hours */}
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-2 block">เวลาทำการ</label>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-1 rounded-xl border border-slate-200 px-3.5 py-2">
+                  <Clock size={16} className="text-slate-400" />
+                  <input
+                    type="time"
+                    value={openTime}
+                    onChange={(e) => setOpenTime(e.target.value)}
+                    className="w-full text-sm text-[#0F2942] outline-none bg-transparent"
+                  />
+                </div>
+                <span className="text-slate-400">—</span>
+                <div className="flex items-center gap-2 flex-1 rounded-xl border border-slate-200 px-3.5 py-2">
+                  <Clock size={16} className="text-slate-400" />
+                  <input
+                    type="time"
+                    value={closeTime}
+                    onChange={(e) => setCloseTime(e.target.value)}
+                    className="w-full text-sm text-[#0F2942] outline-none bg-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Address */}
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-2 block">ที่อยู่ร้านค้า</label>
+              <div className="space-y-3">
+                <textarea
+                  value={address.detail}
+                  onChange={(e) => setAddress((prev) => ({ ...prev, detail: e.target.value }))}
+                  placeholder="เลขที่ อาคาร ซอย ถนน"
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED] resize-none"
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={address.subdistrict}
+                    onChange={(e) => setAddress((prev) => ({ ...prev, subdistrict: e.target.value }))}
+                    placeholder="ตำบล / แขวง"
+                    className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
+                  />
+                  <input
+                    type="text"
+                    value={address.district}
+                    onChange={(e) => setAddress((prev) => ({ ...prev, district: e.target.value }))}
+                    placeholder="อำเภอ / เขต"
+                    className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
+                  />
+                  <input
+                    type="text"
+                    value={address.province}
+                    onChange={(e) => setAddress((prev) => ({ ...prev, province: e.target.value }))}
+                    placeholder="จังหวัด"
+                    className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
+                  />
+                  <input
+                    type="text"
+                    value={address.postcode}
+                    onChange={(e) => setAddress((prev) => ({ ...prev, postcode: e.target.value }))}
+                    placeholder="รหัสไปรษณีย์"
+                    className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={onToggleEdit}
+                disabled={saving}
+                className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-semibold text-slate-500 hover:border-slate-300 transition-colors disabled:opacity-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="rounded-xl bg-[#0F2942] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#16385c] transition-colors disabled:opacity-50"
+              >
+                {saving ? "กำลังบันทึก..." : "บันทึกข้อมูลร้าน"}
+              </button>
+            </div>
+          </div>
         )}
-        <button
-          onClick={onSave}
-          disabled={saving}
-          className="rounded-xl bg-[#0F2942] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#16385c] transition-colors disabled:opacity-50"
-        >
-          {saving ? "กำลังบันทึก..." : "บันทึกข้อมูลร้าน"}
-        </button>
       </div>
+
+      {/* Verification Overlay */}
+      {!isVerified && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/70 backdrop-blur-xs">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+            <Lock size={20} />
+          </div>
+          <p className="text-center px-6 text-sm font-semibold text-gray-900">
+            คุณจะสามารถแก้ไขข้อมูลร้านได้ เมื่อผ่านการยืนยันตัวตนจากผู้ดูแลระบบแล้ว
+          </p>
+        </div>
+      )}
     </div>
   );
 }

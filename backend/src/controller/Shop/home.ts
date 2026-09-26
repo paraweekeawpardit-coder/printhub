@@ -172,16 +172,13 @@ export const getTodayInCome = async (
   }
 };
 
-// ==========================================
 // Get Number of Unaccepted Orders
-// ==========================================
-
 export const getNumOrderUnAccept = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
-    const shop_id = req.headers.shop_id as string;
+    const shop_id = (req.headers.shop_id || req.query.shop_id) as string;
 
     if (!shop_id) {
       return res.status(400).json({
@@ -189,48 +186,21 @@ export const getNumOrderUnAccept = async (
       });
     }
 
-    // ใช้ชื่อเดียวกับ getTopOrder
-    const {
-      data: statusData,
-      error: statusError,
-    } = await supabase
+    const { data: statusData, error: statusError } = await supabase
       .from("status")
       .select("id")
-      .eq(
-        "state",
-        "รอการดำเนินงาน"
-      )
+      .eq("state", "รอการดำเนินการ")
       .single();
 
     if (statusError || !statusData) {
-      return res.status(200).json({
-        numWork: 0,
-      });
+      return res.status(200).json({ numWork: 0 });
     }
 
-    const {
-      count,
-      error,
-    } = await supabase
-      .from("work_status")
-      .select(
-        `
-        id,
-        print_order!inner(shop_id)
-        `,
-        {
-          count: "exact",
-          head: true,
-        }
-      )
-      .eq(
-        "status_id",
-        statusData.id
-      )
-      .eq(
-        "print_order.shop_id",
-        shop_id
-      );
+    const { count, error } = await supabase
+      .from("print_order")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shop_id)
+      .eq("current_status_id", statusData.id);
 
     if (error) {
       return res.status(400).json({
@@ -243,26 +213,22 @@ export const getNumOrderUnAccept = async (
     });
 
   } catch (err) {
-    console.error(err);
-
+    console.error("Error in getNumOrderUnAccept:", err);
     return res.status(500).json({
       error: "Server Error",
     });
   }
 };
 
-// ==========================================
+
 // Get Top Orders
-// ==========================================
 
 export const getTopOrder = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
-    const shop_id =
-      (req.headers.shop_id ||
-        req.query.shop_id) as string;
+    const shop_id = (req.headers.shop_id || req.query.shop_id) as string;
 
     if (!shop_id) {
       return res.status(400).json({
@@ -270,37 +236,26 @@ export const getTopOrder = async (
       });
     }
 
-    const {
-      data: orders,
-      error,
-    } = await supabase
+    const { data: orders, error } = await supabase
       .from("print_order")
       .select(
         `
         *,
         customer (
           first_name,
-          last_name
+          last_name,
+          contact
         ),
-        work_status (
-          updated_at,
-          status (
-            id,
-            state
-          )
+        current_status:status!current_status_id (
+          id,
+          state
+        ),
+        print_order_item (
+          *
         )
         `
       )
-      .eq(
-        "shop_id",
-        shop_id
-      )
-      .order(
-        "order_date",
-        {
-          ascending: false,
-        }
-      );
+      .eq("shop_id", shop_id);
 
     if (error) {
       return res.status(400).json({
@@ -308,80 +263,42 @@ export const getTopOrder = async (
       });
     }
 
-    if (
-      !orders ||
-      orders.length === 0
-    ) {
+    if (!orders || orders.length === 0) {
       return res.status(200).json([]);
     }
 
-    const formattedOrders =
-      orders.map(
-        (order: any) => {
+    const sortedOrders = orders.sort((a: any, b: any) => {
+      const stateA = a.current_status?.state || "";
+      const stateB = b.current_status?.state || "";
 
-          const statuses =
-            order.work_status || [];
+      const isPendingA = stateA === "รอการดำเนินการ" || stateA === "กำลังพิมพ์";
+      const isPendingB = stateB === "รอการดำเนินการ" || stateB === "กำลังพิมพ์";
 
-          statuses.sort(
-            (
-              a: any,
-              b: any
-            ) =>
-              new Date(
-                b.updated_at
-              ).getTime() -
-              new Date(
-                a.updated_at
-              ).getTime()
-          );
+      if (isPendingA && !isPendingB) return -1;
+      if (!isPendingA && isPendingB) return 1;
 
-          const latestState =
-            statuses[0]
-              ?.status
-              ?.state || "";
+      if (isPendingA && isPendingB) {
+        const timeA = new Date(a.appointment_time || a.receive_date || a.order_date).getTime();
+        const timeB = new Date(b.appointment_time || b.receive_date || b.order_date).getTime();
+        return timeA - timeB;
+      }
 
-          return {
-            ...order,
+      const dateA = new Date(a.order_date).getTime();
+      const dateB = new Date(b.order_date).getTime();
+      return dateB - dateA;
+    });
 
-            // ส่งทั้ง work_state
-            // เพื่อให้ Frontend ใช้ได้
-            work_state: statuses,
+    const formattedOrders = sortedOrders.map((order: any) => ({
+      ...order,
+      latest_status: order.current_status?.state || "ไม่ทราบสถานะ",
+    }));
 
-            latest_status:
-              latestState,
-          };
-        }
-      );
+    const topOrders = formattedOrders.slice(0, 5);
 
-    const pendingOrders =
-      formattedOrders.filter(
-        (order) =>
-          order.latest_status ===
-          "รอการดำเนินการ"
-      );
-
-    let resultOrders;
-
-    if (
-      pendingOrders.length < 3
-    ) {
-      resultOrders =
-        formattedOrders.slice(
-          0,
-          3
-        );
-    } else {
-      resultOrders =
-        pendingOrders;
-    }
-
-    return res.status(200).json(
-      resultOrders
-    );
+    return res.status(200).json(topOrders);
 
   } catch (err) {
-    console.error(err);
-
+    console.error("Error in getTopOrder:", err);
     return res.status(500).json({
       error: "Server Error",
     });

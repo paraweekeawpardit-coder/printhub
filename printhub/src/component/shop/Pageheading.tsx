@@ -3,6 +3,9 @@ interface PageHeadingProps {
 }
 
 export default function PageHeading({ title }: PageHeadingProps) {
-  return <h1 className="text-lg font-semibold text-slate-900">{title}</h1>;
+  return (
+    <h1 className="text-2xl font-extrabold tracking-tight text-[#0F2942]">
+      {title}
+    </h1>
+  );
 }
-

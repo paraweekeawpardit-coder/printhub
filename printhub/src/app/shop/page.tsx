@@ -15,16 +15,15 @@ type Order = {
   description: string | null;
   order_date: string;
   total_price: number;
+  latest_status?: string;
   customer?: {
     first_name: string;
     last_name: string;
   };
-  work_status?: {
-    updated_at: string;
-    status: {
-      state: string;
-    };
-  }[];
+  current_status?: {
+    id: string;
+    state: string;
+  };
 };
 
 export default function ShopPage() {
@@ -36,16 +35,10 @@ export default function ShopPage() {
   const [shopId, setShopId] = useState<string>("");
 
   const router = useRouter();
-
-  // กันการยิงซ้ำซ้อนถ้ามีหลาย event (focus + visibilitychange) เด้งพร้อมกัน
   const isFetchingRef = useRef(false);
 
-  // =========================
-  // Get shop_id from localStorage
-  // =========================
   useEffect(() => {
-    const id = "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9";
-
+    const id = localStorage.getItem("shop_id");
     if (id) {
       setShopId(id);
     } else {
@@ -55,9 +48,7 @@ export default function ShopPage() {
 
   const fetchDashboardData = useCallback(
     async (opts?: { silent?: boolean }) => {
-      if (!shopId) {
-        return;
-      }
+      if (!shopId) return;
 
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
@@ -65,9 +56,7 @@ export default function ShopPage() {
       try {
         if (!opts?.silent) setLoading(true);
 
-        const headers = {
-          shop_id: shopId,
-        };
+        const headers = { shop_id: shopId };
 
         const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.all([
           axios.get("http://localhost:5000/shop/numWork", { headers }),
@@ -90,13 +79,10 @@ export default function ShopPage() {
     [shopId]
   );
 
-  // โหลดข้อมูลครั้งแรกตอนได้ shopId
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // โหลดข้อมูลใหม่แบบเงียบๆ (ไม่ขึ้น loading เต็มจอ) ทุกครั้งที่ผู้ใช้กลับมาที่แท็บ/หน้านี้อีกครั้ง
-  // เช่น กด back จากหน้า order detail หลังอัปเดตสถานะเสร็จ
   useEffect(() => {
     const handleFocus = () => fetchDashboardData({ silent: true });
     const handleVisibility = () => {
@@ -116,6 +102,11 @@ export default function ShopPage() {
 
   const handleOrderClick = (orderId: string) => {
     router.push(`/shop/detail/${orderId}`);
+  };
+
+  // ดึงข้อมูล Dashboard ใหม่เมื่อมีการอัปเดตสถานะใน Card
+  const handleStatusUpdated = () => {
+    fetchDashboardData({ silent: true });
   };
 
   return (
@@ -163,6 +154,7 @@ export default function ShopPage() {
                   key={item.id}
                   order={item}
                   onClick={() => handleOrderClick(item.id)}
+                  onUpdateStatus={handleStatusUpdated}
                 />
               ))
             ) : (

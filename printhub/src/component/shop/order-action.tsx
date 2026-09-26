@@ -1,4 +1,4 @@
-import { Check, X } from "lucide-react";
+import { Check, X, Printer } from "lucide-react";
 
 type Props = {
   status?: string;
@@ -11,27 +11,24 @@ export default function OrderActions({
   onUpdateStatus,
   disabled,
 }: Props) {
-  // NOTE: matched against the `status` table's actual values
-  // (พิมพ์เสร็จสิ้น / รอการดำเนินงาน / ยกเลิกการพิมพ์ / กำลังพิมพ์).
-  // "กำลังดำเนินการ" never matched any real row before this fix.
   if (status === "รอการดำเนินงาน") {
     return (
-      <div className="flex gap-3 mt-6">
-        <button
-          onClick={() => onUpdateStatus?.("กำลังพิมพ์")}
-          disabled={disabled}
-          className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg border border-emerald-200 text-emerald-600 text-sm font-medium hover:bg-emerald-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Check size={16} />
-          รับออเดอร์
-        </button>
+      <div className="flex gap-2">
         <button
           onClick={() => onUpdateStatus?.("ยกเลิกการพิมพ์")}
           disabled={disabled}
-          className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg border border-rose-200 text-rose-500 text-sm font-medium hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 text-xs font-bold transition-all disabled:opacity-50"
         >
-          <X size={16} />
+          <X size={14} />
           ปฏิเสธ
+        </button>
+        <button
+          onClick={() => onUpdateStatus?.("กำลังพิมพ์")}
+          disabled={disabled}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+        >
+          <Check size={14} />
+          รับออเดอร์
         </button>
       </div>
     );
@@ -39,32 +36,38 @@ export default function OrderActions({
 
   if (status === "กำลังพิมพ์") {
     return (
-      <button
-        onClick={() => onUpdateStatus?.("ยกเลิกการพิมพ์")}
-        disabled={disabled}
-        className="w-full flex items-center justify-center gap-1.5 mt-6 px-4 py-2.5 rounded-lg border border-rose-200 text-rose-500 text-sm font-medium hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <X size={16} />
-        ปฏิเสธ
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onUpdateStatus?.("ยกเลิกการพิมพ์")}
+          disabled={disabled}
+          className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-500 text-xs font-bold transition-all disabled:opacity-50"
+        >
+          <X size={14} />
+        </button>
+        <button
+          onClick={() => onUpdateStatus?.("พิมพ์เสร็จสิ้น")}
+          disabled={disabled}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm shadow-blue-200 disabled:opacity-50"
+        >
+          <Printer size={14} />
+          พิมพ์เสร็จสิ้น
+        </button>
+      </div>
     );
   }
 
   if (status === "พิมพ์เสร็จสิ้น") {
-    // terminal state — not an action, just a status indicator
     return (
-      <div className="w-full flex items-center justify-center gap-1.5 mt-6 px-4 py-2.5 rounded-lg border border-emerald-200 text-emerald-500 text-sm font-medium">
-        <Check size={16} />
-        เสร็จสิ้น
+      <div className="w-full text-center py-2 text-xs font-bold text-emerald-600 bg-emerald-50/60 rounded-xl">
+        ✓ ดำเนินการเสร็จสิ้น
       </div>
     );
   }
 
   if (status === "ยกเลิกการพิมพ์") {
     return (
-      <div className="w-full flex items-center justify-center gap-1.5 mt-6 px-4 py-2.5 rounded-lg border border-rose-200 text-rose-500 text-sm font-medium">
-        <X size={16} />
-        ยกเลิกแล้ว
+      <div className="w-full text-center py-2 text-xs font-bold text-slate-400 bg-slate-50 rounded-xl">
+        ยกเลิกออเดอร์แล้ว
       </div>
     );
   }

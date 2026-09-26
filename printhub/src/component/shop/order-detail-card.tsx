@@ -1,85 +1,225 @@
-import { Eye } from "lucide-react";
+import { MessageCircle, ArrowUpRight, FileText } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions from "./order-action";
 
+// ==========================================
+// Types
+// ==========================================
+// NOTE: cart lets a customer add several items (with different
+// files/specs) into one checkout, so one order can now contain
+// several "sub-order" items. `items` replaces the old flat
+// qty/type/detail/file_name/file_url fields.
+
+export type OrderItemDetail = {
+  id: string;
+  category: string;
+  describe: string;
+  file_url: string | null;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+  page_count: number | null;
+};
+
 export type OrderDetail = {
   order_id: string;
+  order_no?: number;
   date: string;
   customer_name: string;
-  customer_avatar: string;
-  qty: number;
-  type: string;
-  detail: string;
-  file_name: string;
-  file_url: string;
+  customer_avatar?: string;
   status: string;
-  price: number;
   amount: number;
+  items: OrderItemDetail[];
 };
 
 type Props = {
   order: OrderDetail;
-  onClick?: () => void; // ✅ เพิ่ม onClick (ใส่ ? ไว้เพื่อไม่ให้พังหากบางจุดไม่ได้ส่งมา)
+  onClick?: () => void;
+  onUpdateStatus?: (orderId: string, newStatus: string) => void;
 };
 
-export default function OrderDetailCard({ order, onClick }: Props) {
+const STATUS_CONFIG: Record<
+  string,
+  { dot: string; text: string; bg: string }
+> = {
+  รอการดำเนินงาน: {
+    dot: "bg-amber-500 animate-pulse",
+    text: "text-amber-700",
+    bg: "bg-amber-500/10",
+  },
+  กำลังพิมพ์: {
+    dot: "bg-blue-600 animate-pulse",
+    text: "text-blue-700",
+    bg: "bg-blue-500/10",
+  },
+  พิมพ์เสร็จสิ้น: {
+    dot: "bg-emerald-500",
+    text: "text-emerald-700",
+    bg: "bg-emerald-500/10",
+  },
+  ยกเลิกการพิมพ์: {
+    dot: "bg-rose-500",
+    text: "text-rose-700",
+    bg: "bg-rose-500/10",
+  },
+};
+
+const FALLBACK = {
+  dot: "bg-slate-400",
+  text: "text-slate-600",
+  bg: "bg-slate-100",
+};
+
+function formatDate(value: string) {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  return d.toLocaleString("th-TH", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export default function OrderDetailCard({
+  order,
+  onClick,
+  onUpdateStatus,
+}: Props) {
+  const s = STATUS_CONFIG[order.status] ?? FALLBACK;
+  const items = order.items ?? [];
+
   return (
-    <div 
-      onClick={onClick} 
-      className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm cursor-pointer hover:border-slate-300 transition-colors"
+    <div
+      onClick={onClick}
+      className="group relative flex w-full cursor-pointer flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200"
     >
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="font-semibold text-[#0F2942]">
-            Order #{order.order_id.slice(0, 8)}
-          </h3>
-          <p className="mt-0.5 text-xs text-slate-400">{order.date}</p>
+      <div>
+        {/* Header: Status Dot & Date */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${s.bg} ${s.text}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+              {order.status || "ไม่ทราบสถานะ"}
+            </span>
+          </div>
+
+          <span className="text-[11px] font-medium text-slate-400 tracking-wider">
+            {formatDate(order.date)}
+          </span>
         </div>
 
-        <CustomerBadge
-          name={order.customer_name}
-          avatar={order.customer_avatar}
-        />
+        {/* Order ID + Customer */}
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <div>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+              ORDER
+            </span>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight leading-none mt-0.5">
+              #
+              {order.order_no ?? order.order_id.slice(0, 8)}
+            </h3>
+          </div>
+
+          <CustomerBadge
+            name={order.customer_name}
+            avatar={order.customer_avatar || "/avatar.png"}
+          />
+        </div>
+
+        {/* Sub-orders (items from cart) */}
+        <div className="mt-5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+              รายการ ({items.length})
+            </span>
+          </div>
+
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {items.length > 0 ? (
+              items.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 bg-slate-50/80 rounded-2xl p-3 border border-slate-100"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-800 text-sm truncate">
+                      {item.category}
+                    </p>
+                    {item.describe && (
+                      <p className="text-xs text-slate-400 truncate leading-relaxed">
+                        {item.describe}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-1 flex-wrap">
+                      <span>{item.quantity} ชิ้น</span>
+                      {item.page_count ? (
+                        <span>· {item.page_count} หน้า</span>
+                      ) : null}
+                      <span>· ฿{item.unit_price}/ชิ้น</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className="text-sm font-bold text-slate-900">
+                      ฿{item.subtotal.toLocaleString()}
+                    </span>
+                    {item.file_url && (
+                      <a
+                        href={item.file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline"
+                      >
+                        <FileText size={12} />
+                        ไฟล์
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-slate-400 py-2">ไม่มีรายการ</p>
+            )}
+          </div>
+        </div>
+
+        {/* Chat Link */}
+        <a
+          href="#"
+          onClick={(e) => e.stopPropagation()}
+          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
+        >
+          <MessageCircle size={14} />
+          <span>แชทกับลูกค้า</span>
+          <ArrowUpRight size={12} className="opacity-60" />
+        </a>
       </div>
 
-      <div className="mt-6 space-y-6">
-        <div>
-          <p className="text-sm font-semibold text-[#0F2942]">{order.type}</p>
-
-          <div className="mt-2 space-y-1 text-xs text-slate-500">
-            <p>จำนวน: {order.qty}</p>
-            <p>รายละเอียด: {order.detail}</p>
-            <p>รูปแบบพิมพ์: {order.type}</p>
-
-            <p className="flex items-center gap-1.5">
-              <a
-                href="แชทลูกค้า"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()} // ✅ ป้องกันไม่ให้การกดแชทไปสั่งงาน onClick ของการ์ด
-                className="inline-flex items-center gap-1 text-sky-600 hover:text-sky-700"
-              >
-                แชทกับลูกค้า
-              </a>
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between border-t pt-4">
-          <div>
-            <p className="text-xs text-slate-400">ราคาต่อชิ้น</p>
-            <p className="font-semibold text-[#0F2942]">฿ {order.price}</p>
-          </div>
-
+      {/* Footer: Total Amount & Actions */}
+      <div className="mt-6 pt-4 border-t border-slate-100/80">
+        <div className="flex items-baseline justify-between mb-4">
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            ยอดรวม
+          </span>
           <div className="text-right">
-            <p className="text-xs text-slate-400">ยอดรวม</p>
-            <p className="text-lg font-bold text-[#0F2942]">฿ {order.amount}</p>
+            <span className="text-xs font-bold text-slate-900 mr-1">฿</span>
+            <span className="text-3xl font-black tracking-tight text-slate-900">
+              {order.amount.toLocaleString()}
+            </span>
           </div>
         </div>
 
-        {/* ป้องกันไม่ให้การกด Action อื่นๆ ไปสั่งงาน onClick ของการ์ด */}
         <div onClick={(e) => e.stopPropagation()}>
-          <OrderActions status={order.status} />
+          <OrderActions
+            status={order.status}
+            onUpdateStatus={(newStatus) =>
+              onUpdateStatus?.(order.order_id, newStatus)
+            }
+          />
         </div>
       </div>
     </div>

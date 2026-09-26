@@ -1,15 +1,17 @@
 import { Request, Response } from "express";
-import supabase from "../../config/supabase.js"; 
+import supabase from "../../config/supabase.js";
 
-
-export const getShopProfile = async (req: Request,res: Response): Promise<Response> => {
+export const getShopProfile = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
   try {
     const { shop_id } = req.params;
- 
+
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
     }
- 
+
     const { data: shop, error } = await supabase
       .from("print_shop")
       .select(
@@ -23,6 +25,7 @@ export const getShopProfile = async (req: Request,res: Response): Promise<Respon
         open_time,
         close_time,
         is_verify,
+        is_open,
         address:address_id (
           id,
           detail,
@@ -35,11 +38,13 @@ export const getShopProfile = async (req: Request,res: Response): Promise<Respon
       )
       .eq("id", shop_id)
       .single();
- 
+
+      console.log(shop)
+
     if (error || !shop) {
       return res.status(404).json({ error: "Shop not found" });
     }
- 
+
     return res.status(200).json({ data: shop });
   } catch (err) {
     console.error("Get Shop Profile Error:", err);
@@ -53,21 +58,23 @@ export const getBankAccount = async (
 ): Promise<Response> => {
   try {
     const { shop_id } = req.params;
- 
+
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
     }
- 
+
     const { data: bankAccount, error } = await supabase
       .from("bank_account")
       .select("id, bank_name, account_name, account_number")
       .eq("shop_id", shop_id)
       .maybeSingle();
- 
+
+
+      console.log(bankAccount)
     if (error) {
       return res.status(400).json({ error: error.message });
     }
- 
+
     return res.status(200).json({ data: bankAccount });
   } catch (err) {
     console.error("Get Bank Account Error:", err);
@@ -81,11 +88,11 @@ export const getShopServices = async (
 ): Promise<Response> => {
   try {
     const { shop_id } = req.params;
- 
+
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
     }
- 
+
     const { data: services, error } = await supabase
       .from("service_type")
       .select(
@@ -96,16 +103,18 @@ export const getShopServices = async (
           id,
           detail,
           price,
-          group_name
+          group_type
         )
       `
       )
       .eq("shop_id", shop_id);
- 
+
+      console.log(services)
+
     if (error) {
       return res.status(400).json({ error: error.message });
     }
- 
+
     return res.status(200).json({ data: services ?? [] });
   } catch (err) {
     console.error("Get Shop Services Error:", err);
@@ -130,6 +139,8 @@ export const checkShopVerified = async (
       .eq("id", shop_id)
       .single();
 
+      console.log(shop)
+
     if (error || !shop) {
       return res.status(404).json({ error: "Shop not found" });
     }
@@ -145,7 +156,46 @@ export const checkShopVerified = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
- 
+
+// ==========================================
+// Temporarily open/close the shop
+// ==========================================
+
+export const setShopOpenStatus = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { shop_id } = req.params;
+    const { is_open } = req.body;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    if (typeof is_open !== "boolean") {
+      return res.status(400).json({ error: "is_open must be true or false" });
+    }
+
+    const { data: shop, error } = await supabase
+      .from("print_shop")
+      .update({ is_open })
+      .eq("id", shop_id)
+      .select("id, is_open")
+      .single();
+
+    if (error || !shop) {
+      console.error("Set shop open status error:", error);
+      return res.status(404).json({ error: "Shop not found" });
+    }
+
+    return res.status(200).json({ data: shop });
+  } catch (err) {
+    console.error("Set Shop Open Status Error:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
 export const saveShopServices = async (req: Request, res: Response): Promise<Response> => {
   try {
     const shop_id = req.headers.shop_id as string;
@@ -194,7 +244,7 @@ export const saveShopServices = async (req: Request, res: Response): Promise<Res
           .map((d: any) => ({
             service_type_id: newType.id,
             detail: d.detail,
-            group_name: d.group_name || "ตัวเลือกทั่วไป",
+            group_type: d.group_type || "ตัวเลือกทั่วไป",
             price: Number(d.price) || 0,
           }));
 
@@ -217,15 +267,115 @@ export const saveShopServices = async (req: Request, res: Response): Promise<Res
   }
 };
 
+// ==========================================
+// Update Shop Profile & Address
+// ==========================================
+export const updateShopProfile = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { shop_id } = req.params;
+    const { shop_name, owner_name, phone, open_time, close_time, address } = req.body;
 
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
 
+    let address_id = address?.id;
 
+    // 1. ถ้ามีข้อมูล Address ให้ทำการ Upsert ในตาราง address ก่อน
+    if (address) {
+      if (address_id) {
+        await supabase
+          .from("address")
+          .update({
+            detail: address.detail,
+            subdistrict: address.subdistrict,
+            district: address.district,
+            province: address.province,
+            postcode: address.postcode,
+          })
+          .eq("id", address_id);
+      } else {
+        const { data: newAddr, error: addrErr } = await supabase
+          .from("address")
+          .insert({
+            detail: address.detail,
+            subdistrict: address.subdistrict,
+            district: address.district,
+            province: address.province,
+            postcode: address.postcode,
+          })
+          .select("id")
+          .single();
 
+        if (!addrErr && newAddr) {
+          address_id = newAddr.id;
+        }
+      }
+    }
 
+    // 2. อัปเดตข้อมูลตาราง print_shop
+    const { error: shopErr } = await supabase
+      .from("print_shop")
+      .update({
+        shop_name,
+        owner_name,
+        phone,
+        open_time,
+        close_time,
+        ...(address_id && { address_id }),
+      })
+      .eq("id", shop_id);
 
+    if (shopErr) {
+      return res.status(400).json({ error: shopErr.message });
+    }
 
+    return res.status(200).json({ message: "Profile updated successfully" });
+  } catch (err) {
+    console.error("Update Shop Profile Error:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
 
+// ==========================================
+// Update Bank Account
+// ==========================================
+export const updateBankAccount = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { shop_id } = req.params;
+    const { id, bank_name, account_name, account_number } = req.body;
 
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
 
+    if (id) {
+      // อัปเดตบัญชีเดิม
+      const { error } = await supabase
+        .from("bank_account")
+        .update({ bank_name, account_name, account_number })
+        .eq("id", id)
+        .eq("shop_id", shop_id);
 
+      if (error) return res.status(400).json({ error: error.message });
+    } else {
+      // เพิ่มบัญชีใหม่
+      const { error } = await supabase
+        .from("bank_account")
+        .insert({ shop_id: Number(shop_id), bank_name, account_name, account_number });
 
+      if (error) return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({ message: "Bank account updated successfully" });
+  } catch (err) {
+    console.error("Update Bank Account Error:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};

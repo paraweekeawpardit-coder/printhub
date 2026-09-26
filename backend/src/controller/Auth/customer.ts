@@ -2,37 +2,44 @@ import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-// import multer from "multer";
-
-// interface MulterRequest extends Request {
-//   files?: {
-//     [fieldname: string]: Express.Multer.File[];
-//   };
-// }
 
 export const Regis = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { Fname, Lname, contact, password } = req.body;
     if (!Fname || !Lname || !contact || !password) {
-      return res.status(400).json({ error: "Please enter all information" });
+      return res.status(400).json({ error: "กรุณากรอกข้อมูลให้ครบถ้วน" });
     }
 
-    console.log("information you get :", req.body);
-
-    const { data: haveUser, error: findError } = await supabase
+    // 1. ตรวจสอบว่าอีเมลนี้มีในตาราง customer แล้วหรือยัง
+    const { data: haveUser, error: findCustomerError } = await supabase
       .from("customer")
       .select("id")
       .eq("contact", contact)
       .maybeSingle();
 
-    if (findError) {
-      console.log(findError);
+    if (findCustomerError) {
+      console.error(findCustomerError);
       return res.status(500).json({ error: "Server Error" });
     }
 
     if (haveUser) {
-      console.log(haveUser);
-      return res.status(400).json({ message: "Account already exists. Please log in" });
+      return res.status(400).json({ error: "อีเมลนี้ถูกใช้งานแล้วในบัญชีผู้ใช้ทั่วไป" });
+    }
+
+    // 2. ตรวจสอบว่าอีเมลนี้ถูกใช้งานในตาราง print_shop แล้วหรือยัง (1 Email : 1 Role)
+    const { data: haveShop, error: findShopError } = await supabase
+      .from("print_shop")
+      .select("id")
+      .eq("email", contact)
+      .maybeSingle();
+
+    if (findShopError) {
+      console.error(findShopError);
+      return res.status(500).json({ error: "Server Error" });
+    }
+
+    if (haveShop) {
+      return res.status(400).json({ error: "อีเมลนี้ถูกใช้งานแล้วในบัญชีร้านค้า" });
     }
 
     const Passwd = await bcrypt.hash(password, 10);
@@ -50,16 +57,14 @@ export const Regis = async (req: Request, res: Response): Promise<Response> => {
       .select()
       .single();
 
-    console.log("information you insert", newCustomer);
-
     if (insertError) {
-      console.log(insertError);
-      return res.status(500).json({ error: "Server Error" });
+      console.error(insertError);
+      return res.status(500).json({ error: "ไม่สามารถสร้างบัญชีผู้ใช้ได้" });
     }
 
-    return res.status(201).json({ message: "Registered successfully" });
+    return res.status(201).json({ message: "สมัครสมาชิกสำเร็จ" });
   } catch (err) {
-    console.log(err);
+    console.error(err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
@@ -67,11 +72,12 @@ export const Regis = async (req: Request, res: Response): Promise<Response> => {
 export const Login = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { contact, password } = req.body;
-    console.log("information you get in login :", req.body);
+    console.log(req.body)
 
     if (!contact || !password) {
+      console.log("กรอกข้อมูลไม่ครบ")
       return res.status(400).json({
-        error: "Please enter contact and password",
+        error: "กรุณากรอกอีเมลและรหัสผ่าน",
       });
     }
 
@@ -80,18 +86,66 @@ export const Login = async (req: Request, res: Response): Promise<Response> => {
       .select("*")
       .eq("contact", contact)
       .maybeSingle();
+    
+      console.log("login customer :",user)
 
     if (findError) {
-      console.log(findError);
+      console.error(findError);
       return res.status(500).json({
         error: "Server Error",
       });
     }
 
     if (!user) {
-      console.log("User not registered");
+      const { data: shop, error: findError } = await supabase
+      .from("print_shop")
+      .select("*")
+      .or(`email.eq.${contact}`)
+      .maybeSingle();
+
+      console.log("login shop :",shop)
+
+      if (findError) {
+      console.error("Find shop error:", findError);
+      return res.status(500).json({
+        error: "Server Error",
+      });
+      }
+      
+      if (!shop) {
       return res.status(400).json({
-        error: "User not registered",
+        error: "ไม่พบผู้ใช้งาน",
+      });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, shop.password);
+      
+      if (!isPasswordValid) {
+          return res.status(400).json({
+            error: "รหัสผ่านไม่ถูกต้อง",
+          });
+      }
+
+      const secretKey = process.env.JWT_SECRET;
+      if (!secretKey) {
+        throw new Error("JWT_SECRET is not defined");
+      }
+
+      const payload = {
+      id: shop.id,
+      shop_name: shop.shop_name,
+      };
+
+      const token = jwt.sign(payload, secretKey, {
+          expiresIn: "24h",
+      });
+
+      return res.status(200).json({
+      message: "เข้าสู่ระบบสำเร็จ",
+      token: token,
+      shop_id: shop.id,
+      shop_name: shop.shop_name,
+      role:"shop"
       });
     }
 
@@ -99,7 +153,7 @@ export const Login = async (req: Request, res: Response): Promise<Response> => {
 
     if (!isPasswordValid) {
       return res.status(400).json({
-        error: "Wrong password",
+        error: "รหัสผ่านไม่ถูกต้อง",
       });
     }
 
@@ -116,13 +170,14 @@ export const Login = async (req: Request, res: Response): Promise<Response> => {
     const token = jwt.sign(payload, secretKey, { expiresIn: "24h" });
 
     return res.status(200).json({
-      message: "Login successful",
+      message: "เข้าสู่ระบบสำเร็จ",
       token: token,
       id: user.id,
       name: user.first_name,
+      role:"customer"
     });
   } catch (err) {
-    console.log(err);
+    console.error(err);
     return res.status(500).json({
       error: "Server Error",
     });

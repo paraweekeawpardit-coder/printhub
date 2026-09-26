@@ -1,10 +1,6 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
-// ==========================================
-// GET ORDER DETAIL
-// ==========================================
-
 export const getOrder = async (
   req: Request,
   res: Response
@@ -22,18 +18,35 @@ export const getOrder = async (
       });
     }
 
-    const {
-      data: order,
-      error,
-    } = await supabase
+    // ==========================================
+    // Main order + standard reverse relations
+    // ==========================================
+    // NOTE: current_status / payment / review are intentionally
+    // NOT embedded here. print_order has direct FK columns to
+    // those tables (current_status_id, payment_id, review_id),
+    // but if the FK constraint is missing (or ambiguous with a
+    // reverse FK like payment.order_id), PostgREST's embed fails
+    // and this whole query errors out -> every order looks
+    // "not found". Fetching those by id separately below sidesteps
+    // that entirely.
+
+    const { data: order, error } = await supabase
       .from("print_order")
-      .select(`
+      .select(
+        `
         id,
         order_no,
         description,
-        total_price,
+        subtotal_price,
+        small_order_fee,
+        platform_fee,
+        total_amount,
         order_date,
         receive_date,
+        appointment_time,
+        current_status_id,
+        payment_id,
+        review_id,
 
         customer:customer_id (
           id,
@@ -50,72 +63,75 @@ export const getOrder = async (
           )
         ),
 
-        order_item (
+        print_order_item (
           id,
+          category,
+          describe,
+          file_url,
           quantity,
           unit_price,
           subtotal,
-
-          service_detail:service_detail_id (
-            detail,
-            group_name,
-
-            service_type:service_type_id (
-              type
-            )
-          )
+          page_count
         ),
 
         print_file (
           id,
           filename,
-          file_url
-        ),
-
-        payment (
-          amount,
-          slip_url,
-          payment_date
-        ),
-
-        work_status (
-          updated_at,
-
-          status (
-            state
-          )
+          file_url,
+          file_size_mb,
+          page_count
         )
-      `)
+        `
+      )
       .eq("id", order_id)
       .single();
 
     if (error || !order) {
       console.error("Get order error:", error);
-
       return res.status(404).json({
         error: "Order not found",
       });
     }
 
     // ==========================================
-    // Latest Status
+    // Status / Payment / Review (fetched by id, no embed)
     // ==========================================
 
-    const sortedStatuses = Array.isArray(order.work_status)
-      ? [...order.work_status].sort(
-          (a: any, b: any) =>
-            new Date(b.updated_at).getTime() -
-            new Date(a.updated_at).getTime()
-        )
-      : [];
+    const [
+      { data: statusRow, error: statusError },
+      { data: paymentRow, error: paymentError },
+      { data: reviewRow, error: reviewError },
+    ] = await Promise.all([
+      order.current_status_id
+        ? supabase
+            .from("status")
+            .select("state")
+            .eq("id", order.current_status_id)
+            .single()
+        : Promise.resolve({ data: null, error: null }),
 
-    const firstStatusObj = sortedStatuses[0]?.status;
+      order.payment_id
+        ? supabase
+            .from("payment")
+            .select("amount, slip_url, payment_date, status")
+            .eq("id", order.payment_id)
+            .single()
+        : Promise.resolve({ data: null, error: null }),
 
-    const latestStatus = Array.isArray(firstStatusObj)
-      ? firstStatusObj[0]?.state
-      : (firstStatusObj as any)?.state ?? "รอการดำเนินงาน";
-    // NOTE: fixed the fallback spelling to match the rest of the app
-    // (was "รอการดำเนินการ", every other file uses "รอการดำเนินงาน")
+      order.review_id
+        ? supabase
+            .from("review")
+            .select("score, comment")
+            .eq("id", order.review_id)
+            .single()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+    if (statusError) console.error("Get status error:", statusError);
+    if (paymentError) console.error("Get payment error:", paymentError);
+    if (reviewError) console.error("Get review error:", reviewError);
+
+    const statusState = statusRow?.state || "รอการดำเนินงาน";
 
     // ==========================================
     // Customer
@@ -130,45 +146,35 @@ export const getOrder = async (
       : formattedCustomer?.address;
 
     // ==========================================
-    // Order Items
+    // Items (sub-orders from cart checkout)
     // ==========================================
+    // NOTE: field names (category/describe) match order-detail-card.tsx
+    // and the list endpoint (getOrdersByStatus) so both views use the
+    // same OrderItemDetail shape.
 
-    const items = (order.order_item || []).map((item: any) => {
-      const serviceDetail = Array.isArray(item.service_detail)
-        ? item.service_detail[0]
-        : item.service_detail;
-
-      return {
-        id: item.id,
-        group_name: serviceDetail?.group_name || "รายการพิมพ์",
-        detail: serviceDetail?.detail || "",
-        quantity: item.quantity,
-        unit_price: Number(item.unit_price || 0),
-        subtotal: Number(item.subtotal || 0),
-      };
-    });
-
-    // ==========================================
-    // Payment
-    // ==========================================
-
-    const formattedPayment = Array.isArray(order.payment)
-      ? order.payment[0]
-      : order.payment;
-
-    // ==========================================
-    // Response
-    // ==========================================
+    const items = (order.print_order_item || []).map((item: any) => ({
+      id: item.id,
+      category: item.category || "รายการพิมพ์",
+      describe: item.describe || "",
+      file_url: item.file_url || null,
+      quantity: item.quantity,
+      unit_price: Number(item.unit_price || 0),
+      subtotal: Number(item.subtotal || 0),
+      page_count: item.page_count ?? null,
+    }));
 
     return res.status(200).json({
       order: {
         id: order.id,
         order_no: order.order_no,
         order_date: order.order_date,
-        receive_date: order.receive_date,
+        receive_date: order.receive_date || order.appointment_time,
         description: order.description,
-        total_price: Number(order.total_price || 0),
-        status_state: latestStatus,
+        subtotal_price: Number(order.subtotal_price || 0),
+        small_order_fee: Number(order.small_order_fee || 0),
+        platform_fee: Number(order.platform_fee || 0),
+        total_amount: Number(order.total_amount || 0),
+        status_state: statusState,
 
         customer: {
           id: formattedCustomer?.id,
@@ -180,22 +186,19 @@ export const getOrder = async (
 
         items,
         files: order.print_file || [],
-        payment: formattedPayment || null,
+        payment: paymentRow || null,
+        review: reviewRow || null,
       },
     });
   } catch (err) {
     console.error("Backend Error:", err);
-
     return res.status(500).json({
       error: "Server Error",
     });
   }
 };
 
-// ==========================================
 // UPDATE ORDER STATUS
-// ==========================================
-
 export const updateOrderStatus = async (
   req: Request,
   res: Response
@@ -203,34 +206,17 @@ export const updateOrderStatus = async (
   try {
     const { id } = req.params;
     const { status_name } = req.body;
-
-    // accept shop_id from query string OR header — the frontend now sends
-    // it as a query param (avoids a CORS preflight allow-list issue with
-    // custom headers), but keep the header path working too for anything
-    // else in the codebase that still sends it that way
     const shop_id = (req.query.shop_id || req.headers.shop_id) as
       | string
       | undefined;
 
-    // ==========================================
-    // Validate
-    // ==========================================
-
     if (!id) {
-      return res.status(400).json({
-        error: "order_id is required",
-      });
+      return res.status(400).json({ error: "order_id is required" });
     }
 
     if (!status_name) {
-      return res.status(400).json({
-        error: "status_name is required",
-      });
+      return res.status(400).json({ error: "status_name is required" });
     }
-
-    // ==========================================
-    // ตรวจสอบ Order
-    // ==========================================
 
     const { data: order, error: orderError } = await supabase
       .from("print_order")
@@ -239,24 +225,14 @@ export const updateOrderStatus = async (
       .single();
 
     if (orderError || !order) {
-      return res.status(404).json({
-        error: "Order not found",
-      });
+      return res.status(404).json({ error: "Order not found" });
     }
-
-    // ==========================================
-    // ตรวจว่า Order เป็นของ Shop นี้
-    // ==========================================
 
     if (shop_id && order.shop_id !== shop_id) {
-      return res.status(403).json({
-        error: "This order does not belong to this shop",
-      });
+      return res
+        .status(403)
+        .json({ error: "This order does not belong to this shop" });
     }
-
-    // ==========================================
-    // หา Status ID
-    // ==========================================
 
     const { data: statusData, error: statusError } = await supabase
       .from("status")
@@ -270,10 +246,6 @@ export const updateOrderStatus = async (
       });
     }
 
-    // ==========================================
-    // Insert Work Status
-    // ==========================================
-
     const { data: newWorkStatus, error: insertError } = await supabase
       .from("work_status")
       .insert([
@@ -283,41 +255,39 @@ export const updateOrderStatus = async (
           updated_at: new Date().toISOString(),
         },
       ])
-      .select(
-        `
-        id,
-        order_id,
-        status_id,
-        updated_at,
-        status (
-          id,
-          state
-        )
-        `
-      )
+      .select()
       .single();
 
     if (insertError) {
       console.error("Insert work_status error:", insertError);
-
-      return res.status(400).json({
-        error: insertError.message,
-      });
+      return res.status(400).json({ error: insertError.message });
     }
 
-    // ==========================================
-    // Success
-    // ==========================================
+    // อัปเดต current_status_id และ work_state_id ใน print_order
+    const { error: updateOrderError } = await supabase
+      .from("print_order")
+      .update({
+        current_status_id: statusData.id,
+        work_state_id: newWorkStatus.id,
+      })
+      .eq("id", id);
+
+    if (updateOrderError) {
+      console.error(
+        "Update print_order current_status error:",
+        updateOrderError
+      );
+    }
 
     return res.status(200).json({
       message: "Order status updated successfully",
-      data: newWorkStatus,
+      data: {
+        ...newWorkStatus,
+        status_state: statusData.state,
+      },
     });
   } catch (err) {
     console.error("Update Status Error:", err);
-
-    return res.status(500).json({
-      error: "Server Error",
-    });
+    return res.status(500).json({ error: "Server Error" });
   }
 };

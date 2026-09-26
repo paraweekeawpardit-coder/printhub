@@ -10,10 +10,13 @@ type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-export default function LoginFormShop({ setRegis }: RegisFormProps) {
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+export default function LoginForm({ setRegis }: RegisFormProps) {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
   const [logindata, setData] = useState({
     contact: "",
     password: "",
@@ -22,28 +25,35 @@ export default function LoginFormShop({ setRegis }: RegisFormProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
+    setLoading(true);
+
+    console.log("login information ",logindata)
 
     try {
-      const res = await axios.post(
-        "http://localhost:5000/auth/loginShop",
-        logindata
-      );
+      const res = await axios.post(`${API_URL}/auth/login`, logindata);
 
       if (res.data.token) {
-        localStorage.setItem("token", res.data.token);
-        localStorage.setItem("shop_id","2a1e1ec6-1abd-49df-bcfe-cc66e64521d9");
-        localStorage.setItem("shop_name","PrintHub ลาดกระบัง");
-
-        console.log("id",localStorage.getItem("shop_id"))
-        console.log("name",localStorage.getItem("shop_name"))
-        console.log("Log in success");
-        router.push("/shop");
-      } else {
-        setMessage(res.data.error || "เข้าสู่ระบบไม่สำเร็จ");
+        if (res.data.role === "shop") {
+          localStorage.setItem("token", res.data.token);
+          localStorage.setItem("shop_id", res.data.shop_id);
+          localStorage.setItem("shop_name", res.data.shop_name);
+          router.push("/shop");
+          return;
+        } else {
+          localStorage.setItem("token", res.data.token);
+          localStorage.setItem("id", res.data.id);
+          localStorage.setItem("username", res.data.name);
+          router.push("/customer");
+          return;
+        }
       }
     } catch (err: any) {
       console.error(err);
-      setMessage(err.response?.data?.error || "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์");
+      const errorMessage =
+        err.response?.data?.error || "เกิดข้อผิดพลาด ไม่สามารถเข้าสู่ระบบได้";
+      setMessage(errorMessage);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -51,7 +61,7 @@ export default function LoginFormShop({ setRegis }: RegisFormProps) {
     <section className="w-full bg-white px-8 py-10">
       <div className="w-full max-w-sm mx-auto">
         <h2 className="mb-7 text-center text-2xl font-semibold tracking-tight text-navy">
-          เข้าสู่ระบบร้านค้า
+          เข้าสู่ระบบ
         </h2>
 
         {message && (
@@ -62,13 +72,12 @@ export default function LoginFormShop({ setRegis }: RegisFormProps) {
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <input
-            type="text"
-            placeholder="เบอร์โทรศัพท์ หรือ อีเมล"
+            type="email"
+            placeholder="อีเมล (Email)"
             value={logindata.contact}
             className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-navy placeholder:text-gray-400 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
             onChange={(e) =>
-              {setData({ ...logindata, contact: e.target.value })
-              console.log();}
+              setData({ ...logindata, contact: e.target.value })
             }
             required
           />
@@ -104,15 +113,12 @@ export default function LoginFormShop({ setRegis }: RegisFormProps) {
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-white transition hover:bg-[#005FA3]"
+            disabled={loading}
+            className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-white transition hover:bg-[#005FA3] disabled:opacity-60"
           >
-            เข้าสู่ระบบ
+            {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </button>
         </form>
-
-        <div className="my-7 flex items-center gap-3">
-          <div className="h-px flex-1 bg-gray-100" />
-        </div>
 
         <p className="mt-8 text-center text-sm text-gray-400">
           ยังไม่มีบัญชี?{" "}
@@ -120,7 +126,7 @@ export default function LoginFormShop({ setRegis }: RegisFormProps) {
             onClick={() => setRegis(true)}
             className="font-medium text-primary hover:underline cursor-pointer"
           >
-            สมัครร้านค้าที่นี่
+            สมัครสมาชิกที่นี่
           </span>
         </p>
       </div>
