@@ -17,7 +17,9 @@ const API_BASE = "http://localhost:5000";
 export default function OrderPage() {
   const router = useRouter();
   const params = useParams();
-  const shop_id = Array.isArray(params?.shop_id)
+
+  // 1. ดึง shop_id จาก params หรือ localStorage เป็นค่าสำรอง
+  const paramShopId = Array.isArray(params?.shop_id)
     ? params.shop_id[0]
     : (params?.shop_id as string);
 
@@ -28,8 +30,17 @@ export default function OrderPage() {
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!shopId && typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") || localStorage.getItem("id");
+      if (storedShopId) setShopId(storedShopId);
+    }
+  }, [shopId]);
+
+  // 2. ฟังก์ชันดึงรายการออเดอร์ตามสถานะ
   const getOrder = useCallback(async () => {
-    if (!shop_id) return;
+    if (!shopId) return;
 
     try {
       setLoading(true);
@@ -40,10 +51,11 @@ export default function OrderPage() {
       setOrders(response.data.orders ?? []);
     } catch (error) {
       console.error("Get order error:", error);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
-  }, [shop_id, activeFilter]);
+  }, [shopId, activeFilter]);
 
   useEffect(() => {
     getOrder();

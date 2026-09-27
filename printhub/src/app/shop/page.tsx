@@ -8,6 +8,15 @@ import DashboardCard from "@/src/component/shop/dashboard-card";
 import OrderCard from "@/src/component/shop/order-card";
 import ShopNavbar from "@/src/component/shop/navbar";
 
+// 1. อัปเดต Type ให้ตรงกับข้อมูลที่ Backend (home.ts) ส่งกลับมา
+type FileItem = {
+  id: string;
+  category: string;
+  filename: string;
+  url: string;
+  page_count?: number;
+};
+
 type Order = {
   id: string;
   customer_id: string;
@@ -46,6 +55,7 @@ export default function ShopPage() {
     }
   }, []);
 
+  // 2. ฟังก์ชันดึงข้อมูล Dashboard
   const fetchDashboardData = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!shopId) return;
@@ -58,17 +68,38 @@ export default function ShopPage() {
 
         const headers = { shop_id: shopId };
 
-        const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.all([
-          axios.get("http://localhost:5000/shop/numWork", { headers }),
-          axios.get("http://localhost:5000/shop/getScore", { headers }),
-          axios.get("http://localhost:5000/shop/getIncome", { headers }),
-          axios.get("http://localhost:5000/shop/getTopOrder", { headers }),
+        const baseURL = "http://localhost:5000/shop";
+
+        const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.allSettled([
+          axios.get(`${baseURL}/numWork`, { headers, params: { shop_id: shopId } }),
+          axios.get(`${baseURL}/getScore`, { headers, params: { shop_id: shopId } }),
+          axios.get(`${baseURL}/getIncome`, { headers, params: { shop_id: shopId } }),
+          axios.get(`${baseURL}/getTopOrder`, { headers, params: { shop_id: shopId } }),
         ]);
 
-        setNum(`${numRes.data.numWork ?? 0} รายการ`);
-        setScore(`${scoreRes.data.score ?? 0.0} / 5.0`);
-        setIncome(`${incomeRes.data.income ?? 0} บาท`);
-        setOrders(ordersRes.data ?? []);
+        if (numRes.status === "fulfilled") {
+          const val = numRes.value.data;
+          const count = typeof val === "number" ? val : (val?.numWork ?? val?.count ?? 0);
+          setNum(`${count} รายการ`);
+        }
+
+        if (scoreRes.status === "fulfilled") {
+          const val = scoreRes.value.data;
+          const scoreVal = typeof val === "number" ? val : (val?.score ?? 0.0);
+          setScore(`${Number(scoreVal).toFixed(1)} / 5.0`);
+        }
+
+        if (incomeRes.status === "fulfilled") {
+          const val = incomeRes.value.data;
+          const incomeVal = typeof val === "number" ? val : (val?.income ?? val?.total_income ?? 0);
+          setIncome(`${Number(incomeVal).toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท`);
+        }
+
+        if (ordersRes.status === "fulfilled") {
+          const val = ordersRes.value.data;
+          const orderList = Array.isArray(val) ? val : val?.orders || val?.data || [];
+          setOrders(orderList);
+        }
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
       } finally {
@@ -80,8 +111,10 @@ export default function ShopPage() {
   );
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    if (shopId) {
+      fetchDashboardData();
+    }
+  }, [shopId, fetchDashboardData]);
 
   useEffect(() => {
     const handleFocus = () => fetchDashboardData({ silent: true });
@@ -128,13 +161,13 @@ export default function ShopPage() {
           <DashboardCard
             title="รายได้วันนี้"
             value={income}
-            subtitle="0 คำสั่งพิมพ์"
+            subtitle="สรุปรายได้สะสม"
           />
 
           <DashboardCard
             title="คะแนนรีวิวเฉลี่ย"
             value={score}
-            subtitle="0 รีวิว"
+            subtitle="คะแนนจากลูกค้า"
           />
         </div>
 

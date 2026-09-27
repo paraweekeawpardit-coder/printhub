@@ -2,12 +2,16 @@ import { Check, X, Printer } from "lucide-react";
 
 type Props = {
   status?: string;
+  orderId?: string; // ✅ เพิ่ม orderId
+  onStatusChange?: () => void; // ✅ เพิ่ม onStatusChange
   onUpdateStatus?: (newStatus: string) => void;
   disabled?: boolean;
 };
 
 export default function OrderActions({
   status,
+  orderId,
+  onStatusChange,
   onUpdateStatus,
   disabled,
 }: Props) {
@@ -34,7 +38,7 @@ export default function OrderActions({
     );
   }
 
-  if (status === "กำลังพิมพ์") {
+  if (status === "กำลังพิมพ์" || status === "In Progress") {
     return (
       <div className="flex gap-2">
         <button
@@ -64,7 +68,7 @@ export default function OrderActions({
     );
   }
 
-  if (status === "ยกเลิกการพิมพ์") {
+  if (status === "ยกเลิกการพิมพ์" || status === "ยกเลิก" || status === "Cancelled") {
     return (
       <div className="w-full text-center py-2 text-xs font-bold text-slate-400 bg-slate-50 rounded-xl">
         ยกเลิกออเดอร์แล้ว

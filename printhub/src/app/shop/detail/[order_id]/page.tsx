@@ -22,6 +22,7 @@ import {
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const params = useParams();
 
   const orderId = (params?.id || params?.order_id) as string;
 
@@ -59,15 +60,26 @@ export default function OrderDetailPage() {
   };
 
   useEffect(() => {
-    fetchOrder();
-  }, [orderId]);
+    if (!shopId && typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") || localStorage.getItem("id");
+      if (storedShopId) setShopId(storedShopId);
+    }
+  }, [shopId]);
 
   const handleUpdateStatus = async (nextStatus: string) => {
     try {
-      setIsUpdating(true);
+      setLoading(true);
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-      await axios.patch(
-        `http://localhost:5000/shop/orders/${orderId}/status`,
+      // ✅ ปรับ headers ให้ส่งเฉพาะ shop_id รูปแบบเดียว
+      const headers = {
+        shop_id: String(shopId),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
+      const response = await axios.get(
+        "http://localhost:5000/shop/getOrderByStatus",
         {
           status_name: nextStatus,
         }
@@ -79,7 +91,7 @@ export default function OrderDetailPage() {
         err.response?.data?.error || "อัปเดตสถานะไม่สำเร็จ";
       alert(message);
     } finally {
-      setIsUpdating(false);
+      setLoading(false);
     }
   };
 
