@@ -39,8 +39,6 @@ export const getShopProfile = async (
       .eq("id", shop_id)
       .single();
 
-      console.log(shop)
-
     if (error || !shop) {
       return res.status(404).json({ error: "Shop not found" });
     }
@@ -69,8 +67,6 @@ export const getBankAccount = async (
       .eq("shop_id", shop_id)
       .maybeSingle();
 
-
-      console.log(bankAccount)
     if (error) {
       return res.status(400).json({ error: error.message });
     }
@@ -109,8 +105,6 @@ export const getShopServices = async (
       )
       .eq("shop_id", shop_id);
 
-      console.log(services)
-
     if (error) {
       return res.status(400).json({ error: error.message });
     }
@@ -138,8 +132,6 @@ export const checkShopVerified = async (
       .select("id, is_verify, verified_by")
       .eq("id", shop_id)
       .single();
-
-      console.log(shop)
 
     if (error || !shop) {
       return res.status(404).json({ error: "Shop not found" });
@@ -366,9 +358,11 @@ export const updateBankAccount = async (
       if (error) return res.status(400).json({ error: error.message });
     } else {
       // เพิ่มบัญชีใหม่
+      // NOTE: shop_id เป็น uuid (string) ไม่ใช่ number ห้าม Number(shop_id)
+      // เพราะจะได้ NaN แล้ว insert พัง
       const { error } = await supabase
         .from("bank_account")
-        .insert({ shop_id: Number(shop_id), bank_name, account_name, account_number });
+        .insert({ shop_id, bank_name, account_name, account_number });
 
       if (error) return res.status(400).json({ error: error.message });
     }

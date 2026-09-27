@@ -1,7 +1,43 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil, Landmark, User, Hash, Check, Copy, Loader2, Lock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  Pencil,
+  Landmark,
+  User,
+  Hash,
+  Check,
+  Copy,
+  Loader2,
+  Lock,
+  ChevronDown,
+} from "lucide-react";
+
+// ==========================================
+// รายชื่อธนาคารในไทยสำหรับ dropdown
+// ==========================================
+const BANK_OPTIONS = [
+  { code: "BBL", name: "ธนาคารกรุงเทพ (BBL)" },
+  { code: "KBANK", name: "ธนาคารกสิกรไทย (KBANK)" },
+  { code: "KTB", name: "ธนาคารกรุงไทย (KTB)" },
+  { code: "SCB", name: "ธนาคารไทยพาณิชย์ (SCB)" },
+  { code: "BAY", name: "ธนาคารกรุงศรีอยุธยา (BAY)" },
+  { code: "TTB", name: "ธนาคารทหารไทยธนชาต (ttb)" },
+  { code: "CIMBT", name: "ธนาคารซีไอเอ็มบี ไทย (CIMBT)" },
+  { code: "UOB", name: "ธนาคารยูโอบี (UOB)" },
+  { code: "KKP", name: "ธนาคารเกียรตินาคินภัทร (KKP)" },
+  { code: "TISCO", name: "ธนาคารทิสโก้ (TISCO)" },
+  { code: "LHFG", name: "ธนาคารแลนด์ แอนด์ เฮ้าส์ (LH Bank)" },
+  { code: "ICBC", name: "ธนาคารไอซีบีซี (ไทย) (ICBC)" },
+  { code: "BOC", name: "ธนาคารแห่งประเทศจีน (ไทย) (BOC)" },
+  { code: "SMBC", name: "ธนาคารซูมิโตโม มิตซุย แบงกิ้ง คอร์ปอเรชั่น (SMBC)" },
+  { code: "GSB", name: "ธนาคารออมสิน (GSB)" },
+  { code: "BAAC", name: "ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)" },
+  { code: "GHB", name: "ธนาคารอาคารสงเคราะห์ (ธอส.)" },
+  { code: "EXIM", name: "ธนาคารเพื่อการส่งออกและนำเข้าแห่งประเทศไทย (EXIM)" },
+  { code: "SME", name: "ธนาคารพัฒนาวิสาหกิจขนาดกลางและขนาดย่อม (SME Bank)" },
+  { code: "IBANK", name: "ธนาคารอิสลามแห่งประเทศไทย (iBank)" },
+];
 
 type Props = {
   isVerified: boolean;
@@ -33,6 +69,8 @@ export default function ShopBankTab({
   onToggleEdit,
 }: Props) {
   const [copied, setCopied] = useState(false);
+  const [isBankMenuOpen, setIsBankMenuOpen] = useState(false);
+  const bankMenuRef = useRef<HTMLDivElement>(null);
 
   const handleCopy = async () => {
     if (!accountNumber) return;
@@ -44,6 +82,27 @@ export default function ShopBankTab({
       console.log(err)
     }
   };
+
+  // ปิด dropdown เมื่อคลิกข้างนอก
+  useEffect(() => {
+    if (!isBankMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (bankMenuRef.current && !bankMenuRef.current.contains(e.target as Node)) {
+        setIsBankMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isBankMenuOpen]);
+
+  // เผื่อค่าเดิมที่เคยบันทึกไว้ไม่ตรงกับตัวเลือกในลิสต์ (เช่นพิมพ์เอง
+  // มาก่อนตอนยังเป็น input ธรรมดา) ให้โชว์เป็นตัวเลือกพิเศษไว้ก่อน
+  // จะได้ไม่หายไปเงียบๆ จน dropdown ว่าง
+  const isKnownBank = BANK_OPTIONS.some((b) => b.name === bankName);
+  const bankListWithFallback =
+    bankName && !isKnownBank
+      ? [{ code: "__current__", name: bankName }, ...BANK_OPTIONS]
+      : BANK_OPTIONS;
 
   return (
     <div className="relative">
@@ -113,22 +172,66 @@ export default function ShopBankTab({
               </p>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* ธนาคาร - custom dropdown */}
                 <div>
                   <label className="text-xs font-semibold text-slate-600">
                     ธนาคาร
                   </label>
-                  <div className="relative mt-1.5">
+                  <div className="relative mt-1.5" ref={bankMenuRef}>
                     <Landmark
                       size={16}
-                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-300"
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 z-10 text-slate-300"
                     />
-                    <input
-                      type="text"
-                      value={bankName}
-                      onChange={(e) => setBankName(e.target.value)}
-                      placeholder="เช่น ธนาคารกสิกรไทย"
-                      className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm text-[#0F2942] outline-none transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
-                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setIsBankMenuOpen((prev) => !prev)}
+                      className={`flex w-full items-center justify-between rounded-xl border bg-white py-2 pl-9 pr-3 text-sm outline-none transition-colors ${
+                        isBankMenuOpen
+                          ? "border-[#2F6FED] ring-2 ring-[#2F6FED]/15"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <span
+                        className={`truncate text-left ${
+                          bankName ? "text-[#0F2942]" : "text-slate-300"
+                        }`}
+                      >
+                        {bankName || "เลือกธนาคาร"}
+                      </span>
+                      <ChevronDown
+                        size={15}
+                        className={`shrink-0 text-slate-400 transition-transform ${
+                          isBankMenuOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {/* Panel: เปิดลงด้านล่างเสมอ + จำกัดความสูงแล้วเลื่อนดูได้ */}
+                    {isBankMenuOpen && (
+                      <div className="absolute left-0 right-0 top-full z-20 mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg shadow-slate-900/10">
+                        {bankListWithFallback.map((b) => (
+                          <button
+                            key={b.code}
+                            type="button"
+                            onClick={() => {
+                              setBankName(b.name);
+                              setIsBankMenuOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm transition-colors hover:bg-slate-50 ${
+                              bankName === b.name
+                                ? "font-semibold text-[#2F6FED]"
+                                : "text-slate-700"
+                            }`}
+                          >
+                            <span className="truncate">{b.name}</span>
+                            {bankName === b.name && (
+                              <Check size={14} className="shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
