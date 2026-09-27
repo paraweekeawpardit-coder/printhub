@@ -12,6 +12,8 @@ import OrderDetailCard, {
   OrderDetail,
 } from "@/src/component/shop/order-detail-card";
 
+const API_BASE = "http://localhost:5000";
+
 export default function OrderPage() {
   const router = useRouter();
   const params = useParams();
@@ -21,7 +23,8 @@ export default function OrderPage() {
     ? params.shop_id[0]
     : (params?.shop_id as string);
 
-  const [shopId, setShopId] = useState<string>(paramShopId || "");
+  console.log("get ordertab from shop", shop_id);
+
   const [activeFilter, setActiveFilter] =
     useState<OrderStatusFilter>("ทั้งหมด");
   const [orders, setOrders] = useState<OrderDetail[]>([]);
@@ -41,29 +44,11 @@ export default function OrderPage() {
 
     try {
       setLoading(true);
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-      const headers = {
-        shop_id: String(shopId),
-        "shop-id": String(shopId),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-
-      const response = await axios.get(
-        "http://localhost:5000/shop/getOrderByStatus",
-        {
-          headers,
-          params: { status: activeFilter },
-        }
-      );
-
-      // รองรับโครงสร้าง Response ทั้งแบบ response.data, response.data.orders และ response.data.data
-      const resultData =
-        Array.isArray(response.data)
-          ? response.data
-          : response.data.orders || response.data.data || [];
-
-      setOrders(resultData);
+      const response = await axios.get(`${API_BASE}/shop/getOrderByStatus`, {
+        headers: { shop_id },
+        params: { status: activeFilter },
+      });
+      setOrders(response.data.orders ?? []);
     } catch (error) {
       console.error("Get order error:", error);
       setOrders([]);
@@ -76,8 +61,24 @@ export default function OrderPage() {
     getOrder();
   }, [getOrder]);
 
+  const handleUpdateStatus = useCallback(
+    async (orderId: string, newStatus: string) => {
+      try {
+        await axios.patch(
+          `${API_BASE}/shop/orders/${orderId}/status`,
+          { status_name: newStatus },
+          { params: { shop_id } }
+        );
+        await getOrder();
+      } catch (error) {
+        console.error("Update order status error:", error);
+      }
+    },
+    [shop_id, getOrder]
+  );
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-slate-100">
       <ShopNavbar />
 
       <main className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
@@ -94,15 +95,10 @@ export default function OrderPage() {
             {orders.length > 0 ? (
               orders.map((order) => (
                 <OrderDetailCard
-                  key={order.order_id || (order as any).id}
+                  key={order.order_id}
                   order={order}
-                  onClick={() =>
-                    router.push(
-                      `/shop/detail/${order.order_id || (order as any).id}`
-                    )
-                  }
-                  // ส่ง callback getOrder เพื่อให้โหลดหน้าใหม่เมื่อมีการกด อนุมัติ/ปฏิเสธ ออเดอร์
-                  onStatusChange={getOrder} 
+                  onClick={() => router.push(`/shop/detail/${order.order_id}`)}
+                  onUpdateStatus={handleUpdateStatus}
                 />
               ))
             ) : (

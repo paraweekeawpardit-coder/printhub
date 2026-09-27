@@ -54,9 +54,25 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
     }
 
     if (existingShop) {
-      return res.status(400).json({ error: "อีเมลนี้ถูกใช้งานแล้ว" });
+      return res.status(400).json({ error: "อีเมลนี้ถูกใช้งานในระบบร้านค้าแล้ว" });
     }
 
+    const { data: existingCustomer, error: checkCustomerError } = await supabase
+      .from("customer")
+      .select("id")
+      .eq("contact", email)
+      .maybeSingle();
+
+    if (checkCustomerError) {
+      console.error("Check customer error:", checkCustomerError);
+      return res.status(500).json({ error: "เกิดข้อผิดพลาดในการตรวจสอบข้อมูลลูกค้า" });
+    }
+
+    if (existingCustomer) {
+      return res.status(400).json({ error: "อีเมลนี้ถูกใช้งานแล้วในบัญชีผู้ใช้ทั่วไป" });
+    }
+
+    // 3. ตรวจสอบเลขบัตรประชาชน
     const { data: existingIdCard, error: checkIdError } = await supabase
       .from("id_card")
       .select("id")
@@ -103,7 +119,7 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
           owner_name,
           email,
           phone: contact || null,
-          password: hashedPassword, // <-- FIX: password ไม่เคยถูกบันทึกลง DB มาก่อน ทำให้ login ไม่มี password ให้ตรวจสอบ
+          password: hashedPassword,
           profile_image: shopImagePath,
           address_id: newAddress.id,
           is_verify: false,
@@ -167,8 +183,10 @@ export const LoginShop = async (req: Request, res: Response): Promise<Response> 
     const { data: shop, error: findError } = await supabase
       .from("print_shop")
       .select("*")
-      .or(`email.eq.${contact},phone.eq.${contact}`)
+      .or(`email.eq.${contact}`)
       .maybeSingle();
+    
+      console.log("login shop :",shop)
 
     if (findError) {
       console.error("Find shop error:", findError);
@@ -180,13 +198,6 @@ export const LoginShop = async (req: Request, res: Response): Promise<Response> 
     if (!shop) {
       return res.status(400).json({
         error: "Shop not found",
-      });
-    }
-
-    // <-- FIX: เดิมไม่มีการตรวจสอบรหัสผ่านเลย ทำให้ login ผ่านได้ทันทีแค่มี contact ที่ถูกต้อง
-    if (!shop.password) {
-      return res.status(400).json({
-        error: "บัญชีนี้ยังไม่ได้ตั้งรหัสผ่าน",
       });
     }
 

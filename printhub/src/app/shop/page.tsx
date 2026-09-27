@@ -29,13 +29,10 @@ type Order = {
     first_name: string;
     last_name: string;
   };
-  files?: FileItem[];
-  work_status?: {
-    updated_at: string;
-    status: {
-      state: string;
-    };
-  }[];
+  current_status?: {
+    id: string;
+    state: string;
+  };
 };
 
 export default function ShopPage() {
@@ -49,20 +46,12 @@ export default function ShopPage() {
   const router = useRouter();
   const isFetchingRef = useRef(false);
 
-  // 1. ดึง shop_id จาก localStorage (แก้ Fallback ให้เป็น ID จริงใน Supabase)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedShopId =
-        localStorage.getItem("shop_id") ||
-        localStorage.getItem("id") ||
-        "cd04a0a0-9a52-49ff-a84c-df32288ca384"; // <--- แก้ ID ตรงนี้ให้ตรงกับ Database
-
-      if (storedShopId && storedShopId !== "undefined" && storedShopId !== "null") {
-        setShopId(storedShopId);
-      } else {
-        console.error("shop_id not found in localStorage");
-        setLoading(false);
-      }
+    const id = localStorage.getItem("shop_id");
+    if (id) {
+      setShopId(id);
+    } else {
+      console.error("shop_id not found in localStorage");
     }
   }, []);
 
@@ -77,13 +66,7 @@ export default function ShopPage() {
       try {
         if (!opts?.silent) setLoading(true);
 
-        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-        const headers = {
-          shop_id: String(shopId),
-          "shop-id": String(shopId),
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        };
+        const headers = { shop_id: shopId };
 
         const baseURL = "http://localhost:5000/shop";
 
@@ -154,6 +137,11 @@ export default function ShopPage() {
     router.push(`/shop/detail/${orderId}`);
   };
 
+  // ดึงข้อมูล Dashboard ใหม่เมื่อมีการอัปเดตสถานะใน Card
+  const handleStatusUpdated = () => {
+    fetchDashboardData({ silent: true });
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <ShopNavbar />
@@ -199,6 +187,7 @@ export default function ShopPage() {
                   key={item.id}
                   order={item}
                   onClick={() => handleOrderClick(item.id)}
+                  onUpdateStatus={handleStatusUpdated}
                 />
               ))
             ) : (
