@@ -1,59 +1,13 @@
 import { Request, Response } from 'express';
 import supabase from '../config/supabase.js';
 
-// // ฟังก์ชันคำนวณระยะทางจากพิกัด (กิโลเมตร) ด้วย Haversine Formula[cite: 1, 2]
-// function calculateDistance(
-//   lat1?: number,
-//   lon1?: number,
-//   lat2?: number,
-//   lon2?: number
-// ): number | null {
-//   if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined) return null;
-//   const R = 6371;
-//   const dLat = ((lat2 - lat1) * Math.PI) / 180;
-//   const dLon = ((lon2 - lon1) * Math.PI) / 180;
-//   const a =
-//     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-//     Math.cos((lat1 * Math.PI) / 180) *
-//       Math.cos((lat2 * Math.PI) / 180) *
-//       Math.sin(dLon / 2) *
-//       Math.sin(dLon / 2);
-//   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-//   const dist = R * c;
-//   return isNaN(dist) ? null : parseFloat(dist.toFixed(2));
-// }
-
-// // ฟังก์ชันตรวจสอบว่าร้านเปิดอยู่หรือไม่ ณ เวลาปัจจุบัน[cite: 1, 2]
-// function checkIsOpen(openTime?: string, closeTime?: string): boolean {
-//   if (!openTime || !closeTime) return true;
-//   try {
-//     const now = new Date();
-//     const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-//     const [openH, openM] = openTime.split(':').map(Number);
-//     const [closeH, closeM] = closeTime.split(':').map(Number);
-
-//     const openMinutes = openH * 60 + (openM || 0);
-//     const closeMinutes = closeH * 60 + (closeM || 0);
-
-//     if (closeMinutes < openMinutes) {
-//       return currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
-//     }
-//     return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
-//   } catch (e) {
-//     return true;
-//   }
-// }
-
 // ==========================================
-// 1. ดึงรายชื่อร้านค้า (พร้อมฟิลเตอร์ ค้นหา/ระยะทาง/เรตติ้ง)
+// 1. ดึงรายชื่อร้านค้า (ตัด review_count ออก)
 // ==========================================
 export const getShops = async (req: Request, res: Response) => {
   try {
     const {
       search,
-      service_type,
-      finishing_service,
       is_open,
       is_top_rated,
       sort_by = 'distance',
@@ -61,38 +15,99 @@ export const getShops = async (req: Request, res: Response) => {
       user_lng
     } = req.query;
 
-    const lat = user_lat ? parseFloat(user_lat as string) : 13.7298;
-    const lng = user_lng ? parseFloat(user_lng as string) : 100.7782;
+    const userLat = user_lat ? parseFloat(user_lat as string) : 13.7298;
+    const userLng = user_lng ? parseFloat(user_lng as string) : 100.7782;
 
-    const { data, error } = await supabase.rpc('get_customer_shops', {
-      p_user_lat: lat,
-      p_user_lng: lng,
-      p_search: (search as string) || null,
-      p_service_type: (service_type && service_type !== 'ทั้งหมด') ? (service_type as string) : null,
-      p_finishing_service: (finishing_service as string) || null,
-      p_is_open: is_open === 'true' ? true : null,
-      p_min_rating: is_top_rated === 'true' ? 4.0 : null, // ถ้าเปิดคะแนนสูงสุด ให้เอาร้าน 4 ดาวขึ้นไป
-      p_sort_by: (sort_by as string) || 'distance'
-    });
+    let query = supabase
+      .from('print_shop')
+      .select(`
+        id,
+        shop_name,
+        profile_image,
+        open_time,
+        close_time,
+        rating,
+        address:address_id (
+          latitude,
+          longitude
+        )
+      `);
+
+    if (search) {
+      query = query.ilike('shop_name', `%${search}%`);
+    }
+
+    if (is_top_rated === 'true') {
+      query = query.gte('rating', 4.0);
+    }
+
+    const { data: shops, error } = await query;
 
     if (error) {
-      console.error('Supabase RPC Error:', error);
+      console.error('Supabase Error:', error);
       return res.status(500).json({ success: false, message: error.message });
+    }
+
+    const now = new Date();
+    const currentTime = now.toTimeString().slice(0, 8);
+
+    let formattedShops = (shops || []).map((shop: any) => {
+      let isOpenNow = true;
+      if (shop.open_time && shop.close_time) {
+        if (shop.open_time <= shop.close_time) {
+          isOpenNow = currentTime >= shop.open_time && currentTime <= shop.close_time;
+        } else {
+          isOpenNow = currentTime >= shop.open_time || currentTime <= shop.close_time;
+        }
+      }
+
+      let distance: number | null = null;
+      if (shop.address?.latitude && shop.address?.longitude) {
+        const R = 6371;
+        const dLat = ((Number(shop.address.latitude) - userLat) * Math.PI) / 180;
+        const dLon = ((Number(shop.address.longitude) - userLng) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((userLat * Math.PI) / 180) *
+            Math.cos((Number(shop.address.latitude) * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        distance = Number((R * c).toFixed(1));
+      }
+
+      return {
+        id: shop.id,
+        name: shop.shop_name,
+        shop_name: shop.shop_name,
+        image_url: shop.profile_image,
+        profile_image: shop.profile_image,
+        rating: Number(shop.rating || 0),
+        review_count: 0, // กำหนดค่าเริ่มต้นเป็น 0
+        open_time: shop.open_time,
+        close_time: shop.close_time,
+        is_open: isOpenNow,
+        distance: distance
+      };
+    });
+
+    if (is_open === 'true') {
+      formattedShops = formattedShops.filter((s) => s.is_open === true);
+    }
+
+    if (sort_by === 'rating') {
+      formattedShops.sort((a, b) => b.rating - a.rating);
+    } else {
+      formattedShops.sort((a, b) => {
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
     }
 
     return res.json({
       success: true,
-      data: (data || []).map((shop: any) => ({
-        id: shop.id,
-        name: shop.name,
-        image_url: shop.image_url,
-        rating: Number(shop.rating || 0),
-        review_count: Number(shop.review_count || 0),
-        open_time: shop.open_time,
-        close_time: shop.close_time,
-        is_open: shop.is_open,
-        distance: shop.distance !== null ? Number(shop.distance) : null
-      }))
+      data: formattedShops
     });
   } catch (err: any) {
     console.error('Server error:', err);
@@ -101,19 +116,17 @@ export const getShops = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. ดึงประเภทงานพิมพ์ทั้งหมดของระบบ (สำหรับแถบหมวดหมู่หน้าแรก)
+// 2. ดึงประเภทงานพิมพ์ทั้งหมด (ดึงจาก service_type แทน)
 // ==========================================
 export const getAllServiceTypes = async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabase
-      .from("service_option_template")
-      .select("category")
-      .order("category");
+      .from("service_type")
+      .select("type");
 
     if (error) throw error;
 
-    // กรองชื่อหมวดหมู่ไม่ให้ซ้ำกัน
-    const uniqueCategories = Array.from(new Set((data || []).map((item) => item.category)));
+    const uniqueCategories = Array.from(new Set((data || []).map((item) => item.type)));
 
     return res.status(200).json({ success: true, data: uniqueCategories });
   } catch (error: any) {
@@ -123,13 +136,13 @@ export const getAllServiceTypes = async (_req: Request, res: Response) => {
 };
 
 // ==========================================
-// 3. ดึงตัวเลือกบริการและราคาของร้านนั้นๆ (ใช้ Template + Shop Pricing)
+// 3. ดึงตัวเลือกบริการของร้านนั้นๆ
 // ==========================================
 export const getShopServices = async (req: Request, res: Response) => {
   try {
     const { shopId } = req.params;
 
-    // 3.1 ข้อมูลร้าน
+    // 1. ดึงข้อมูลร้านค้า
     const { data: shop, error: shopError } = await supabase
       .from("print_shop")
       .select("id, shop_name, profile_image, open_time, close_time, rating")
@@ -141,52 +154,19 @@ export const getShopServices = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "ไม่พบร้านค้านี้ในระบบ" });
     }
 
-    // 3.2 ข้อมูลการตั้งค่าขนาด Custom ของบริการร้านนี้
+    // 2. ดึงประเภทบริการ (ตัดคอลัมน์ is_custom_size_allowed ออก)
     const { data: serviceTypes, error: stError } = await supabase
       .from("service_type")
-      .select("id, type, is_custom_size_allowed, min_custom_size_cm, max_custom_size_cm")
+      .select("id, type")
       .eq("shop_id", shopId);
 
     if (stError) throw stError;
 
-    // 3.3 ดึงตัวเลือกราคาที่ร้านนี้เปิดให้บริการ
-    const { data: optionPrices, error: priceError } = await supabase
-      .from("shop_option_price")
-      .select(`
-        price,
-        is_available,
-        service_option_template (
-          id,
-          category,
-          group_type,
-          option_name,
-          description
-        )
-      `)
-      .eq("shop_id", shopId)
-      .eq("is_available", true);
-
-    if (priceError) throw priceError;
-
-    // 3.4 จัดโครงสร้างข้อมูลแยกตามหมวดหมู่บริการ
     const formattedServices = (serviceTypes || []).map((st: any) => {
-      const matchingOptions = (optionPrices || [])
-        .filter((op: any) => op.service_option_template?.category === st.type)
-        .map((op: any) => ({
-          id: op.service_option_template.id,
-          group_type: op.service_option_template.group_type,
-          option_name: op.service_option_template.option_name,
-          unit_price: Number(op.price) || 0,
-          description: op.service_option_template.description,
-        }));
-
       return {
         id: st.id,
         type_name: st.type,
-        is_custom_size_allowed: st.is_custom_size_allowed,
-        min_custom_size_cm: st.min_custom_size_cm,
-        max_custom_size_cm: st.max_custom_size_cm,
-        options: matchingOptions,
+        options: [],
       };
     });
 
@@ -204,9 +184,8 @@ export const getShopServices = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 4. ดึงข้อมูลตะกร้าสินค้าของลูกค้า
+// 4. ดึงข้อมูลตะกร้าสินค้า
 // ==========================================
-// 4. ดึงข้อมูลตะกร้าสินค้าของลูกค้า
 export const getCart = async (req: Request, res: Response) => {
   try {
     const customerId = (req as any).user?.id || (req.query.customer_id as string);
@@ -220,7 +199,6 @@ export const getCart = async (req: Request, res: Response) => {
       });
     }
 
-    // ดึง cart พร้อมรายละเอียดร้านค้า (รูป, เรตติ้ง, เวลาเปิดปิด, พิกัดที่อยู่)
     const { data: cart, error } = await supabase
       .from("cart")
       .select(`
@@ -257,7 +235,6 @@ export const getCart = async (req: Request, res: Response) => {
       });
     }
 
-    // ตรวจสอบเวลาเปิด-ปิดทำการเทียบกับเวลาไทย
     const now = new Date();
     const currentTime = now.toTimeString().slice(0, 8);
     const shop = cart.print_shop as any;
@@ -271,7 +248,6 @@ export const getCart = async (req: Request, res: Response) => {
       }
     }
 
-    // คำนวณระยะทาง (กม.) ด้วยสูตร Haversine
     let distance: number | null = null;
     if (shop.address?.latitude && shop.address?.longitude) {
       const R = 6371;
@@ -287,7 +263,6 @@ export const getCart = async (req: Request, res: Response) => {
       distance = Number((R * c).toFixed(1));
     }
 
-    // รวมข้อมูลร้านค้าที่คำนวณแล้วส่งกลับไปให้หน้าเว็บ
     const responseData = {
       ...cart,
       print_shop: {
@@ -308,10 +283,9 @@ export const getCart = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 5. เพิ่มสินค้าลงตะกร้า (บังคับ 1 ร้านต่อ 1 ตะกร้า)
+// 5. เพิ่มสินค้าลงตะกร้า
 // ==========================================
 export const addToCart = async (req: Request, res: Response) => {
-  console.log(">>> มี Request เข้ามาที่ addToCart แล้ว!", req.body);
   try {
     const {
       customer_id,
@@ -323,6 +297,7 @@ export const addToCart = async (req: Request, res: Response) => {
       finishing_option,
       quantity,
       unit_price,
+      price, // รับรองรับกรณี frontend ส่งมาชื่อ price
       file_url,
       total_pages,
       page_count,
@@ -338,7 +313,6 @@ export const addToCart = async (req: Request, res: Response) => {
       });
     }
 
-    // 1. ตรวจสอบว่ามีหัวตะกร้าอยู่หรือไม่
     let { data: cart, error: cartErr } = await supabase
       .from("cart")
       .select("*")
@@ -347,7 +321,6 @@ export const addToCart = async (req: Request, res: Response) => {
 
     if (cartErr) throw cartErr;
 
-    // หากมีตะกร้าค้างอยู่ แต่เป็นของร้านอื่น
     if (cart && cart.shop_id && String(cart.shop_id) !== String(shop_id)) {
       return res.status(409).json({
         success: false,
@@ -355,7 +328,6 @@ export const addToCart = async (req: Request, res: Response) => {
       });
     }
 
-    // หากยังไม่มีตะกร้า ให้สร้างใหม่
     if (!cart) {
       const { data: newCart, error: createCartErr } = await supabase
         .from("cart")
@@ -367,11 +339,12 @@ export const addToCart = async (req: Request, res: Response) => {
       cart = newCart;
     }
 
-    // 2. คำนวณข้อมูลและบันทึกลงตาราง cart_item ให้ตรง schema
     const calculatedPages = Number(page_count || total_pages) || 1;
     const calculatedQuantity = Number(quantity) || 1;
-    const parsedUnitPrice = Number(unit_price) || 0;
-    const calculatedSubtotal = parsedUnitPrice * calculatedQuantity;
+    
+    // ตรวจสอบทั้ง unit_price และ price
+    const rawPrice = unit_price !== undefined ? unit_price : price;
+    const parsedUnitPrice = Number(rawPrice) || 0;
 
     const { data: itemData, error: itemErr } = await supabase
       .from("cart_item")
@@ -386,7 +359,6 @@ export const addToCart = async (req: Request, res: Response) => {
           finishing_option: finishing_option || null,
           quantity: calculatedQuantity,
           unit_price: parsedUnitPrice,
-          //subtotal: calculatedSubtotal,
           page_count: calculatedPages,
           side_type: side_type || "SINGLE",
         },
@@ -432,14 +404,13 @@ export const clearCart = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 7. สั่งพิมพ์งาน (Checkout ย้ายไอเทมจาก Cart ไป print_order_item)
+// 7. สั่งพิมพ์งาน (Checkout)
 // ==========================================
 export const createOrder = async (req: Request, res: Response) => {
   try {
     const customerId = (req as any).user?.id || req.body.customer_id;
     const { description, receive_date, appointment_time } = req.body;
 
-    // 7.1 ดึงรายการในตะกร้าของลูกค้า
     const { data: cart, error: cartError } = await supabase
       .from("cart")
       .select(`
@@ -457,7 +428,6 @@ export const createOrder = async (req: Request, res: Response) => {
 
     const targetShopId = cart?.shop_id || req.body.shop_id;
 
-    // 7.2 ตรวจสอบช่วงเวลาทำการของร้าน
     const { data: shop, error: shopError } = await supabase
       .from("print_shop")
       .select("open_time, close_time")
@@ -479,17 +449,14 @@ export const createOrder = async (req: Request, res: Response) => {
       }
     }
 
-    // 7.3 คำนวณราคาและค่าธรรมเนียม
     const pricing = calculateOrderPricing(cart.cart_item);
 
-    // 7.4 ดึงรหัสสถานะ 'Pending' จากตาราง status
     const { data: statusRow } = await supabase
       .from("status")
       .select("id")
       .eq("state", "Pending")
       .maybeSingle();
 
-    // 7.5 สร้างบิลหลักใน print_order
     const { data: newOrder, error: orderError } = await supabase
       .from("print_order")
       .insert([
@@ -512,7 +479,6 @@ export const createOrder = async (req: Request, res: Response) => {
 
     if (orderError) throw orderError;
 
-    // 7.6 ย้ายรายการสินค้าจาก cart_item ไป print_order_item
     const orderItems = cart.cart_item.map((item: any) => ({
       order_id: newOrder.id,
       file_url: item.file_url,
@@ -533,7 +499,6 @@ export const createOrder = async (req: Request, res: Response) => {
     const { error: itemsError } = await supabase.from("print_order_item").insert(orderItems);
     if (itemsError) throw itemsError;
 
-    // 7.7 บันทึกประวัติสถานะลง work_status
     if (statusRow?.id) {
       await supabase.from("work_status").insert([
         {
@@ -543,7 +508,6 @@ export const createOrder = async (req: Request, res: Response) => {
       ]);
     }
 
-    // 7.8 เคลียร์ตะกร้าสินค้า
     await supabase.from("cart_item").delete().eq("cart_id", cart.id);
     await supabase.from("cart").delete().eq("id", cart.id);
 
@@ -559,7 +523,7 @@ export const createOrder = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 8. ดึงประวัติคำสั่งซื้อของลูกค้า
+// 8. ดึงประวัติคำสั่งซื้อ
 // ==========================================
 export const getCustomerOrders = async (req: Request, res: Response) => {
   try {
@@ -598,7 +562,7 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 9. อัปเดตสถานะงานพิมพ์ (Work Status)
+// 9. อัปเดตสถานะงานพิมพ์
 // ==========================================
 export const updateWorkStatus = async (req: Request, res: Response) => {
   try {
@@ -660,7 +624,7 @@ export const getReviewOrderDetail = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 11. ส่งรีวิว (Review)
+// 11. ส่งรีวิว
 // ==========================================
 export const submitOrderReview = async (req: Request, res: Response) => {
   try {
@@ -687,7 +651,7 @@ export const submitOrderReview = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 12. ส่งรายงานปัญหา (Report)
+// 12. ส่งรายงานปัญหา
 // ==========================================
 export const submitOrderReport = async (req: Request, res: Response) => {
   try {
@@ -714,7 +678,7 @@ export const submitOrderReport = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// ฟังก์ชันคำนวณราคางานพิมพ์ ค่าธรรมเนียม และยอดสุทธิ
+// คำนวณราคา
 // ==========================================
 export const calculateOrderPricing = (items: Array<any>) => {
   const subtotal = items.reduce((sum, item) => {
