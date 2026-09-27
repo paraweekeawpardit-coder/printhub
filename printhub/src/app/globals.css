@@ -1,5 +1,13 @@
-
 @import "tailwindcss";
+
+@theme {
+  /* กำหนดโทนสี Custom เพิ่มเติมสำหรับ Tailwind v4 */
+  --color-primary: #0077c2;
+  --color-navy: #051c3e;
+  
+  /* ผูก Font Family เข้ากับ Tailwind Utility Class (เช่น font-sans หรือ font-kanit) */
+  --font-sans: var(--font-kanit), "Kanit", sans-serif;
+}
 
 html {
   scroll-behavior: smooth;
@@ -11,9 +19,14 @@ html {
 
 body {
   font-family: var(--font-kanit), sans-serif;
+  background-color: #f8fafc; /* slate-50 */
+  color: #0f172a; /* slate-900 */
+  -webkit-font-smoothing: antialiased;
 }
 
-@theme {
-  --color-primary: #0077C2;
-  --color-navy: #051C3E;
+/* ลบเส้นขอบตอน Focus ปุ่มให้ดูสะอาดตาขึ้น (Optional) */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }

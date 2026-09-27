@@ -6,14 +6,16 @@ import { Star, MapPin, Clock } from "lucide-react";
 
 export interface Shop {
   id: string | number;
-  name: string;              // ชื่อร้าน (FR-1.4)
+  name: string;
   image_url?: string;
-  distance?: number | string;// ระยะทางจากจุดค้นหา กิโลเมตร (FR-1.4)
-  rating: number;            // คะแนนรีวิวเฉลี่ย (FR-1.4)
+  distance?: number | string;
+  rating: number;
   review_count?: number;
-  open_time?: string;        // เวลาเปิดทำการ (FR-1.4)
-  close_time?: string;       // เวลาปิดทำการ (FR-1.4)
-  is_open?: boolean;         // สถานะเปิด-ปิด
+  open_time?: string;
+  close_time?: string;
+  opening_time?: string;
+  closing_time?: string;
+  is_open?: boolean;
   starting_price?: number;
   profile_image?: string | null;
   shop_name?: string;
@@ -23,55 +25,102 @@ interface ShopCardProps {
   shop: Shop;
 }
 
-// 🌟 ฟังก์ชันคำนวณสถานะเปิด-ปิดร้านจากเวลาจริง
+// 🌟 ฟังก์ชันช่วยดึงค่าเวลาแบบครอบคลุมทุกชื่อฟิลด์จาก API / Supabase
+const getShopTimes = (shopData: any) => {
+  const open =
+    shopData.open_time ||
+    shopData.openTime ||
+    shopData.opening_time ||
+    shopData.opening_hours ||
+    "";
+  const close =
+    shopData.close_time ||
+    shopData.closeTime ||
+    shopData.closing_time ||
+    shopData.closing_hours ||
+    "";
+
+  const openFormatted = open ? String(open).slice(0, 5) : "";
+  const closeFormatted = close ? String(close).slice(0, 5) : "";
+
+  return { openTime: openFormatted, closeTime: closeFormatted };
+};
+
+// 🌟 ฟังก์ชันคำนวณสถานะเปิด-ปิดร้าน (รองรับร้าน 24 ชั่วโมง)
 export const checkIsShopOpen = (shop: Shop): boolean => {
   const shopData = shop as any;
-  
-  // ถ้าร้านปิดแบบ Manual ไว้ ให้คืนค่า false ทันที
+
+  // 1. ถ้าร้านสั่งปิด Manual (is_open === false) ให้ถือว่าปิด
   if (shopData.is_open === false) return false;
 
-  // ถ้ามีเวลาเปิด-ปิด ให้เปรียบเทียบกับเวลาปัจจุบัน
-  if (shopData.open_time && shopData.close_time) {
-    const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    const openTime = shopData.open_time.slice(0, 5);
-    const closeTime = shopData.close_time.slice(0, 5);
+  const { openTime, closeTime } = getShopTimes(shopData);
 
-    return currentTime >= openTime && currentTime <= closeTime;
+  // 2. เงื่อนไขร้านเปิด 24 ชั่วโมง
+  if (
+    (openTime === "00:00" && (closeTime === "23:59" || closeTime === "24:00")) ||
+    shopData.is_24_hours === true
+  ) {
+    return true;
   }
 
-  return Boolean(shopData.is_open);
+  // 3. ถ้าไม่มีการระบุเวลา ให้ยึดตามค่า is_open จาก DB
+  if (!openTime || !closeTime) {
+    return shopData.is_open !== undefined ? Boolean(shopData.is_open) : true;
+  }
+
+  // 4. คำนวณตามเวลาปัจจุบัน
+  const now = new Date();
+  const currentHours = String(now.getHours()).padStart(2, "0");
+  const currentMinutes = String(now.getMinutes()).padStart(2, "0");
+  const currentTime = `${currentHours}:${currentMinutes}`;
+
+  if (openTime <= closeTime) {
+    return currentTime >= openTime && currentTime <= closeTime;
+  } else {
+    // กรณีเปิดข้ามคืน
+    return currentTime >= openTime || currentTime <= closeTime;
+  }
 };
 
 export default function ShopCard({ shop }: ShopCardProps) {
   const shopData = shop as any;
 
-  // 🌟 คำนวณสถานะเปิด-ปิดจริงตามเวลาปัจจุบัน
   const isOpen = checkIsShopOpen(shop);
+  const { openTime, closeTime } = getShopTimes(shopData);
 
-  // ฟอร์แมตแสดงเวลาเปิด-ปิด
-  const businessHours =
-    shop.open_time && shop.close_time
-      ? `${shop.open_time.slice(0, 5)} - ${shop.close_time.slice(0, 5)} น.`
-      : "ไม่ระบุเวลาทำการ";
+  // 🌟 จัดการข้อความแสดงเวลาเปิด-ปิด
+  let businessHours = "ไม่ระบุเวลาทำการ";
+  if (
+    (openTime === "00:00" && (closeTime === "23:59" || closeTime === "24:00")) ||
+    shopData.is_24_hours === true
+  ) {
+    businessHours = "เปิด 24 ชั่วโมง";
+  } else if (openTime && closeTime) {
+    businessHours = `${openTime} - ${closeTime} น.`;
+  }
 
-  // ฟอร์แมตระยะทาง (ปัดทศนิยม 1 ตำแหน่ง)
   const formattedDistance =
     shop.distance !== undefined && shop.distance !== null
       ? `${Number(shop.distance).toFixed(1)} กม.`
       : "ไม่ระบุระยะทาง";
+
+  const rawImage = shop?.profile_image || shop?.image_url;
+  const imageUrl = rawImage
+    ? rawImage.startsWith("http")
+      ? rawImage
+      : `http://localhost:5000${rawImage.startsWith("/") ? "" : "/"}${rawImage}`
+    : null;
 
   return (
     <Link
       href={`/customer/shop/${shopData.id}`}
       className="group bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-blue-400 transition-all flex flex-col cursor-pointer"
     >
-      {/* รูปภาพหน้าร้าน พร้อม Badge สถานะเปิด-ปิด */}
       <div className="relative w-full h-44 bg-blue-50/60 border-b border-blue-100 flex items-center justify-center overflow-hidden shrink-0">
-        {shop?.profile_image || shop?.image_url ? (
+        {imageUrl ? (
           <img
-            src={shop.profile_image || shop.image_url} 
-            alt={shop.shop_name || "รูปร้านค้า"}
+            src={imageUrl}
+            alt={shop.shop_name || shop.name || "รูปร้านค้า"}
             className="w-full h-full object-cover"
             onError={(e) => {
               (e.target as HTMLElement).style.display = "none";
@@ -81,7 +130,6 @@ export default function ShopCard({ shop }: ShopCardProps) {
           <span className="text-4xl">🖨️</span>
         )}
 
-        {/* ป้ายสถานะเปิด-ปิดทำการ */}
         <div className="absolute top-2.5 left-2.5 z-10">
           <span
             className={`text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-md ${
@@ -100,15 +148,12 @@ export default function ShopCard({ shop }: ShopCardProps) {
         </div>
       </div>
 
-      {/* เนื้อหาสรุปข้อมูลร้านค้า (FR-1.4) */}
       <div className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
         <div className="space-y-1">
-          {/* 1. ชื่อร้าน */}
           <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition truncate">
             {shopData.shop_name || shopData.name}
           </h3>
 
-          {/* 2. คะแนนรีวิวเฉลี่ย */}
           <div className="flex items-center gap-1.5 text-xs text-slate-600">
             <div className="flex items-center gap-0.5 text-amber-500 font-bold">
               <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-500" />
@@ -122,15 +167,12 @@ export default function ShopCard({ shop }: ShopCardProps) {
           </div>
         </div>
 
-        {/* ข้อมูลระยะทาง และ เวลาเปิด-ปิดทำการ */}
         <div className="pt-2 border-t border-slate-100 space-y-1 text-xs text-slate-500">
-          {/* 3. ระยะทางจากจุดค้นหา (กิโลเมตร) */}
           <div className="flex items-center gap-1.5 truncate">
             <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <span className="truncate">{formattedDistance}</span>
           </div>
 
-          {/* 4. เวลาเปิด-ปิดทำการ */}
           <div className="flex items-center gap-1.5 truncate">
             <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span className="text-[11px] text-slate-500 truncate">{businessHours}</span>

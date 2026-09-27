@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useCallback, use } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Store, Printer, Landmark, Loader2 } from "lucide-react";
 
@@ -20,10 +20,23 @@ type AddressData = {
   postcode: string;
 };
 
-export default function ShopSettingsPage() {
+interface PageProps {
+  params: Promise<{ shop_id: string }>;
+}
+
+export default function ShopSettingsPage({ params }: PageProps) {
+  // 🌟 ใช้ React.use Unwrap promise params และ useParams() เป็น Fallback
+  const resolvedParams = use(params);
+  const routeParams = useParams();
   const searchParams = useSearchParams();
-  // 🔹 รับ UUID string โดยตรง ไม่แปลงเป็น parseInt
-  const shopId = searchParams.get("shopId");
+
+  // 🌟 ดึง shop_id โดยรองรับทั้ง [shop_id], [shopId] และ Query String (?shopId=...)
+  const shopId =
+    resolvedParams?.shop_id ||
+    (routeParams?.shop_id as string) ||
+    (routeParams?.shopId as string) ||
+    searchParams.get("shopId") ||
+    searchParams.get("shop_id");
 
   const [tab, setTab] = useState<string>("profile");
   const [loading, setLoading] = useState<boolean>(true);
@@ -68,7 +81,7 @@ export default function ShopSettingsPage() {
 
   const fetchShopSettings = useCallback(async () => {
     if (!shopId) {
-      console.warn("ไม่พบ shopId ใน URL Parameters (เช่น ?shopId=cd04a0a0-...)");
+      console.warn("ไม่พบ shopId ใน URL Parameters หรือ Path");
       setLoading(false);
       return;
     }
@@ -77,10 +90,10 @@ export default function ShopSettingsPage() {
       setLoading(true);
 
       const [profileRes, bankRes, servicesRes, verifyRes] = await Promise.all([
-        axios.get(`${API_BASE}/profile/${shopId}`),
-        axios.get(`${API_BASE}/bank-account/${shopId}`),
-        axios.get(`${API_BASE}/services/${shopId}`),
-        axios.get(`${API_BASE}/verify-status/${shopId}`),
+        axios.get(`${API_BASE}/profile/${shopId}`).catch(() => ({ data: null })),
+        axios.get(`${API_BASE}/bank-account/${shopId}`).catch(() => ({ data: null })),
+        axios.get(`${API_BASE}/services/${shopId}`).catch(() => ({ data: null })),
+        axios.get(`${API_BASE}/verify-status/${shopId}`).catch(() => ({ data: null })),
       ]);
 
       const shop = profileRes.data?.data;
@@ -112,8 +125,14 @@ export default function ShopSettingsPage() {
         setHasProfileData(Boolean(shop.shop_name));
       }
 
-      // Verification Status
-      setIsVerified(Boolean(verifyStatus?.is_verify));
+      // Verification Status (เช็คค่าทั้งกรณี boolean และ string/number)
+      const verified = Boolean(
+        verifyStatus?.is_verify ??
+          verifyStatus?.is_verified ??
+          shop?.is_verified ??
+          shop?.is_verify
+      );
+      setIsVerified(verified);
 
       // Services Data
       if (shopServices) {
@@ -123,7 +142,7 @@ export default function ShopSettingsPage() {
           items: (group.service_detail ?? []).map((d: any) => ({
             id: d.id,
             detail: d.detail ?? "",
-            group_type: d.group_type ?? "", // 🔹 แก้ไขจาก group_name เป็น group_type
+            group_type: d.group_type ?? "",
             price: d.price != null ? String(d.price) : "",
           })),
         }));
@@ -196,12 +215,12 @@ export default function ShopSettingsPage() {
     if (!shopId) return;
     try {
       setSaving(true);
-      
+
       const payloadServices = services.map((s) => ({
         type: s.type,
         service_detail: s.items.map((item) => ({
           detail: item.detail,
-          group_type: item.group_type, // 🔹 แก้ไขจาก group_name เป็น group_type
+          group_type: item.group_type,
           price: item.price,
         })),
       }));

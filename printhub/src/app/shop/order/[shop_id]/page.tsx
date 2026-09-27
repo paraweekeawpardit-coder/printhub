@@ -18,25 +18,30 @@ export default function OrderPage() {
   const router = useRouter();
   const params = useParams();
 
-  // 1. ดึง shop_id จาก params หรือ localStorage เป็นค่าสำรอง
+  // 1. ดึง shop_id จาก URL params
   const paramShopId = Array.isArray(params?.shop_id)
     ? params.shop_id[0]
     : (params?.shop_id as string);
 
-  console.log("get ordertab from shop", shop_id);
-
+  // ประกาศ state สำหรับเก็บ shopId
+  const [shopId, setShopId] = useState<string>(paramShopId || "");
   const [activeFilter, setActiveFilter] =
     useState<OrderStatusFilter>("ทั้งหมด");
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
+  // อัปเดต shopId จาก params หรือ localStorage
   useEffect(() => {
-    if (!shopId && typeof window !== "undefined") {
+    if (paramShopId) {
+      setShopId(paramShopId);
+    } else if (typeof window !== "undefined") {
       const storedShopId =
         localStorage.getItem("shop_id") || localStorage.getItem("id");
       if (storedShopId) setShopId(storedShopId);
     }
-  }, [shopId]);
+  }, [paramShopId]);
+
+  console.log("get ordertab from shop", shopId);
 
   // 2. ฟังก์ชันดึงรายการออเดอร์ตามสถานะ
   const getOrder = useCallback(async () => {
@@ -45,7 +50,7 @@ export default function OrderPage() {
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE}/shop/getOrderByStatus`, {
-        headers: { shop_id },
+        headers: { shop_id: shopId },
         params: { status: activeFilter },
       });
       setOrders(response.data.orders ?? []);
@@ -63,18 +68,19 @@ export default function OrderPage() {
 
   const handleUpdateStatus = useCallback(
     async (orderId: string, newStatus: string) => {
+      if (!shopId) return;
       try {
         await axios.patch(
           `${API_BASE}/shop/orders/${orderId}/status`,
           { status_name: newStatus },
-          { params: { shop_id } }
+          { params: { shop_id: shopId } }
         );
         await getOrder();
       } catch (error) {
         console.error("Update order status error:", error);
       }
     },
-    [shop_id, getOrder]
+    [shopId, getOrder]
   );
 
   return (
