@@ -1,24 +1,44 @@
 "use client";
 
+import { Eye } from "lucide-react";
+
 export interface Shop {
-  id: string;
-  shop_name: string;
-  owner_name: string;
-  email: string;
-  phone: string;
+  id?: string;
+  _id?: string;
+  shop_name?: string;
+  name?: string;
+  owner_name?: string;
+  ownerName?: string;
+  email?: string;
+  phone?: string;
   profile_image?: string;
+  logoUrl?: string;
   open_time?: string;
   close_time?: string;
-  is_verify: boolean;
+  openTime?: string;
+  closeTime?: string;
+  address?: string;
+  description?: string;
+  documentUrl?: string;
+  is_verify?: boolean;
+  status?: string;
   created_at?: string;
 }
 
 interface ShopCardProps {
   shop: Shop;
   onVerify: (shop_id: string, action: "approve" | "reject") => void;
+  onSelectShop?: (shop: Shop) => void;
 }
 
-export default function ShopCard({ shop, onVerify }: ShopCardProps) {
+export default function ShopCard({ shop, onVerify, onSelectShop }: ShopCardProps) {
+  const shopId = shop.id || shop._id || "";
+  const shopName = shop.shop_name || shop.name || "ไม่ระบุชื่อร้าน";
+  const ownerName = shop.owner_name || shop.ownerName || "ไม่ระบุ";
+  const imageSrc = shop.profile_image || shop.logoUrl;
+  const openTime = shop.open_time || shop.openTime;
+  const closeTime = shop.close_time || shop.closeTime;
+
   const formatTime = (timeStr?: string) => {
     if (!timeStr) return "ไม่ระบุ";
     return timeStr.slice(0, 5) + " น.";
@@ -28,11 +48,11 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
     <div className="shop-card">
       <div className="card-top">
         <div className="avatar-wrapper">
-          {shop.profile_image ? (
-            <img src={shop.profile_image} alt={shop.shop_name} className="avatar-img" />
+          {imageSrc ? (
+            <img src={imageSrc} alt={shopName} className="avatar-img" />
           ) : (
             <div className="avatar-placeholder">
-              {shop.shop_name?.charAt(0) || "S"}
+              {shopName.charAt(0) || "S"}
             </div>
           )}
         </div>
@@ -40,9 +60,9 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
       </div>
 
       <div className="card-body">
-        <h3 className="shop-name">{shop.shop_name}</h3>
+        <h3 className="shop-name">{shopName}</h3>
         <p className="owner-name">
-          เจ้าของร้าน: <span>{shop.owner_name || "ไม่ระบุ"}</span>
+          เจ้าของร้าน: <span>{ownerName}</span>
         </p>
 
         <div className="info-divider" />
@@ -50,7 +70,7 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
         <div className="info-list">
           <div className="info-item">
             <span className="info-label">อีเมล</span>
-            <span className="info-value">{shop.email}</span>
+            <span className="info-value">{shop.email || "-"}</span>
           </div>
           <div className="info-item">
             <span className="info-label">เบอร์โทรศัพท์</span>
@@ -59,31 +79,46 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
           <div className="info-item">
             <span className="info-label">เวลาทำการ</span>
             <span className="info-value highlight">
-              {formatTime(shop.open_time)} - {formatTime(shop.close_time)}
+              {formatTime(openTime)} - {formatTime(closeTime)}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="card-actions">
-        <button
-          className="btn btn-reject"
-          onClick={() => onVerify(shop.id, "reject")}
-        >
-          ปฏิเสธ
-        </button>
-        <button
-          className="btn btn-approve"
-          onClick={() => onVerify(shop.id, "approve")}
-        >
-          อนุมัติร้านค้า
-        </button>
+      <div className="card-actions-container">
+        {onSelectShop && (
+          <button
+            type="button"
+            className="btn btn-detail"
+            onClick={() => onSelectShop(shop)}
+          >
+            <Eye className="w-4 h-4 inline-block mr-1" />
+            ดูรายละเอียดข้อมูลร้าน
+          </button>
+        )}
+
+        <div className="card-actions">
+          <button
+            type="button"
+            className="btn btn-reject"
+            onClick={() => onVerify(shopId, "reject")}
+          >
+            ปฏิเสธ
+          </button>
+          <button
+            type="button"
+            className="btn btn-approve"
+            onClick={() => onVerify(shopId, "approve")}
+          >
+            อนุมัติร้านค้า
+          </button>
+        </div>
       </div>
 
       <style jsx>{`
         .shop-card {
-          background-color: #FFFFFF;
-          border: 1px solid #E2E8F0;
+          background-color: #ffffff;
+          border: 1px solid #e2e8f0;
           border-radius: 16px;
           padding: 24px;
           display: flex;
@@ -95,7 +130,7 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
         .shop-card:hover {
           transform: translateY(-3px);
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-          border-color: #CBD5E1;
+          border-color: #cbd5e1;
         }
         .card-top {
           display: flex;
@@ -108,7 +143,7 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
           height: 56px;
           border-radius: 14px;
           overflow: hidden;
-          background-color: #F0F8FF;
+          background-color: #f0f8ff;
         }
         .avatar-img {
           width: 100%;
@@ -121,14 +156,14 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
           display: flex;
           align-items: center;
           justify-content: center;
-          background-color: #E0F2FE;
-          color: #0284C7;
+          background-color: #e0f2fe;
+          color: #0284c7;
           font-size: 1.5rem;
           font-weight: 700;
         }
         .status-pill {
-          background-color: #FEF3C7;
-          color: #D97706;
+          background-color: #fef3c7;
+          color: #d97706;
           font-size: 0.75rem;
           font-weight: 700;
           padding: 4px 12px;
@@ -138,12 +173,12 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
         .shop-name {
           font-size: 1.15rem;
           font-weight: 700;
-          color: #0F172A;
+          color: #0f172a;
           margin: 0 0 4px 0;
         }
         .owner-name {
           font-size: 0.88rem;
-          color: #64748B;
+          color: #64748b;
           margin: 0;
         }
         .owner-name span {
@@ -152,7 +187,7 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
         }
         .info-divider {
           height: 1px;
-          background-color: #F1F5F9;
+          background-color: #f1f5f9;
           margin: 16px 0;
         }
         .info-list {
@@ -166,7 +201,7 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
           font-size: 0.85rem;
         }
         .info-label {
-          color: #94A3B8;
+          color: #94a3b8;
         }
         .info-value {
           color: #334155;
@@ -176,13 +211,17 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
           color: #003554;
           font-weight: 600;
         }
+        .card-actions-container {
+          margin-top: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
         .card-actions {
           display: flex;
           gap: 12px;
-          margin-top: 24px;
         }
         .btn {
-          flex: 1;
           padding: 10px;
           border-radius: 10px;
           font-size: 0.88rem;
@@ -190,8 +229,20 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
           cursor: pointer;
           border: none;
           transition: background-color 0.15s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .btn-detail {
+          width: 100%;
+          background-color: #f1f5f9;
+          color: #334155;
+        }
+        .btn-detail:hover {
+          background-color: #e2e8f0;
         }
         .btn-approve {
+          flex: 1;
           background-color: #003554;
           color: white;
         }
@@ -199,12 +250,13 @@ export default function ShopCard({ shop, onVerify }: ShopCardProps) {
           background-color: #002238;
         }
         .btn-reject {
-          background-color: #FFF5F5;
-          color: #E11D48;
-          border: 1px solid #FECDD3;
+          flex: 1;
+          background-color: #fff5f5;
+          color: #e11d48;
+          border: 1px solid #fecdd3;
         }
         .btn-reject:hover {
-          background-color: #FFE4E6;
+          background-color: #ffe4e6;
         }
       `}</style>
     </div>

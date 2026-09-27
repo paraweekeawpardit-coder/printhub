@@ -1,63 +1,37 @@
-import express from "express";
-import { adminLogin } from "../controller/Admin/auth.js";
+import { Router } from "express";
+import { getPlatformStats } from "../controller/Admin/dashboardController.js";
+import { getPendingShops, verifyShop } from "../controller/Admin/shopController.js";
+import { getAllReports, verifyReport } from "../controller/Admin/reportController.js";
+import { getAllTransactions } from "../controller/Admin/transactionController.js";
 import {
-  getPlatformStats,
-  getPendingShops,
-  verifyShop,
-  getAllReports,
-  verifyReport,
-  getAllTransactions,
-  // เพิ่ม Controller สำหรับ Profile, Settings, Notifications, Logout
   getAdminProfile,
   updateAdminProfile,
   updateSettings,
   getNotifications,
-  adminLogout,
-} from "../controller/Admin/dashboard.js";
+  adminLogout
+} from "../controller/Admin/profileController.js";
 
-const router = express.Router();
+const router = Router();
 
-// ==========================================
-// Authentication (แยกเฉพาะ Admin)
-// ==========================================
-// POST: /api/admin/login
-router.post("/login", adminLogin);
-
-// POST: /api/admin/logout
-router.post("/logout", adminLogout);
-
-// ==========================================
-// Admin Profile & Settings
-// ==========================================
-// GET / PUT: /api/admin/profile
-router.get("/profile", getAdminProfile);
-router.put("/profile", updateAdminProfile);
-
-// PUT: /api/admin/settings
-router.put("/settings", updateSettings);
-
-// GET: /api/admin/notifications
-router.get("/notifications", getNotifications);
-
-// ==========================================
-// Admin Dashboard & Management
-// ==========================================
-// 1. ดึงข้อมูลสถิติภาพรวมสำหรับ Admin Dashboard
+// Dashboard
 router.get("/dashboard-stats", getPlatformStats);
 
-// 2. ดึงรายการร้านค้าที่รอการอนุมัติ (status = 'pending')
+// Shops
 router.get("/shops/pending", getPendingShops);
-
-// 3. อนุมัติหรือปฏิเสธการลงทะเบียนร้านค้า
 router.patch("/shops/verify", verifyShop);
 
-// 4. ดึงรายการคำร้องเรียน/ปัญหาทั้งหมด
+// Reports
 router.get("/reports", getAllReports);
-
-// 5. อัปเดตสถานะการตรวจสอบคำร้องเรียน/ปัญหา
 router.patch("/reports/verify", verifyReport);
 
-// 6. ดึงรายการธุรกรรมการเงินทั้งหมด
+// Transactions
 router.get("/transactions", getAllTransactions);
+
+// Profile & Settings
+router.get("/profile", getAdminProfile);
+router.put("/profile", updateAdminProfile);
+router.put("/settings", updateSettings);
+router.get("/notifications", getNotifications);
+router.post("/logout", adminLogout);
 
 export default router;

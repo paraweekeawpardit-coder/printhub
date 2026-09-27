@@ -1,9 +1,11 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "path";
 import shopRoutes from "./route/Shop.js";
 import adminRoutes from "./route/Admin.js";
 import authRoutes from "./route/Auth.js";
+import customerRoute from "./route/customerRoute.js";
 
 dotenv.config();
 
@@ -28,6 +30,9 @@ app.use(
 
 app.use(express.json());
 
+// 🌟 เปิดให้ภายนอกเข้าถึงไฟล์ในโฟลเดอร์ uploads เพื่อแสดงรูปภาพ
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
 // 1. เส้น Route สำหรับฝั่งร้านค้า (Shop)
 app.use("/api/shop", shopRoutes);
 app.use("/shop", shopRoutes); // เพิ่มไว้เพื่อรองรับ backward compatibility
@@ -39,6 +44,10 @@ app.use("/admin", adminRoutes); // เพิ่มไว้เพื่อรอ
 // 3. เส้น Route สำหรับระบบยืนยันตัวตน (Auth)
 app.use("/api/auth", authRoutes);
 app.use("/auth", authRoutes);
+
+// 4. เส้น Route สำหรับฝั่งลูกค้า (Customer)
+app.use("/api/customer", customerRoute);
+app.use("/customer", customerRoute); // เพิ่มไว้เพื่อรองรับ backward compatibility
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
