@@ -1,13 +1,10 @@
-import express, { Request, Response } from "express";
-import http from "http";
-import { Server } from "socket.io";
+import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import morgan from "morgan";
-import Authroute from "./route/Auth.js";
-import ShopRoute from "./route/Shop.js";
-import supabase from "./config/supabase.js";
-
+import path from "path";
+import shopRoutes from "./route/Shop.js";
+import adminRoutes from "./route/Admin.js";
+import authRoutes from "./route/Auth.js";
 import customerRoute from "./route/customerRoute.js";
 import notificationRoute from "./route/notificationRoute.js"; // 🟢 1. Import Notification Route
 import mongoose, { Schema } from "mongoose";
@@ -16,20 +13,19 @@ import connectDB from "./config/mongo.js";
 dotenv.config();
 
 const app = express();
-const server = http.createServer(app);
+const PORT = process.env.PORT || 5000;
 
-// 1. ตั้งค่า CORS และ Middleware
+// ตั้งค่า CORS ให้รองรับ Custom Headers (shop_id, shop-id)
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://192.168.1.59:3000"],
+    origin: ["http://localhost:3000", "http://localhost:5173"],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
       "Authorization",
       "shop_id",
-      "order_id",
-      "customer_id",
-      "Accept",
+      "shop-id",
+      "admin_token",
     ],
     credentials: true,
   })
@@ -109,29 +105,20 @@ io.on("connection", (socket) => {
   socket.on("send_message", async (data: IMessage) => {
     if (!data.orderId || data.orderId === "undefined" || !data.text) return;
 
-    console.log(`💬 [Order #${data.orderId}] ${data.sender}: ${data.text}`);
+// 🌟 เปิดให้ภายนอกเข้าถึงไฟล์ในโฟลเดอร์ uploads เพื่อแสดงรูปภาพ
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-    try {
-      const newMessage = new Message({
-        orderId: data.orderId,
-        sender: data.sender,
-        text: data.text,
-        time: data.time,
-        isRead: false,
-      });
-      const savedMessage = await newMessage.save();
+// 1. เส้น Route สำหรับฝั่งร้านค้า (Shop)
+app.use("/api/shop", shopRoutes);
+app.use("/shop", shopRoutes); // เพิ่มไว้เพื่อรองรับ backward compatibility
 
-      io.to(data.orderId).emit("receive_message", savedMessage);
-    } catch (error) {
-      console.error("❌ Error saving message to DB:", error);
-    }
-  });
+// 2. เส้น Route สำหรับฝั่งผู้ดูแลระบบ (Admin)
+app.use("/api/admin", adminRoutes);
+app.use("/admin", adminRoutes); // เพิ่มไว้เพื่อรองรับ backward compatibility
 
-  // อัปเดตสถานะอ่านแล้ว
-  socket.on("mark_as_read", async (data: { orderId: string; reader: string }) => {
-    if (!data.orderId || data.orderId === "undefined") return;
-    try {
-      const senderToUpdate = data.reader === "customer" ? "shop" : "customer";
+// 3. เส้น Route สำหรับระบบยืนยันตัวตน (Auth)
+app.use("/api/auth", authRoutes);
+app.use("/auth", authRoutes);
 
       await Message.updateMany(
         { orderId: data.orderId, sender: senderToUpdate, isRead: false },
@@ -229,11 +216,9 @@ app.get("/api/orders/:orderId/status", async (req: Request, res: Response) => {
   }
 });
 
-// ==========================================
-// 5. Server Startup
-// ==========================================
-const PORT = process.env.PORT || 5000;
+// 5. เส้น Route แอดมิน
+app.use("/api/admin", adminRoutes);
 
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
 });

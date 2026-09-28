@@ -3,10 +3,23 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import { Clock, DollarSign, Star } from "lucide-react";
 
 import DashboardCard from "@/src/component/shop/dashboard-card";
 import OrderCard from "@/src/component/shop/order-card";
 import ShopNavbar from "@/src/component/shop/navbar";
+import FinancialTable, { Transaction } from "@/src/component/shop/financial-table";
+import OrderBreakdownModal from "@/src/component/shop/order-breakdown-modal";
+import ReviewComplaintModal from "@/src/component/shop/review-complaint-modal";
+
+// 1. อัปเดต Type ให้ตรงกับข้อมูลที่ Backend (home.ts) ส่งกลับมา
+type FileItem = {
+  id: string;
+  category: string;
+  filename: string;
+  url: string;
+  page_count?: number;
+};
 
 type Order = {
   id: string;
@@ -15,37 +28,69 @@ type Order = {
   description: string | null;
   order_date: string;
   total_price: number;
+  latest_status?: string;
   customer?: {
     first_name: string;
     last_name: string;
   };
-  work_status?: {
-    updated_at: string;
-    status: {
-      state: string;
-    };
-  }[];
+  current_status?: {
+    id: string;
+    state: string;
+  };
 };
 
 export default function ShopPage() {
   const [num, setNum] = useState<string>("0 รายการ");
   const [score, setScore] = useState<string>("0.0 / 5.0");
   const [income, setIncome] = useState<string>("0.00 บาท");
+  const [todayOrdersCount, setTodayOrdersCount] = useState<number>(0);
+  const [totalReviewsCount, setTotalReviewsCount] = useState<number>(0);
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [shopId, setShopId] = useState<string>("");
 
-  const router = useRouter();
+  // Control View สำหรับสลับรายละเอียดของทั้ง 3 Cards
+  const [activeView, setActiveView] = useState<"orders" | "financial" | "reviews" | null>(null);
 
-  // กันการยิงซ้ำซ้อนถ้ามีหลาย event (focus + visibilitychange) เด้งพร้อมกัน
+  // Financial Data State
+  const [financialData, setFinancialData] = useState<{
+    totalGross: number;
+    totalFee: number;
+    totalNet: number;
+    transactions: Transaction[];
+  }>({
+    totalGross: 0,
+    totalFee: 0,
+    totalNet: 0,
+    transactions: [],
+  });
+
+  // Order Breakdown State
+  const [breakdownData, setBreakdownData] = useState<{
+    total: number;
+    counts: Record<string, number>;
+    orders: any[];
+  }>({
+    total: 0,
+    counts: {},
+    orders: [],
+  });
+
+  // Review & Complaint State
+  const [reviewData, setReviewData] = useState<{
+    reviews: any[];
+    complaints: any[];
+  }>({
+    reviews: [],
+    complaints: [],
+  });
+
+  const router = useRouter();
   const isFetchingRef = useRef(false);
 
-  // =========================
-  // Get shop_id from localStorage
-  // =========================
   useEffect(() => {
-    const id = "2a1e1ec6-1abd-49df-bcfe-cc66e64521d9";
-
+    const id = localStorage.getItem("shop_id");
     if (id) {
       setShopId(id);
     } else {
@@ -53,11 +98,10 @@ export default function ShopPage() {
     }
   }, []);
 
+  // 2. ฟังก์ชันดึงข้อมูล Dashboard
   const fetchDashboardData = useCallback(
     async (opts?: { silent?: boolean }) => {
-      if (!shopId) {
-        return;
-      }
+      if (!shopId) return;
 
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
@@ -65,21 +109,43 @@ export default function ShopPage() {
       try {
         if (!opts?.silent) setLoading(true);
 
-        const headers = {
-          shop_id: shopId,
-        };
+        const headers = { shop_id: shopId };
 
-        const [numRes, scoreRes, incomeRes, ordersRes] = await Promise.all([
+        const [
+          numRes,
+          scoreRes,
+          incomeRes,
+          ordersRes,
+          financeRes,
+          breakdownRes,
+          reviewRes,
+        ] = await Promise.all([
           axios.get("http://localhost:5000/shop/numWork", { headers }),
           axios.get("http://localhost:5000/shop/getScore", { headers }),
           axios.get("http://localhost:5000/shop/getIncome", { headers }),
           axios.get("http://localhost:5000/shop/getTopOrder", { headers }),
+          axios.get("http://localhost:5000/shop/getFinancialOverview", { headers }),
+          axios.get("http://localhost:5000/shop/getOrderStatusBreakdown", { headers }),
+          axios.get("http://localhost:5000/shop/getComplaintsAndReviews", { headers }),
         ]);
 
         setNum(`${numRes.data.numWork ?? 0} รายการ`);
         setScore(`${scoreRes.data.score ?? 0.0} / 5.0`);
         setIncome(`${incomeRes.data.income ?? 0} บาท`);
+
+        setTodayOrdersCount(incomeRes.data.orderCount ?? 0);
+        setTotalReviewsCount(scoreRes.data.totalReviews ?? 0);
+
         setOrders(ordersRes.data ?? []);
+        setFinancialData(
+          financeRes.data ?? { totalGross: 0, totalFee: 0, totalNet: 0, transactions: [] }
+        );
+        setBreakdownData(
+          breakdownRes.data ?? { total: 0, counts: {}, orders: [] }
+        );
+        setReviewData(
+          reviewRes.data ?? { reviews: [], complaints: [] }
+        );
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
       } finally {
@@ -90,13 +156,12 @@ export default function ShopPage() {
     [shopId]
   );
 
-  // โหลดข้อมูลครั้งแรกตอนได้ shopId
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    if (shopId) {
+      fetchDashboardData();
+    }
+  }, [shopId, fetchDashboardData]);
 
-  // โหลดข้อมูลใหม่แบบเงียบๆ (ไม่ขึ้น loading เต็มจอ) ทุกครั้งที่ผู้ใช้กลับมาที่แท็บ/หน้านี้อีกครั้ง
-  // เช่น กด back จากหน้า order detail หลังอัปเดตสถานะเสร็จ
   useEffect(() => {
     const handleFocus = () => fetchDashboardData({ silent: true });
     const handleVisibility = () => {
@@ -118,36 +183,84 @@ export default function ShopPage() {
     router.push(`/shop/detail/${orderId}`);
   };
 
+  const handleStatusUpdated = () => {
+    fetchDashboardData({ silent: true });
+  };
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-slate-50/50">
       <ShopNavbar />
 
-      <div className="mx-auto max-w-7xl px-12 py-10">
+      <div className="mx-auto max-w-7xl px-6 py-8 md:px-12">
         <h2 className="mb-6 text-lg font-bold text-[#0F2942]">
           ผลการดำเนินงานด้านคำสั่งพิมพ์
         </h2>
 
-        <div className="mb-16 flex gap-5">
+        {/* 3 Dashboard Summary Cards */}
+        <div className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-3">
           <DashboardCard
             title="ออเดอร์รอการดำเนินการ"
             value={num}
             subtitle="กำลังเตรียม / รอพิมพ์"
+            icon={Clock}
+            active={activeView === "orders"}
+            onClick={() => setActiveView(activeView === "orders" ? null : "orders")}
           />
 
           <DashboardCard
             title="รายได้วันนี้"
             value={income}
-            subtitle="0 คำสั่งพิมพ์"
+            subtitle={`${todayOrdersCount} คำสั่งพิมพ์วันนี้`}
+            icon={DollarSign}
+            active={activeView === "financial"}
+            onClick={() => setActiveView(activeView === "financial" ? null : "financial")}
           />
 
           <DashboardCard
             title="คะแนนรีวิวเฉลี่ย"
             value={score}
-            subtitle="0 รีวิว"
+            subtitle={`${totalReviewsCount} รีวิวทั้งหมด`}
+            icon={Star}
+            active={activeView === "reviews"}
+            onClick={() => setActiveView(activeView === "reviews" ? null : "reviews")}
           />
         </div>
 
-        <h2 className="mb-8 text-lg font-bold text-[#0F2942]">
+        {/* Dynamic Detail Section เมื่อกดคลิกแต่ละ Card */}
+        {activeView === "orders" && (
+          <div className="mb-10">
+            <OrderBreakdownModal
+              counts={breakdownData.counts}
+              total={breakdownData.total}
+              orders={breakdownData.orders}
+              onOrderClick={handleOrderClick}
+            />
+          </div>
+        )}
+
+        {activeView === "financial" && (
+          <div className="mb-10">
+            <FinancialTable
+              totalGross={financialData.totalGross}
+              totalFee={financialData.totalFee}
+              totalNet={financialData.totalNet}
+              transactions={financialData.transactions}
+              onOrderClick={handleOrderClick}
+            />
+          </div>
+        )}
+
+        {activeView === "reviews" && (
+          <div className="mb-10">
+            <ReviewComplaintModal
+              reviews={reviewData.reviews}
+              complaints={reviewData.complaints}
+            />
+          </div>
+        )}
+
+        {/* รายการคำสั่งพิมพ์ล่าสุด */}
+        <h2 className="mb-6 text-lg font-bold text-[#0F2942]">
           รายการคำสั่งพิมพ์ล่าสุด
         </h2>
 
@@ -163,6 +276,7 @@ export default function ShopPage() {
                   key={item.id}
                   order={item}
                   onClick={() => handleOrderClick(item.id)}
+                  onUpdateStatus={handleStatusUpdated}
                 />
               ))
             ) : (

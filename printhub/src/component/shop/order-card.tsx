@@ -1,6 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import { Check, X, Printer, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 
 type Order = {
@@ -10,16 +12,15 @@ type Order = {
   description: string | null;
   order_date: string;
   total_price: number;
+  latest_status?: string;
   customer?: {
     first_name: string;
     last_name: string;
   };
-  work_status?: {
-    updated_at: string;
-    status: {
-      state: string;
-    };
-  }[];
+  current_status?: {
+    id: string;
+    state: string;
+  };
 };
 
 type Props = {
@@ -31,23 +32,22 @@ type Props = {
 const API_BASE = "http://localhost:5000";
 
 export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
-  const sortedStatus = order.work_status
-    ? [...order.work_status].sort(
-        (a, b) =>
-          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      )
-    : [];
+  // อ่านค่าสถานะล่าสุดจาก latest_status หรือ current_status.state
+  const initialStatus =
+    order.latest_status || order.current_status?.state || "รอการดำเนินการ";
 
-  const [currentState, setCurrentState] = useState(
-    sortedStatus[0]?.status?.state
-  );
-  const [updating, setUpdating] = useState(false);
+  const [currentState, setCurrentState] = useState<string>(initialStatus);
+  const [updating, setUpdating] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentState(
+      order.latest_status || order.current_status?.state || "รอการดำเนินการ"
+    );
+  }, [order]);
 
   async function updateState(newStatus: string) {
     if (updating) return;
-
-    console.log("[OrderCard] button clicked ->", newStatus, "order:", order.id);
 
     setUpdating(true);
     setErrorMsg(null);
@@ -55,13 +55,12 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
     const url = `${API_BASE}/shop/orders/${order.id}/status`;
 
     try {
-      const res = await axios.patch(
+      await axios.patch(
         url,
         { status_name: newStatus },
         { params: { shop_id: order.shop_id } }
       );
 
-      console.log("[OrderCard] success:", res.status, res.data);
       setCurrentState(newStatus);
       onUpdateStatus?.(order.id, newStatus);
     } catch (err) {
@@ -69,19 +68,13 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
 
       if (axios.isAxiosError(err)) {
         if (err.response) {
-          console.error("[OrderCard] server responded:", err.response.status, err.response.data);
           setErrorMsg(
-            `เซิร์ฟเวอร์ตอบกลับ ${err.response.status}: ${
-              err.response.data?.error || "ไม่ทราบสาเหตุ"
+            `เกิดข้อผิดพลาด (${err.response.status}): ${
+              err.response.data?.error || "ไม่สามารถเปลี่ยนสถานะได้"
             }`
           );
-        } else if (err.request) {
-          console.error("[OrderCard] no response received — request was:", err.request);
-          setErrorMsg(
-            `ติดต่อ ${url} ไม่ได้เลย (เช็คว่า backend รันอยู่พอร์ต 5000, และไม่ได้ถูก CORS บล็อก — ดู tab Console/Network เพิ่มเติม)`
-          );
         } else {
-          setErrorMsg(`ตั้ง request ไม่สำเร็จ: ${err.message}`);
+          setErrorMsg("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้");
         }
       } else {
         setErrorMsg("เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
@@ -156,7 +149,7 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
       <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center gap-2">
         <span
           className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap shrink-0 ${
-            currentState === "รอการดำเนินงาน"
+            currentState === "รอการดำเนินการ"
               ? "bg-amber-50 text-amber-600 border border-amber-200"
               : currentState === "กำลังพิมพ์"
               ? "bg-blue-50 text-blue-600 border border-blue-200"
@@ -170,7 +163,7 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
           {currentState || "ไม่ทราบสถานะ"}
         </span>
 
-        {currentState === "รอการดำเนินงาน" && (
+        {currentState === "รอการดำเนินการ" && (
           <div
             className="flex gap-2 shrink-0"
             onClick={(e) => e.stopPropagation()}

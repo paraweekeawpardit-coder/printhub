@@ -1,239 +1,134 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
-interface Customer {
-  id: string;
-  first_name: string;
-  last_name: string;
-  avatar: string | null;
-}
+// ==========================================
+// Types
+// ==========================================
+// NOTE: 1 order (print_order) can now hold MULTIPLE items
+// (print_order_item rows), since these are created from a cart
+// that can have several items in it at once. Each item below is
+// what the frontend calls a "sub-order".
 
-interface ServiceType {
+export interface OrderItemDetail {
   id: string;
-  type: string;
-}
-
-interface ServiceDetail {
-  id: string;
-  detail: string;
-  price: number;
-  service_type_id: string;
-}
-
-interface OrderItem {
-  order_id: string;
+  category: string;
+  describe: string;
+  file_url: string | null;
   quantity: number;
   unit_price: number;
-  service_detail_id: string;
+  subtotal: number;
+  page_count: number | null;
 }
 
-interface PrintFile {
+export interface ResultOrder {
   order_id: string;
-  filename: string;
-  file_url: string;
-}
-
-interface Payment {
-  order_id: string;
-  amount: number;
-}
-
-interface WorkStatus {
-  order_id: string;
-  status_id: string;
-  updated_at: string;
-}
-
-interface Status {
-  id: string;
-  state: "พิมพ์เสร็จสิ้น" | "รอการดำเนินการ" | "ยกเลิกการพิมพ์" | "กำลังพิมพ์";
-}
-
-interface Order {
-  id: string;
-  shop_id: string;
-  customer_id: string;
-  order_date: string;
-  total_price: number;
-  description: string | null;
-}
-
-interface ResultOrder {
-  order_id: string;
+  order_no: number;
   date: string;
   customer_name: string;
-  customer_avatar: string;
-  qty: number;
-  type: string;
-  detail: string;
-  file_name: string;
-  file_url: string;
   status: string;
-  price: number;
   amount: number;
+  items: OrderItemDetail[];
 }
+
+// ==========================================
+// Get Orders By Status (for a shop)
+// ==========================================
 
 export const getOrdersByStatus = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
-    const shop_id = (req.headers.shop_id || req.headers["shop_id"]) as string;
-    const status = req.query.status as string;
+    const shop_id = (req.headers.shop_id || req.query.shop_id) as string;
+    const status = (req.query.status as string) || "ทั้งหมด";
 
-    if (!shop_id || !status) {
+    if (!shop_id) {
       return res.status(400).json({
-        error: "shop_id and status are required",
+        error: "shop_id is required",
       });
     }
 
-    const { data: orders, error: orderError } = await supabase
+    const { data: orders, error } = await supabase
       .from("print_order")
-      .select("*")
-      .eq("shop_id", shop_id);
+      .select(
+        `
+        id,
+        order_no,
+        order_date,
+        total_amount,
 
-    if (orderError) {
+        customer:customer_id (
+          first_name,
+          last_name
+        ),
+
+        current_status:current_status_id (
+          state
+        ),
+
+        print_order_item (
+          id,
+          category,
+          describe,
+          file_url,
+          quantity,
+          unit_price,
+          subtotal,
+          page_count
+        )
+        `
+      )
+      .eq("shop_id", shop_id)
+      .order("order_date", { ascending: false });
+
+    if (error) {
+      console.error("Get orders error:", error);
       return res.status(400).json({
-        error: orderError.message,
+        error: error.message,
       });
     }
 
-    if (!orders || orders.length === 0) {
-      return res.status(200).json({
-        count: 0,
-        orders: [],
-      });
-    }
+    const result: ResultOrder[] = (orders || [])
+      .map((order: any) => {
+        const customer = Array.isArray(order.customer)
+          ? order.customer[0]
+          : order.customer;
 
-    const orderIds = orders.map((o) => o.id);
+        const currentStatus = Array.isArray(order.current_status)
+          ? order.current_status[0]
+          : order.current_status;
 
-    const [
-      { data: customers },
-      { data: orderItems },
-      { data: serviceDetails },
-      { data: serviceTypes },
-      { data: files },
-      { data: payments },
-      { data: workStatuses },
-      { data: statuses },
-    ] = await Promise.all([
-      supabase
-        .from("customer")
-        .select("id, first_name, last_name, avatar"),
+        const statusState = currentStatus?.state || "รอการดำเนินงาน";
 
-      supabase
-        .from("order_item")
-        .select("order_id, quantity, unit_price, service_detail_id")
-        .in("order_id", orderIds),
-
-      supabase
-        .from("service_detail")
-        .select("id, detail, price, service_type_id"),
-
-      supabase
-        .from("service_type")
-        .select("id, type"),
-
-      supabase
-        .from("print_file")
-        .select("order_id, filename, file_url")
-        .in("order_id", orderIds),
-
-      supabase
-        .from("payment")
-        .select("order_id, amount")
-        .in("order_id", orderIds),
-
-      supabase
-        .from("work_status")
-        .select("order_id, status_id, updated_at")
-        .in("order_id", orderIds),
-
-      supabase
-        .from("status")
-        .select("id, state"),
-    ]);
-
-    const statusMap = new Map(
-      ((statuses || []) as Status[]).map((s) => [s.id, s.state])
-    );
-
-    const customerMap = new Map(
-      ((customers || []) as Customer[]).map((c) => [c.id, c])
-    );
-
-    const serviceDetailMap = new Map(
-      ((serviceDetails || []) as ServiceDetail[]).map((sd) => [sd.id, sd])
-    );
-
-    const serviceTypeMap = new Map(
-      ((serviceTypes || []) as ServiceType[]).map((st) => [st.id, st.type])
-    );
-
-    const orderItemMap = new Map(
-      ((orderItems || []) as OrderItem[]).map((item) => [item.order_id, item])
-    );
-
-    const fileMap = new Map(
-      ((files || []) as PrintFile[]).map((f) => [f.order_id, f])
-    );
-
-    const paymentMap = new Map(
-      ((payments || []) as Payment[]).map((p) => [p.order_id, p])
-    );
-
-    const workStatusMap = new Map<string, WorkStatus[]>();
-
-    ((workStatuses || []) as WorkStatus[]).forEach((ws) => {
-      if (!workStatusMap.has(ws.order_id)) {
-        workStatusMap.set(ws.order_id, []);
-      }
-      workStatusMap.get(ws.order_id)!.push(ws);
-    });
-
-    const result: ResultOrder[] = (orders as Order[])
-      .map((order) => {
-        const orderStates = workStatusMap.get(order.id) || [];
-
-        orderStates.sort(
-          (a, b) =>
-            new Date(b.updated_at).getTime() -
-            new Date(a.updated_at).getTime()
+        // ==========================================
+        // Sub-orders (cart items -> print_order_item)
+        // ==========================================
+        const items: OrderItemDetail[] = (order.print_order_item || []).map(
+          (item: any) => ({
+            id: item.id,
+            category: item.category || "รายการพิมพ์",
+            describe: item.describe || "",
+            file_url: item.file_url || null,
+            quantity: item.quantity,
+            unit_price: Number(item.unit_price || 0),
+            subtotal: Number(item.subtotal || 0),
+            page_count: item.page_count ?? null,
+          })
         );
-
-        const latestStatusId = orderStates[0]?.status_id;
-        const currentStateText = statusMap.get(latestStatusId) || "";
-
-        const customer = customerMap.get(order.customer_id);
-        const orderItem = orderItemMap.get(order.id);
-        const detail = orderItem ? serviceDetailMap.get(orderItem.service_detail_id) : null;
-        const serviceTypeName = detail ? serviceTypeMap.get(detail.service_type_id) : "";
-        const file = fileMap.get(order.id);
-        const payment = paymentMap.get(order.id);
 
         return {
           order_id: order.id,
+          order_no: order.order_no,
           date: order.order_date,
           customer_name: `${customer?.first_name ?? ""} ${
             customer?.last_name ?? ""
           }`.trim(),
-          customer_avatar: customer?.avatar ?? "",
-          qty: orderItem?.quantity ?? 0,
-          type: serviceTypeName ?? "",
-          detail: detail?.detail ?? order.description ?? "",
-          file_name: file?.filename ?? "",
-          file_url: file?.file_url ?? "",
-          status: currentStateText,
-          price: orderItem?.unit_price ?? detail?.price ?? 0,
-          amount: payment?.amount ?? order.total_price ?? 0,
+          status: statusState,
+          amount: Number(order.total_amount || 0),
+          items,
         };
       })
-      .filter((item) => {
-        if (status === "ทั้งหมด") {
-          return true;
-        }
-        return item.status === status;
-      });
+      .filter((order) => status === "ทั้งหมด" || order.status === status);
 
     return res.status(200).json({
       count: result.length,

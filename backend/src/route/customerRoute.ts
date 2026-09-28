@@ -1,53 +1,56 @@
-// import express from "express";
-// import {
-//   getShops,
-//   getShopServices,
-//   getAllServiceTypes,
-//   getCustomerOrders,
-//   createOrder,
-// } from "../controller/customerController.js";
+import express from 'express';
+import { 
+  getShops, 
+  getAllServiceTypes, 
+  getShopServices 
+} from '../controller/shopController.js';
 
-// const router = express.Router();
+import { 
+  getCart, 
+  addToCart, 
+  clearCart 
+} from '../controller/cartController.js';
 
-// // 1. Route ดึงข้อมูลร้านค้าและบริการ
-// router.get("/shops", getShops);
-// router.get("/shops/:shopId/services", getShopServices);
-// router.get("/service-types", getAllServiceTypes);
+import { 
+  createOrder, 
+  getCustomerOrders, 
+  updateWorkStatus 
+} from '../controller/orderController.js';
 
-// // 2. Route สร้างคำสั่งซื้อใหม่ (POST)
-// router.post("/orders", createOrder);
-
-// // 3. Route ดึงประวัติคำสั่งซื้อของลูกค้าตามเวลาล่าสุด (GET)
-// router.get("/orders", getCustomerOrders);
-
-// export default router;
-
-
-import express from "express";
-import {
-  getShops,
-  getShopServices,
-  getAllServiceTypes,
-  getCustomerOrders,
-  createOrder,
-  updateWorkStatus, //นำเข้าฟังก์ชันนี้
-  getReviewOrderDetail,
-  submitOrderReview,
-  submitOrderReport,
-} from "../controller/customerController.js";
+import { 
+  getReviewOrderDetail, 
+  submitOrderReview, 
+  submitOrderReport 
+} from '../controller/reviewController.js';
 
 const router = express.Router();
 
-router.post("/orders", createOrder); // สั่งพิมพ์[cite: 1]
-router.get("/orders", getCustomerOrders); // ดึงประวัติคำสั่งซื้อ
-router.patch("/orders/:orderId/status", updateWorkStatus); //เพิ่ม Route อัปเดตสถานะงานพิมพ์
+// ==========================================
+// 1. ค้นหาและสรุปข้อมูลร้านค้า (FR-1)
+// ==========================================
+router.get('/shops', getShops);
+router.get('/service-types', getAllServiceTypes);
+router.get('/shops/:shopId/services', getShopServices);
 
-router.get("/shops", getShops); // หน้ารายการร้าน[cite: 1]
-router.get("/shops/:shopId/services", getShopServices); // หน้ารายละเอียดบริการ[cite: 1]
-router.get("/service-types", getAllServiceTypes); // รายการประเภทงานพิมพ์[cite: 1]
+// ==========================================
+// 2. ตะกร้าสินค้า (Cart)
+// ==========================================
+router.get('/cart', getCart);
+router.post('/cart', addToCart);
+router.delete('/cart', clearCart);
 
-router.get("/orders/:orderId/review-detail", getReviewOrderDetail);
-router.post("/reviews", submitOrderReview);
-router.post("/reports", submitOrderReport);
+// ==========================================
+// 3. คำสั่งซื้อและสถานะ (Order)
+// ==========================================
+router.post('/order', createOrder);
+router.get('/orders', getCustomerOrders);
+router.patch('/order/:orderId/status', updateWorkStatus);
+
+// ==========================================
+// 4. รีวิวและรายงานปัญหา (Review & Report)
+// ==========================================
+router.get('/order/:orderId/review', getReviewOrderDetail);
+router.post('/review', submitOrderReview);
+router.post('/report', submitOrderReport);
 
 export default router;
