@@ -3,6 +3,7 @@ import { getPlatformStats } from "../controller/Admin/dashboardController.js";
 import { getPendingShops, verifyShop } from "../controller/Admin/shopController.js";
 import { getAllReports, verifyReport } from "../controller/Admin/reportController.js";
 import { getAllTransactions } from "../controller/Admin/transactionController.js";
+import { adminLogin } from "../controller/Auth/admin.js";
 import {
   getAdminProfile,
   updateAdminProfile,
@@ -12,6 +13,8 @@ import {
 } from "../controller/Admin/profileController.js";
 
 const router = Router();
+
+router.post("/login", adminLogin);
 
 // Dashboard
 router.get("/dashboard-stats", getPlatformStats);

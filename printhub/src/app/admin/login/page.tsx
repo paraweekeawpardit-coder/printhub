@@ -14,7 +14,7 @@ export default function AdminLoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await axios.post("http://localhost:5000/admin/login", {
+      const res = await axios.post("http://localhost:5000/api/admin/login", {
         username,
         password,
       });
@@ -30,9 +30,14 @@ export default function AdminLoginPage() {
 
   return (
     <div className="flex min-h-[calc(100vh-80px)] items-center justify-center bg-gray-50 px-4">
-      <form onSubmit={handleLogin} className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg border border-gray-100">
-        <h1 className="text-2xl font-bold mb-6 text-center text-slate-800">Admin System Access</h1>
-        
+      <form
+        onSubmit={handleLogin}
+        className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg border border-gray-100"
+      >
+        <h1 className="text-2xl font-bold mb-6 text-center text-slate-800">
+          Admin System Access
+        </h1>
+
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm font-medium text-center border border-red-200">
             {error}
@@ -40,7 +45,9 @@ export default function AdminLoginPage() {
         )}
 
         <div className="mb-4">
-          <label className="block mb-2 text-sm font-medium text-gray-700">Username / Email</label>
+          <label className="block mb-2 text-sm font-medium text-gray-700">
+            Username / Email
+          </label>
           <input
             type="text"
             className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-black outline-none transition"
@@ -52,7 +59,9 @@ export default function AdminLoginPage() {
         </div>
 
         <div className="mb-6">
-          <label className="block mb-2 text-sm font-medium text-gray-700">Password</label>
+          <label className="block mb-2 text-sm font-medium text-gray-700">
+            Password
+          </label>
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
@@ -72,7 +81,10 @@ export default function AdminLoginPage() {
           </div>
         </div>
 
-        <button type="submit" className="w-full bg-slate-900 hover:bg-black text-white py-3 rounded-lg font-semibold transition shadow-md">
+        <button
+          type="submit"
+          className="w-full bg-slate-900 hover:bg-black text-white py-3 rounded-lg font-semibold transition shadow-md"
+        >
           เข้าสู่ระบบ Admin
         </button>
       </form>
