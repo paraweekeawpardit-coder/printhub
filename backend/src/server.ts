@@ -49,6 +49,9 @@ app.use("/auth", authRoutes);
 app.use("/api/customer", customerRoute);
 app.use("/customer", customerRoute); // เพิ่มไว้เพื่อรองรับ backward compatibility
 
+// 5. เส้น Route แอดมิน
+app.use("/api/admin", adminRoutes);
+
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
