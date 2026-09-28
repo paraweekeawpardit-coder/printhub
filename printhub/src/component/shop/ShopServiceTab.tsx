@@ -4,14 +4,14 @@ import { useState } from "react";
 import { Plus, Trash2, Lock, Tag, Edit2, Check, X, Printer } from "lucide-react";
 
 export type ServiceDetailRow = {
-  id?: number | string;
+  id?: string;
   detail: string;
   group_type: string;
   price: string;
 };
 
 export type ServiceTypeGroup = {
-  id?: number | string;
+  id?: string;
   type: string;
   items: ServiceDetailRow[];
 };
@@ -30,22 +30,56 @@ type GroupedRows = {
 };
 
 // ==========================================
-// เทมเพลตประเภทบริการที่เว็บมีให้เลือก
+// เทมเพลตประเภทบริการ + รายการตัวเลือกเริ่มต้น
 // ==========================================
-// รายการนี้เป็นแค่ตัวช่วยกรอกข้อมูลให้ร้านค้าเลือกจาก dropdown
-// (ยังไม่มีตารางในฐานข้อมูลรองรับ "เทมเพลต" จริงๆ) ถ้าไม่มีตัวไหนตรง
-// ร้านค้าเลือก "อื่นๆ (กำหนดเอง)" แล้วพิมพ์เองได้เหมือนเดิม
-const SERVICE_TYPE_TEMPLATES = [
-  "พิมพ์เอกสาร / รายงาน",
-  "งานเข้าเล่ม",
-  "พิมพ์โปสเตอร์",
-  "นามบัตร",
-  "สติกเกอร์",
-  "พิมพ์ภาพถ่าย",
-  "ป้ายไวนิล",
-  "งานเสื้อ / ของพรีเมียม",
-];
+const SERVICE_TEMPLATES: Record<string, { group_type: string; detail: string; price: string }[]> = {
+  "พิมพ์เอกสาร / รายงาน": [
+    { group_type: "ขนาดกระดาษ", detail: "A4 ขาวดำ (หน้าเดียว)", price: "1.5" },
+    { group_type: "ขนาดกระดาษ", detail: "A4 ขาวดำ (หน้า-หลัง)", price: "2" },
+    { group_type: "ขนาดกระดาษ", detail: "A4 สี (หน้าเดียว)", price: "5" },
+    { group_type: "ชนิดกระดาษ", detail: "กระดาษปอนด์ 80 แกรม", price: "0" },
+    { group_type: "ชนิดกระดาษ", detail: "กระดาษถนอมสายตา 75 แกรม", price: "1" },
+  ],
+  "งานเข้าเล่ม": [
+    { group_type: "รูปแบบการเข้าเล่ม", detail: "เข้าเล่มกระดูกงู / ห่วงพลาสติก", price: "30" },
+    { group_type: "รูปแบบการเข้าเล่ม", detail: "เข้าเล่มสันเกลียว", price: "40" },
+    { group_type: "รูปแบบการเข้าเล่ม", detail: "เข้าเล่มกาวร้อน / สันกาว", price: "50" },
+    { group_type: "ปกรายงาน", detail: "ปกใส + กระดาษแข็ง", price: "10" },
+  ],
+  "พิมพ์โปสเตอร์": [
+    { group_type: "ขนาดโปสเตอร์", detail: "A3 (Art Paper 160g)", price: "40" },
+    { group_type: "ขนาดโปสเตอร์", detail: "A2 (Photo Paper)", price: "150" },
+    { group_type: "ขนาดโปสเตอร์", detail: "A1 (Photo Paper)", price: "250" },
+    { group_type: "การเคลือบ", detail: "เคลือบเงา / เคลือบด้าน", price: "20" },
+  ],
+  "นามบัตร": [
+    { group_type: "จำนวนและวัสดุ", detail: "กระดาษอาร์ตการ์ด 300g (100 ใบ)", price: "150" },
+    { group_type: "จำนวนและวัสดุ", detail: "กระดาษอาร์ตการ์ด เคลือบด้าน (100 ใบ)", price: "200" },
+    { group_type: "ตัวเลือกเสริม", detail: "ตัดมุมมน", price: "30" },
+  ],
+  "สติกเกอร์": [
+    { group_type: "ชนิดสติกเกอร์", detail: "สติกเกอร์กระดาษ (A4)", price: "35" },
+    { group_type: "ชนิดสติกเกอร์", detail: "สติกเกอร์ PP กันน้ำ (A4)", price: "50" },
+    { group_type: "ชนิดสติกเกอร์", detail: "สติกเกอร์ใส (A4)", price: "55" },
+    { group_type: "งานไดคัท", detail: "ไดคัทพร้อมลอกแปะ", price: "15" },
+  ],
+  "พิมพ์ภาพถ่าย": [
+    { group_type: "ขนาดรูปภาพ", detail: "4x6 นิ้ว (4R)", price: "5" },
+    { group_type: "ขนาดรูปภาพ", detail: "5x7 นิ้ว (5R)", price: "15" },
+    { group_type: "ขนาดรูปภาพ", detail: "8x10 นิ้ว (8R)", price: "40" },
+  ],
+  "ป้ายไวนิล": [
+    { group_type: "ความหนาไวนิล", detail: "ไวนิลหนา 360gsm (ตร.ม.)", price: "120" },
+    { group_type: "ความหนาไวนิล", detail: "ไวนิลหนา 440gsm (ตร.ม.)", price: "150" },
+    { group_type: "การพับขอบ", detail: "พับขอบ เจาะรูตาไก่", price: "0" },
+  ],
+  "งานเสื้อ / ของพรีเมียม": [
+    { group_type: "สกรีนเสื้อ", detail: "สกรีน DTF ขนาด A4 (หน้าเดียว)", price: "120" },
+    { group_type: "สกรีนเสื้อ", detail: "สกรีน DTF ขนาด A3 (หน้าเดียว)", price: "180" },
+  ],
+};
 
+const SERVICE_TYPE_TEMPLATES = Object.keys(SERVICE_TEMPLATES);
 const OTHER_OPTION = "__other__";
 
 const groupItems = (items: ServiceDetailRow[]): GroupedRows[] => {
@@ -70,6 +104,9 @@ export default function ShopServicesTab({
   saving,
 }: Props) {
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  
+  // 🔹 State สำหรับเก็บดรรชนีของบริการที่เลือกโหมด "อื่นๆ (กำหนดเอง)"
+  const [customTypeIndexes, setCustomTypeIndexes] = useState<Record<number, boolean>>({});
 
   const addServiceType = () => {
     setServices((prev) => [
@@ -80,10 +117,50 @@ export default function ShopServicesTab({
 
   const removeServiceType = (index: number) => {
     setServices((prev) => prev.filter((_, i) => i !== index));
+    setCustomTypeIndexes((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
   };
 
-  const updateServiceType = (index: number, type: string) => {
-    setServices((prev) => prev.map((g, i) => (i === index ? { ...g, type } : g)));
+  // 🔹 อัปเดตการเลือกประเภทบริการ
+  const updateServiceType = (index: number, selectedValue: string) => {
+    if (selectedValue === OTHER_OPTION) {
+      // เมื่อเลือก "อื่นๆ" ให้เปิดโหมด Custom
+      setCustomTypeIndexes((prev) => ({ ...prev, [index]: true }));
+      setServices((prev) =>
+        prev.map((g, i) =>
+          i === index
+            ? {
+                ...g,
+                type: "",
+                items:
+                  g.items.length > 0
+                    ? g.items
+                    : [{ detail: "", group_type: "", price: "" }],
+              }
+            : g
+        )
+      );
+    } else if (SERVICE_TEMPLATES[selectedValue]) {
+      // เมื่อเลือก Preset Template ให้ดึงข้อมูล Template มาใส่
+      setCustomTypeIndexes((prev) => ({ ...prev, [index]: false }));
+      const templateItems = SERVICE_TEMPLATES[selectedValue].map((item) => ({
+        detail: item.detail,
+        group_type: item.group_type,
+        price: item.price,
+      }));
+      setServices((prev) =>
+        prev.map((g, i) =>
+          i === index ? { ...g, type: selectedValue, items: templateItems } : g
+        )
+      );
+    } else {
+      setServices((prev) =>
+        prev.map((g, i) => (i === index ? { ...g, type: selectedValue } : g))
+      );
+    }
   };
 
   const renameGroup = (groupIndex: number, oldName: string, newName: string) => {
@@ -251,8 +328,8 @@ export default function ShopServicesTab({
             {services.map((group, gIdx) => {
               const groupedRows = groupItems(group.items);
               const isPreset = SERVICE_TYPE_TEMPLATES.includes(group.type);
-              const selectValue =
-                group.type === "" ? "" : isPreset ? group.type : OTHER_OPTION;
+              const isCustomMode = customTypeIndexes[gIdx] || (!isPreset && group.type !== "");
+              const selectValue = isCustomMode ? OTHER_OPTION : group.type;
 
               return (
                 <div
@@ -263,13 +340,7 @@ export default function ShopServicesTab({
                     <div className="flex flex-1 items-center gap-2">
                       <select
                         value={selectValue}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          updateServiceType(
-                            gIdx,
-                            value === OTHER_OPTION ? "" : value
-                          );
-                        }}
+                        onChange={(e) => updateServiceType(gIdx, e.target.value)}
                         className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-[#2F6FED]"
                       >
                         <option value="" disabled>
@@ -283,13 +354,18 @@ export default function ShopServicesTab({
                         <option value={OTHER_OPTION}>อื่นๆ (กำหนดเอง)</option>
                       </select>
 
-                      {selectValue === OTHER_OPTION && (
+                      {/* 🔹 แสดง Input เมื่อเลือกโหมด อื่นๆ (กำหนดเอง) */}
+                      {isCustomMode && (
                         <input
                           value={group.type}
-                          onChange={(e) => updateServiceType(gIdx, e.target.value)}
-                          placeholder="ระบุประเภทบริการเอง"
+                          onChange={(e) =>
+                            setServices((prev) =>
+                              prev.map((g, i) => (i === gIdx ? { ...g, type: e.target.value } : g))
+                            )
+                          }
+                          placeholder="พิมพ์ระบุประเภทบริการเอง..."
                           autoFocus
-                          className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 placeholder:text-slate-300 outline-none focus:border-[#2F6FED]"
+                          className="flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#2F6FED]"
                         />
                       )}
                     </div>
