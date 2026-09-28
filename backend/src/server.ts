@@ -9,6 +9,7 @@ import ShopRoute from "./route/Shop.js";
 import supabase from "./config/supabase.js";
 
 import customerRoute from "./route/customerRoute.js";
+import notificationRoute from "./route/notificationRoute.js"; // 🟢 1. Import Notification Route
 import mongoose, { Schema } from "mongoose";
 import connectDB from "./config/mongo.js";
 
@@ -48,6 +49,7 @@ app.get("/", (req: Request, res: Response) => {
 app.use("/auth", Authroute);
 app.use("/shop", ShopRoute);
 app.use("/api/customer", customerRoute);
+app.use("/api", notificationRoute); // 🟢 2. แมป Notification Route (/api/notifications/...)
 
 // ==========================================
 // 4. Socket.io & MongoDB Real-time Chat
@@ -179,7 +181,7 @@ app.delete("/api/messages/:orderId", async (req: Request, res: Response) => {
   }
 });
 
-// 🟢 REST API: ดึงสถานะออเดอร์จาก Supabase (ดึงสถานะล่าสุดจริงตาม updated_at)
+// REST API: ดึงสถานะออเดอร์จาก Supabase (ดึงสถานะล่าสุดจริงตาม updated_at)
 app.get("/api/orders/:orderId/status", async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
@@ -199,7 +201,7 @@ app.get("/api/orders/:orderId/status", async (req: Request, res: Response) => {
         )
       `)
       .eq("order_id", orderId)
-      .order("updated_at", { ascending: false }) // 👈 เรียงตามเวลาอัปเดตล่าสุด
+      .order("updated_at", { ascending: false })
       .limit(1);
 
     if (error) {
