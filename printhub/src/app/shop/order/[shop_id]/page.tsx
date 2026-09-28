@@ -17,33 +17,50 @@ const API_BASE = "http://localhost:5000";
 export default function OrderPage() {
   const router = useRouter();
   const params = useParams();
-  const shop_id = Array.isArray(params?.shop_id)
+
+  // 1. ดึง shop_id จาก URL params
+  const paramShopId = Array.isArray(params?.shop_id)
     ? params.shop_id[0]
     : (params?.shop_id as string);
 
-  console.log("get ordertab from shop", shop_id);
-
+  // ประกาศ state สำหรับเก็บ shopId
+  const [shopId, setShopId] = useState<string>(paramShopId || "");
   const [activeFilter, setActiveFilter] =
     useState<OrderStatusFilter>("ทั้งหมด");
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
+  // อัปเดต shopId จาก params หรือ localStorage
+  useEffect(() => {
+    if (paramShopId) {
+      setShopId(paramShopId);
+    } else if (typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") || localStorage.getItem("id");
+      if (storedShopId) setShopId(storedShopId);
+    }
+  }, [paramShopId]);
+
+  console.log("get ordertab from shop", shopId);
+
+  // 2. ฟังก์ชันดึงรายการออเดอร์ตามสถานะ
   const getOrder = useCallback(async () => {
-    if (!shop_id) return;
+    if (!shopId) return;
 
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE}/shop/getOrderByStatus`, {
-        headers: { shop_id },
+        headers: { shop_id: shopId },
         params: { status: activeFilter },
       });
       setOrders(response.data.orders ?? []);
     } catch (error) {
       console.error("Get order error:", error);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
-  }, [shop_id, activeFilter]);
+  }, [shopId, activeFilter]);
 
   useEffect(() => {
     getOrder();
@@ -51,18 +68,19 @@ export default function OrderPage() {
 
   const handleUpdateStatus = useCallback(
     async (orderId: string, newStatus: string) => {
+      if (!shopId) return;
       try {
         await axios.patch(
           `${API_BASE}/shop/orders/${orderId}/status`,
           { status_name: newStatus },
-          { params: { shop_id } }
+          { params: { shop_id: shopId } }
         );
         await getOrder();
       } catch (error) {
         console.error("Update order status error:", error);
       }
     },
-    [shop_id, getOrder]
+    [shopId, getOrder]
   );
 
   return (

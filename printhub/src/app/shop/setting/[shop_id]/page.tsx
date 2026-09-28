@@ -187,8 +187,14 @@ export default function ShopSettingsPage() {
         setHasProfileData(Boolean(shop.shop_name));
       }
 
-      // Verification Status
-      setIsVerified(Boolean(verifyStatus?.is_verify));
+      // Verification Status (เช็คค่าทั้งกรณี boolean และ string/number)
+      const verified = Boolean(
+        verifyStatus?.is_verify ??
+          verifyStatus?.is_verified ??
+          shop?.is_verified ??
+          shop?.is_verify
+      );
+      setIsVerified(verified);
 
       // Services Data
       if (shopServices) {

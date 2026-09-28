@@ -1,51 +1,54 @@
-import express, { Request, Response } from "express";
+import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import morgan from "morgan";
-import Authroute from "./route/Auth.js";
-import ShopRoute from "./route/Shop.js";
-import supabase from "./config/supabase.js";
-
+import path from "path";
+import shopRoutes from "./route/Shop.js";
+import adminRoutes from "./route/Admin.js";
+import authRoutes from "./route/Auth.js";
 import customerRoute from "./route/customerRoute.js";
 
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
+// ตั้งค่า CORS ให้รองรับ Custom Headers (shop_id, shop-id)
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "http://192.168.1.59:3000"
-    ],
+    origin: ["http://localhost:3000", "http://localhost:5173"],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
       "Authorization",
       "shop_id",
-      "order_id",
-      "customer_id"
+      "shop-id",
+      "admin_token",
     ],
-    credentials: true
+    credentials: true,
   })
 );
 
 app.use(express.json());
-app.use(morgan("dev"));
 
-app.get("/", (req: Request, res: Response) => {
-  res.send("Backend is running!");
-});
+// 🌟 เปิดให้ภายนอกเข้าถึงไฟล์ในโฟลเดอร์ uploads เพื่อแสดงรูปภาพ
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-// Routes
-app.use("/auth", Authroute);
-app.use("/shop", ShopRoute);
+// 1. เส้น Route สำหรับฝั่งร้านค้า (Shop)
+app.use("/api/shop", shopRoutes);
+app.use("/shop", shopRoutes); // เพิ่มไว้เพื่อรองรับ backward compatibility
 
-// Map Route Customer
+// 2. เส้น Route สำหรับฝั่งผู้ดูแลระบบ (Admin)
+app.use("/api/admin", adminRoutes);
+app.use("/admin", adminRoutes); // เพิ่มไว้เพื่อรองรับ backward compatibility
+
+// 3. เส้น Route สำหรับระบบยืนยันตัวตน (Auth)
+app.use("/api/auth", authRoutes);
+app.use("/auth", authRoutes);
+
+// 4. เส้น Route สำหรับฝั่งลูกค้า (Customer)
 app.use("/api/customer", customerRoute);
-
-const PORT = process.env.PORT || 5000;
+app.use("/customer", customerRoute); // เพิ่มไว้เพื่อรองรับ backward compatibility
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server is running on http://localhost:${PORT}`);
 });

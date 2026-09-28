@@ -1,27 +1,37 @@
-import express from "express";
+import { Router } from "express";
+import { getPlatformStats } from "../controller/Admin/dashboardController.js";
+import { getPendingShops, verifyShop } from "../controller/Admin/shopController.js";
+import { getAllReports, verifyReport } from "../controller/Admin/reportController.js";
+import { getAllTransactions } from "../controller/Admin/transactionController.js";
 import {
-  getPlatformStats,
-  getPendingShops,
-  verifyShop,
-  getAllReports,
-  getAllTransactions,
-} from "../controller/Admin/dashboard.js"; // ปรับ path ให้ตรงกับที่เก็บไฟล์ controller ของคุณ[cite: 1]
+  getAdminProfile,
+  updateAdminProfile,
+  updateSettings,
+  getNotifications,
+  adminLogout
+} from "../controller/Admin/profileController.js";
 
-const router = express.Router();
+const router = Router();
 
-// 1. ดึงข้อมูลสถิติภาพรวมสำหรับ Admin Dashboard[cite: 1]
+// Dashboard
 router.get("/dashboard-stats", getPlatformStats);
 
-// 2. ดึงรายการร้านค้าที่รอการอนุมัติ (status = 'pending')[cite: 1]
+// Shops
 router.get("/shops/pending", getPendingShops);
-
-// 3. อนุมัติหรือปฏิเสธการลงทะเบียนร้านค้า[cite: 1]
 router.patch("/shops/verify", verifyShop);
 
-// 4. ดึงรายการคำร้องเรียน/ปัญหาทั้งหมด[cite: 1]
+// Reports
 router.get("/reports", getAllReports);
+router.patch("/reports/verify", verifyReport);
 
-// 5. ดึงรายการธุรกรรมการเงินทั้งหมด[cite: 1]
+// Transactions
 router.get("/transactions", getAllTransactions);
+
+// Profile & Settings
+router.get("/profile", getAdminProfile);
+router.put("/profile", updateAdminProfile);
+router.put("/settings", updateSettings);
+router.get("/notifications", getNotifications);
+router.post("/logout", adminLogout);
 
 export default router;

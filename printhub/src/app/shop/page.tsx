@@ -12,6 +12,15 @@ import FinancialTable, { Transaction } from "@/src/component/shop/financial-tabl
 import OrderBreakdownModal from "@/src/component/shop/order-breakdown-modal";
 import ReviewComplaintModal from "@/src/component/shop/review-complaint-modal";
 
+// 1. อัปเดต Type ให้ตรงกับข้อมูลที่ Backend (home.ts) ส่งกลับมา
+type FileItem = {
+  id: string;
+  category: string;
+  filename: string;
+  url: string;
+  page_count?: number;
+};
+
 type Order = {
   id: string;
   customer_id: string;
@@ -89,6 +98,7 @@ export default function ShopPage() {
     }
   }, []);
 
+  // 2. ฟังก์ชันดึงข้อมูล Dashboard
   const fetchDashboardData = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!shopId) return;
@@ -147,8 +157,10 @@ export default function ShopPage() {
   );
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    if (shopId) {
+      fetchDashboardData();
+    }
+  }, [shopId, fetchDashboardData]);
 
   useEffect(() => {
     const handleFocus = () => fetchDashboardData({ silent: true });
