@@ -2,79 +2,16 @@ import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import "multer" 
 
-// ==========================================
-// 1. ระบบเข้าสู่ระบบร้านค้า (Login Shop)
-// ==========================================
-export const loginShop = async (req: Request, res: Response): Promise<Response> => {
+interface MulterRequest extends Request {
+  files?: {
+    [fieldname: string]: Express.Multer.File[];
+  } | Express.Multer.File[];
+}
+
+export const registerShop = async (req: MulterRequest, res: Response): Promise<Response> => {
   try {
-    const { contact, password } = req.body;
-
-    if (!contact || !password) {
-      return res.status(400).json({ error: "กรุณากรอกข้อมูลให้ครบถ้วน" });
-    }
-
-    const cleanContact = contact.trim();
-    const cleanPassword = password.trim();
-
-    // ค้นหาร้านค้าจาก email หรือ contact (เบอร์โทร)
-    const { data: shop, error } = await supabase
-      .from("print_shop")
-      .select("*")
-      .or(`email.eq.${cleanContact},phone.eq.${cleanContact}`)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Find shop error:", error);
-      return res.status(500).json({ error: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์" });
-    }
-
-    if (!shop) {
-      return res.status(404).json({ error: "ไม่พบบัญชีผู้ใช้นี้ในระบบ" });
-    }
-
-    // ตรวจสอบรหัสผ่านแบบ Hash
-    const isPasswordValid = await bcrypt.compare(cleanPassword, shop.password);
-
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: "รหัสผ่านไม่ถูกต้อง" });
-    }
-
-    const secretKey = process.env.JWT_SECRET || "default_secret_key";
-
-    const payload = {
-      id: shop.id,
-      shop_name: shop.shop_name,
-    };
-
-    const token = jwt.sign(payload, secretKey, {
-      expiresIn: "24h",
-    });
-
-    return res.status(200).json({
-      message: "เข้าสู่ระบบสำเร็จ",
-      token,
-      shop_id: shop.id,
-      shop_name: shop.shop_name,
-    });
-  } catch (error: any) {
-    console.error("Login shop controller error:", error);
-    return res.status(500).json({ error: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ" });
-  }
-};
-
-// ==========================================
-// 2. ระบบลงทะเบียนร้านค้า (Register Shop)
-// ==========================================
-export const registerShop = async (req: Request, res: Response) => {
-  try {
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
-
-    // ตรวจสอบไฟล์ image_card จาก multer
-    if (!files || !files["image_card"] || files["image_card"].length === 0) {
-      return res.status(400).json({ error: "กรุณาอัปโหลดรูปภาพบัตรประชาชน" });
-    }
-
     const {
       shop_name,
       owner_name,
@@ -97,10 +34,14 @@ export const registerShop = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน" });
     }
 
-    const imageCardPath = files["image_card"][0].path;
-    const shopImagePath = files["image"] ? files["image"][0].path : null;
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    const imageCardPath = files && files["image_card"] ? files["image_card"][0].path : null;
+    const shopImagePath = files && files["image"] ? files["image"][0].path : null;
 
-    // 1. ตรวจสอบอีเมลซ้ำในระบบร้านค้า
+    if (!imageCardPath) {
+      return res.status(400).json({ error: "กรุณาอัปโหลดรูปภาพบัตรประชาชน" });
+    }
+
     const { data: existingShop, error: checkShopError } = await supabase
       .from("print_shop")
       .select("id")
@@ -116,7 +57,6 @@ export const registerShop = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "อีเมลนี้ถูกใช้งานในระบบร้านค้าแล้ว" });
     }
 
-    // 2. ตรวจสอบอีเมลซ้ำในระบบลูกค้า
     const { data: existingCustomer, error: checkCustomerError } = await supabase
       .from("customer")
       .select("id")
@@ -148,7 +88,6 @@ export const registerShop = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "เลขบัตรประชาชนนี้ถูกใช้งานแล้ว" });
     }
 
-    // 4. บันทึกที่อยู่ร้านค้า
     const { data: newAddress, error: addressError } = await supabase
       .from("address")
       .insert([
@@ -170,7 +109,6 @@ export const registerShop = async (req: Request, res: Response) => {
       return res.status(500).json({ error: "ไม่สามารถบันทึกข้อมูลที่อยู่ได้" });
     }
 
-    // 5. บันทึกข้อมูลร้านค้า
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const { data: newShop, error: shopError } = await supabase
@@ -195,7 +133,6 @@ export const registerShop = async (req: Request, res: Response) => {
       return res.status(500).json({ error: "ไม่สามารถสร้างบัญชีร้านค้าได้" });
     }
 
-    // 6. บันทึกข้อมูลบัตรประชาชน
     const { error: idCardError } = await supabase.from("id_card").insert([
       {
         shop_id: newShop.id,
@@ -208,7 +145,6 @@ export const registerShop = async (req: Request, res: Response) => {
       console.error("ID Card Insert Error:", idCardError);
     }
 
-    // 7. บันทึกบัญชีธนาคาร (ถ้ามี)
     if (bank && bank_number) {
       const { error: bankError } = await supabase.from("bank_account").insert([
         {
@@ -231,5 +167,72 @@ export const registerShop = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Register Error:", error);
     return res.status(500).json({ error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์" });
+  }
+};
+
+export const LoginShop = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const { contact, password } = req.body;
+
+    if (!contact || !password) {
+      return res.status(400).json({
+        error: "Please enter email/phone and password",
+      });
+    }
+
+    const { data: shop, error: findError } = await supabase
+      .from("print_shop")
+      .select("*")
+      .or(`email.eq.${contact}`)
+      .maybeSingle();
+    
+      console.log("login shop :",shop)
+
+    if (findError) {
+      console.error("Find shop error:", findError);
+      return res.status(500).json({
+        error: "Server Error",
+      });
+    }
+
+    if (!shop) {
+      return res.status(400).json({
+        error: "Shop not found",
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, shop.password);
+
+    if (!isPasswordValid) {
+      return res.status(400).json({
+        error: "Wrong password",
+      });
+    }
+
+    const secretKey = process.env.JWT_SECRET;
+    if (!secretKey) {
+      throw new Error("JWT_SECRET is not defined");
+    }
+
+    const payload = {
+      id: shop.id,
+      shop_name: shop.shop_name,
+    };
+
+    const token = jwt.sign(payload, secretKey, {
+      expiresIn: "24h",
+    });
+
+    return res.status(200).json({
+      message: "Login successful",
+      token,
+      shop_id: shop.id,
+      shop_name: shop.shop_name,
+    });
+  } catch (err) {
+    console.error("Login Error:", err);
+    return res.status(500).json({
+      error: "Server Error",
+    });
   }
 };
