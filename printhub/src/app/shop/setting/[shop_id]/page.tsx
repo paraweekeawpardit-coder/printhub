@@ -10,7 +10,7 @@ import ShopProfileTab from "../../../../component/shop/ShopProfileTab";
 import ShopServicesTab, { ServiceTypeGroup } from "../../../../component/shop/ShopServiceTab";
 import ShopBankTab from "../../../../component/shop/ShopBankTab";
 
-const API_BASE = "http://localhost:5000/api/shop";
+const API_BASE = "http://localhost:5000/shop";
 
 type AddressData = {
   detail: string;
