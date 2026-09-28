@@ -179,8 +179,10 @@ export default function ShopChatPage() {
   }, [selectedOrderId]);
 
   return (
-    <div className="min-h-screen bg-[#F4F6F9] flex flex-col font-sans">
-      <header className="bg-[#001B3A] text-white h-14 px-6 flex items-center justify-between shadow-md sticky top-0 z-10">
+    // 1. ล็อกความสูงพอดีจอภาพ (h-screen) และปิด scrollbar ของเบราว์เซอร์
+    <div className="h-screen w-full bg-[#F4F6F9] flex flex-col font-sans overflow-hidden">
+      {/* Header หลักด้านบน ล็อกขนาดคงที่ (shrink-0) */}
+      <header className="bg-[#001B3A] text-white h-14 px-6 flex items-center justify-between shadow-md shrink-0">
         <button
           onClick={() => router.back()}
           className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors cursor-pointer"
@@ -192,10 +194,12 @@ export default function ShopChatPage() {
         <div className="w-16"></div>
       </header>
 
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex gap-4 h-[calc(100vh-80px)]">
-        {/* ฝั่งซ้าย: กล่องข้อความทั้งหมด */}
-        <div className="w-1/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex flex-col">
-          <h2 className="text-base font-bold text-slate-800 mb-3 px-1">
+      {/* Main Container ครอบพื้นที่ทั้งหมดที่เหลือ */}
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex gap-4 min-h-0 overflow-hidden">
+        
+        {/* ================= ฝั่งซ้าย: กล่องข้อความทั้งหมด ================= */}
+        <div className="w-1/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex flex-col min-h-0 overflow-hidden">
+          <h2 className="text-base font-bold text-slate-800 mb-3 px-1 shrink-0">
             กล่องข้อความทั้งหมด
           </h2>
 
@@ -208,7 +212,8 @@ export default function ShopChatPage() {
               ไม่มีรายการแชต
             </div>
           ) : (
-            <div className="overflow-y-auto flex-1 space-y-2">
+            /* overflow-y-auto + min-h-0 สั่งให้ scroll เฉพาะฝั่งซ้ายเมื่อรายชื่อเยอะ */
+            <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
               {orderChats.map((chat) => (
                 <div
                   key={chat.id}
@@ -236,11 +241,12 @@ export default function ShopChatPage() {
           )}
         </div>
 
-        {/* ฝั่งขวา: แสดง ChatBox */}
-        <div className="w-2/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col overflow-hidden">
+        {/* ================= ฝั่งขวา: แสดง ChatBox ================= */}
+        <div className="w-2/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col min-h-0 overflow-hidden">
           {selectedOrderId ? (
             <>
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white">
+              {/* Header ฝั่งขวา ล็อกขนาดคงที่ (shrink-0) */}
+              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                 <div>
                   <h3 className="font-bold text-slate-800 text-sm md:text-base">
                     ออเดอร์ #{selectedOrderId}
@@ -257,7 +263,8 @@ export default function ShopChatPage() {
                 </span>
               </div>
 
-              <div className="flex-1 overflow-hidden flex flex-col">
+              {/* คอนเทนเนอร์สำหรับกล่องแชต สั่งล็อกความสูงและปล่อยให้ ChatBox ภายในทำการ scroll ข้อความเอง */}
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <ChatBox
                   orderId={selectedOrderId}
                   role="shop"
@@ -271,6 +278,7 @@ export default function ShopChatPage() {
             </div>
           )}
         </div>
+
       </div>
     </div>
   );
