@@ -27,11 +27,15 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
         id,
         order_no,
         description,
+        subtotal_price,
+        small_order_fee,
         total_price,
         total_amount,
         receive_date,
         appointment_time,
         order_date,
+        review_id,
+        report_id,
         shop:shop_id (
           id,
           shop_name,
@@ -41,15 +45,15 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
           id,
           state
         ),
-        order_items:print_order_item (
+        print_order_item (
           id,
           category,
           quantity,
           unit_price,
-          subtotal
-        ),
-        review_id,
-        report_id
+          subtotal,
+          page_count,
+          describe
+        )
       `)
       .eq("customer_id", customer_id)
       .order("order_date", { ascending: false });

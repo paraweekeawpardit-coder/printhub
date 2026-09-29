@@ -13,7 +13,27 @@ import {
   Check,
   RotateCcw,
   Info,
+  MapPin,
+  Star,
 } from "lucide-react";
+
+// 🌟 ประกาศ Types ของ Props ทั้งหมดที่ส่งมาจากหน้าหลัก
+interface FilterPillsBarProps {
+  selectedCategory: string;
+  onSelectCategory?: (category: string) => void;
+  isNearest: boolean;
+  onToggleNearest: () => void;
+  isOpenOnly: boolean;
+  onToggleOpenOnly: () => void;
+  isTopRated: boolean;
+  onToggleTopRated: () => void;
+  minPrice?: number | string;
+  maxPrice?: number | string;
+  onApplyPrice: (min?: number, max?: number) => void;
+  selectedFinishing: string[];
+  onSelectFinishing: (finishing: string[]) => void;
+  onResetAll: () => void;
+}
 
 // ประเภทงานพิมพ์หลัก
 const CATEGORIES = [
@@ -49,69 +69,46 @@ const GROUPED_OPTIONS: Record<string, { group: string; items: string[] }[]> = {
   ],
 };
 
-export default function FilterPillsBar() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  // State หลัก
-  const [selectedCategory, setSelectedCategory] = useState<string>("เอกสาร");
-  const [selectedFinishing, setSelectedFinishing] = useState<string[]>([]);
-  const [minPrice, setMinPrice] = useState<string>("");
-  const [maxPrice, setMaxPrice] = useState<string>("");
-
-  // State สำหรับ Pop-up Modal
+export default function FilterPillsBar({
+  selectedCategory,
+  onSelectCategory,
+  isNearest,
+  onToggleNearest,
+  isOpenOnly,
+  onToggleOpenOnly,
+  isTopRated,
+  onToggleTopRated,
+  minPrice,
+  maxPrice,
+  onApplyPrice,
+  selectedFinishing,
+  onSelectFinishing,
+  onResetAll,
+}: FilterPillsBarProps) {
+  // State ภายใน Pop-up Modal
   const [isFinishingModalOpen, setIsFinishingModalOpen] = useState(false);
-  const [modalCategory, setModalCategory] = useState<string>("เอกสาร");
+  const [modalCategory, setModalCategory] = useState<string>(
+    selectedCategory && selectedCategory !== "ทั้งหมด" ? selectedCategory : "เอกสาร"
+  );
   const [tempFinishing, setTempFinishing] = useState<string[]>([]);
   const [tempMinPrice, setTempMinPrice] = useState<string>("");
   const [tempMaxPrice, setTempMaxPrice] = useState<string>("");
   const [priceError, setPriceError] = useState<string>("");
 
-  // Sync จาก URL SearchParams เมื่อโหลดหน้า
-  useEffect(() => {
-    const catParam = searchParams.get("category");
-    const finishingParam = searchParams.get("finishing_service");
-    const minP = searchParams.get("min_price");
-    const maxP = searchParams.get("max_price");
+  const selectedOptionsList = Array.isArray(selectedFinishing) ? selectedFinishing : [];
+  const hasPriceFilter = Boolean(
+    (minPrice !== undefined && minPrice !== "" && minPrice !== null) ||
+    (maxPrice !== undefined && maxPrice !== "" && maxPrice !== null)
+  );
+  const filterCount = selectedOptionsList.length + (hasPriceFilter ? 1 : 0);
+  const hasActiveSpecs = filterCount > 0;
 
-    if (catParam) {
-      setSelectedCategory(catParam);
-      setModalCategory(catParam);
-    }
-    if (finishingParam) {
-      setSelectedFinishing(finishingParam.split(",").filter(Boolean));
-    } else {
-      setSelectedFinishing([]);
-    }
-    setMinPrice(minP || "");
-    setMaxPrice(maxP || "");
-  }, [searchParams]);
-
-  // ฟังก์ชันอัปเดต URL Parameters
-  const updateQueryParams = (newCategory: string, newFinishing: string[], minP?: string, maxP?: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    
-    if (newCategory) params.set("category", newCategory);
-    else params.delete("category");
-
-    if (newFinishing.length > 0) params.set("finishing_service", newFinishing.join(","));
-    else params.delete("finishing_service");
-
-    if (minP && parseFloat(minP) > 0) params.set("min_price", minP);
-    else params.delete("min_price");
-
-    if (maxP && parseFloat(maxP) > 0) params.set("max_price", maxP);
-    else params.delete("max_price");
-
-    router.push(`?${params.toString()}`);
-  };
-
-  // เปิด Modal
+  // เปิด Modal พร้อมโหลดค่าเดิมมาใส่
   const handleOpenModal = () => {
-    setModalCategory(selectedCategory);
-    setTempFinishing([...selectedFinishing]);
-    setTempMinPrice(minPrice);
-    setTempMaxPrice(maxPrice);
+    setModalCategory(selectedCategory && selectedCategory !== "ทั้งหมด" ? selectedCategory : "เอกสาร");
+    setTempFinishing([...selectedOptionsList]);
+    setTempMinPrice(minPrice !== undefined ? String(minPrice) : "");
+    setTempMaxPrice(maxPrice !== undefined ? String(maxPrice) : "");
     setPriceError("");
     setIsFinishingModalOpen(true);
   };
@@ -131,29 +128,28 @@ export default function FilterPillsBar() {
 
   // ยืนยันการเลือกใน Modal
   const handleConfirmModal = () => {
-    const minVal = tempMinPrice ? parseFloat(tempMinPrice) : null;
-    const maxVal = tempMaxPrice ? parseFloat(tempMaxPrice) : null;
+    const minVal = tempMinPrice ? parseFloat(tempMinPrice) : undefined;
+    const maxVal = tempMaxPrice ? parseFloat(tempMaxPrice) : undefined;
 
-    if (minVal !== null && minVal <= 0) {
+    if (minVal !== undefined && minVal <= 0) {
       setPriceError("ราคาต่ำสุดต้องมากกว่า 0 บาท");
       return;
     }
-    if (maxVal !== null && maxVal <= 0) {
+    if (maxVal !== undefined && maxVal <= 0) {
       setPriceError("ราคาสูงสุดต้องมากกว่า 0 บาท");
       return;
     }
-    if (minVal !== null && maxVal !== null && minVal > maxVal) {
+    if (minVal !== undefined && maxVal !== undefined && minVal > maxVal) {
       setPriceError("ราคาต่ำสุดต้องไม่มากกว่าราคาสูงสุด");
       return;
     }
 
     setPriceError("");
-    setSelectedCategory(modalCategory);
-    setSelectedFinishing(tempFinishing);
-    setMinPrice(tempMinPrice);
-    setMaxPrice(tempMaxPrice);
-
-    updateQueryParams(modalCategory, tempFinishing, tempMinPrice, tempMaxPrice);
+    if (onSelectCategory) {
+      onSelectCategory(modalCategory);
+    }
+    onSelectFinishing(tempFinishing);
+    onApplyPrice(minVal, maxVal);
     setIsFinishingModalOpen(false);
   };
 
@@ -222,12 +218,10 @@ export default function FilterPillsBar() {
         </div>
       </div>
 
-      {/* POP-UP MODAL */}
+      {/* POP-UP MODAL สเปกย่อยและช่วงราคา */}
       {isFinishingModalOpen && (
         <div
-          /* กดพื้นที่ฉากหลังตรงไหนก็ปิดได้ทันที */
           onClick={() => setIsFinishingModalOpen(false)}
-          /* เพิ่ม z-[100] และ pt-24 ดันลงมาจาก Navbar ด้านบน */
           className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 pt-24 sm:pt-28 pb-6 bg-slate-900/60 backdrop-blur-xs cursor-pointer"
         >
           <div
