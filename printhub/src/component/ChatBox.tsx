@@ -38,21 +38,17 @@ export default function ChatBox({
 
   const socketRef = useRef<Socket | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null); // Ref สำหรับอ้างอิงจุดล่างสุด
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // ฟังก์ชันเลื่อนลงล่างสุดอัตโนมัติ
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // เลื่อนลงล่างสุดเมื่อมีข้อความใหม่
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // --------------------------------------------------
   // 1. ดึงสถานะออเดอร์จาก Supabase
-  // --------------------------------------------------
   useEffect(() => {
     if (!orderId) return;
 
@@ -99,22 +95,42 @@ export default function ChatBox({
     };
   }, [orderId]);
 
+  // กำหนดสถานะที่จะให้ล็อคช่องแชต (เอา "พิมพ์เสร็จสิ้น" ออกแล้ว)
   const lockedStates = [
-    "พิมพ์เสร็จสิ้น",
     "รายการเสร็จสิ้น",
     "ยกเลิกการพิมพ์",
+    "รอการดำเนินงาน",
     "เสร็จสิ้น",
     "ยกเลิก",
     "completed",
     "cancelled",
   ];
 
-  const isFinished = lockedStates.includes(statusState.trim().toLowerCase());
+  const cleanStatus = statusState.trim();
+  const isFinished = lockedStates.includes(cleanStatus.toLowerCase());
   const isLocked = Boolean(propIsChatDisabled || isFinished);
 
-  // --------------------------------------------------
+  // 🟢 แสดงข้อความแจ้งเตือนใน Placeholder ตามสถานะของออเดอร์
+  const getPlaceholderText = () => {
+    if (!isLocked) return "พิมพ์ข้อความ...";
+
+    switch (cleanStatus) {
+      case "รอการดำเนินงาน":
+        return "🔒 กรุณายืนยันออเดอร์ก่อนเริ่มการสนทนา";
+      case "ยกเลิกการพิมพ์":
+      case "ยกเลิก":
+      case "cancelled":
+        return "🔒 รายการนี้ถูกยกเลิกแล้ว ไม่สามารถส่งข้อความได้";
+      case "รายการเสร็จสิ้น":
+      case "เสร็จสิ้น":
+      case "completed":
+        return "🔒 ออเดอร์นี้เสร็จสิ้นแล้ว ไม่สามารถส่งข้อความได้";
+      default:
+        return "🔒 ไม่สามารถส่งข้อความได้";
+    }
+  };
+
   // 2. Socket.io
-  // --------------------------------------------------
   useEffect(() => {
     if (!orderId) return;
 
@@ -192,9 +208,7 @@ export default function ChatBox({
     );
   };
 
-  // --------------------------------------------------
   // 3. ฟังก์ชันส่งข้อความ
-  // --------------------------------------------------
   const handleSend = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (
@@ -239,9 +253,8 @@ export default function ChatBox({
   };
 
   return (
-    // กำหนด h-full และ max-h-full เพื่อให้อยู่ในขอบเขต Parent
     <div className="flex-1 flex flex-col h-full max-h-full min-h-0 overflow-hidden">
-      {/* Message Area: flex-1 + overflow-y-auto จะช่วยให้ Scroll เฉพาะกล่องนี้ */}
+      {/* Message Area */}
       <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#F8FAFC] min-h-0">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-slate-400">
@@ -279,7 +292,6 @@ export default function ChatBox({
                       : "bg-white text-slate-800 border border-slate-200 rounded-bl-none"
                   }`}
                 >
-                  {/* แสดงรูปภาพ */}
                   {msgImages.length > 0 && (
                     <div
                       className={`grid gap-1.5 mb-2 ${
@@ -322,13 +334,12 @@ export default function ChatBox({
             );
           })
         )}
-        {/* Element อ้างอิงจุดล่างสุดของแชต */}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Previews ก่อนกดส่ง */}
       {imagePreviews.length > 0 && (
-        <div className="p-2 bg-slate-50 border-t border-t border-slate-100 flex items-center gap-2 overflow-x-auto shrink-0">
+        <div className="p-2 bg-slate-50 border-t border-slate-100 flex items-center gap-2 overflow-x-auto shrink-0">
           {imagePreviews.map((preview, idx) => (
             <div key={idx} className="relative w-14 h-14 flex-shrink-0">
               <img
@@ -351,7 +362,7 @@ export default function ChatBox({
         </div>
       )}
 
-      {/* Input Area (shrink-0 ป้องกันไม่ให้โดนบีบขนาด) */}
+      {/* Input Area */}
       <form
         onSubmit={handleSend}
         className="p-3 bg-white border-t border-slate-100 flex items-center gap-2 shrink-0"
@@ -385,11 +396,7 @@ export default function ChatBox({
           value={input}
           disabled={isLocked || isUploading}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={
-            isLocked
-              ? "🔒 ออเดอร์นี้เสร็จสิ้นแล้ว ไม่สามารถส่งข้อความได้"
-              : "พิมพ์ข้อความ..."
-          }
+          placeholder={getPlaceholderText()}
           className={`flex-1 px-4 py-2.5 text-sm rounded-xl focus:outline-none transition ${
             isLocked
               ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"

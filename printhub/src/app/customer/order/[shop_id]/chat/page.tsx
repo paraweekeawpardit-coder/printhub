@@ -21,6 +21,26 @@ export default function CustomerOrderChatPage() {
   const [statusName, setStatusName] = useState("กำลังโหลดสถานะ...");
   const [isChatDisabled, setIsChatDisabled] = useState(false);
 
+  // ฟังก์ชันสไตล์สีตามสถานะให้เหมือนฝั่งร้านค้า
+  const getStatusBadgeClass = (status: string) => {
+    const s = status.trim().toLowerCase();
+    
+    if (s.includes("กำลังพิมพ์") || s.includes("printing")) {
+      return "bg-blue-50 text-blue-600 border border-blue-200"; // สีฟ้าอ่อน
+    }
+    if (s.includes("รอการดำเนินงาน") || s.includes("pending")) {
+      return "bg-amber-50 text-amber-600 border border-amber-200"; // สีส้มอ่อน
+    }
+    if (s.includes("เสร็จสิ้น") || s.includes("completed")) {
+      return "bg-slate-100 text-slate-600 border border-slate-300"; // สีเทาอ่อน
+    }
+    if (s.includes("ยกเลิก") || s.includes("cancel")) {
+      return "bg-rose-50 text-rose-600 border border-rose-200"; // สีแดง/ชมพูอ่อน
+    }
+    
+    return "bg-emerald-50 text-emerald-600 border border-emerald-200"; // สีเขียวพื้นฐาน
+  };
+
   useEffect(() => {
     if (!orderId) {
       setStatusName("ไม่พบรหัสออเดอร์");
@@ -63,8 +83,8 @@ export default function CustomerOrderChatPage() {
     const updateStatusUI = (state: string) => {
       setStatusName(state);
       const stateClean = state.trim().toLowerCase();
+      
       const disabledStates = [
-        "พิมพ์เสร็จสิ้น",
         "รายการเสร็จสิ้น",
         "เสร็จสิ้น",
         "ยกเลิกการพิมพ์",
@@ -147,11 +167,9 @@ export default function CustomerOrderChatPage() {
 
             <div className="flex items-center gap-2">
               <span
-                className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
-                  isChatDisabled
-                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                    : "bg-blue-50 text-blue-700 border border-blue-200"
-                }`}
+                className={`text-xs px-3 py-1.5 rounded-lg font-medium ${getStatusBadgeClass(
+                  statusName
+                )}`}
               >
                 {statusName}
               </span>
