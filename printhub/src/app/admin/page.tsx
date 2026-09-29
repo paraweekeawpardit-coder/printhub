@@ -12,7 +12,6 @@ interface ChartDataItem {
 interface DashboardStats {
   totalCustomers: number;
   totalActiveShops: number;
-  totalPlatformIncome: number;
   pendingReports: number;
   dailyIncome?: ChartDataItem[];
 }
@@ -22,62 +21,31 @@ export default function AdminHomePage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
 
   useEffect(() => {
-    fetch(`${API_URL}/dashboard-stats`)
+    // ใช้ Query Parameter timestamp เพื่อกัน Cache โดยไม่ติด CORS Header
+    fetch(`${API_URL}/dashboard-stats?t=${Date.now()}`)
       .then((res) => {
-        const contentType = res.headers.get("content-type");
-        if (!res.ok || !contentType || !contentType.includes("application/json")) {
-          throw new Error("API route not found or did not return JSON");
-        }
+        if (!res.ok) throw new Error("API Error");
         return res.json();
       })
-      .then((data) => setStats(data))
-      .catch((err) => {
-        console.warn("API Error, using fallback data:", err.message);
+      .then((data) => {
         setStats({
-          totalCustomers: 1250,
-          totalActiveShops: 48,
-          totalPlatformIncome: 154000,
-          pendingReports: 5,
-          dailyIncome: [
-            { name: "Mon", income: 0 },
-            { name: "Tue", income: 0 },
-            { name: "Wed", income: 0 },
-            { name: "Thu", income: 0 },
-            { name: "Fri", income: 0 },
-            { name: "Sat", income: 0 },
-            { name: "Sun", income: 0 },
-          ],
+          totalCustomers: data.totalCustomers ?? 0,
+          totalActiveShops: data.totalActiveShops ?? 0,
+          pendingReports: data.pendingReports ?? 0,
+          dailyIncome: data.dailyIncome ?? [],
+        });
+      })
+      .catch(() => {
+        setStats({
+          totalCustomers: 0,
+          totalActiveShops: 0,
+          pendingReports: 0,
+          dailyIncome: [],
         });
       });
   }, [API_URL]);
 
-  if (!stats) {
-    return (
-      <div className="spinner-container">
-        <div className="spinner"></div>
-        <style jsx>{`
-          .spinner-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 50vh;
-          }
-          .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f0f8ff;
-            border-top: 4px solid #003554;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-          }
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
-  }
+  if (!stats) return <div>กำลังโหลดข้อมูล...</div>;
 
   return (
     <div className="admin-page-container">
@@ -89,33 +57,29 @@ export default function AdminHomePage() {
           value={stats.totalCustomers?.toLocaleString()}
           unit="คน"
           subtitle="ผู้ใช้งานในระบบทั้งหมด"
+          href="/admin/customers"
         />
         <StatCard
           title="ร้านค้าที่ใช้งานอยู่"
           value={stats.totalActiveShops?.toLocaleString()}
           unit="ร้าน"
           subtitle="เปิดให้บริการบนแพลตฟอร์ม"
-        />
-        <StatCard
-          title="รายได้แพลตฟอร์ม"
-          value={stats.totalPlatformIncome?.toLocaleString("th-TH")}
-          unit="บาท"
-          subtitle="รายได้รวมทั้งหมด"
+          href="/admin/shops?tab=all"
         />
         <StatCard
           title="ปัญหาที่รอตรวจสอบ"
           value={stats.pendingReports}
           unit="รายการ"
           subtitle="รายงานจากผู้ใช้และร้านค้า"
+          href="/admin/reports"
           isAlert={true}
         />
       </section>
 
       <h2 className="section-title" style={{ marginTop: "40px" }}>
-        กราฟแสดงรายได้ย้อนหลัง 7 วัน
+        ปริมาณคำสั่งซื้อย้อนหลัง 7 วัน
       </h2>
 
-      {/* ใช้ข้อมูล dailyIncome จาก API แทน mockChartData */}
       <IncomeChart data={stats.dailyIncome || []} />
 
       <style jsx>{`

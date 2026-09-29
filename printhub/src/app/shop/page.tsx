@@ -44,7 +44,9 @@ export default function ShopPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [shopId, setShopId] = useState<string>("");
 
-  const [activeView, setActiveView] = useState<"orders" | "financial" | "reviews" | null>(null);
+  const [activeView, setActiveView] = useState<
+    "orders" | "financial" | "reviews" | null
+  >(null);
 
   // Financial Data State (เพิ่ม financialTrend สำหรับกราฟการเงิน)
   const [financialData, setFinancialData] = useState<{
@@ -111,13 +113,15 @@ export default function ShopPage() {
       try {
         if (!opts?.silent) setLoading(true);
 
-        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("token")
+            : null;
         const headers = {
           shop_id: shopId,
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
 
-        // 💡 ตรวจสอบ Path ว่ามี /api หรือไม่ตาม Backend ที่ตั้งไว้
         const [
           numRes,
           scoreRes,
@@ -127,18 +131,40 @@ export default function ShopPage() {
           breakdownRes,
           reviewRes,
         ] = await Promise.all([
-          axios.get("http://localhost:5000/shop/numWork", { headers }).catch(() => ({ data: { numWork: 0 } })),
-          axios.get("http://localhost:5000/shop/getScore", { headers }).catch(() => ({ data: { score: 0, totalReviews: 0 } })),
-          axios.get("http://localhost:5000/shop/getIncome", { headers }).catch(() => ({ data: { income: 0, orderCount: 0 } })),
-          axios.get("http://localhost:5000/shop/getTopOrder", { headers }).catch(() => ({ data: [] })),
-          axios.get("http://localhost:5000/shop/getFinancialOverview", { headers }).catch(() => ({ data: null })),
-          axios.get("http://localhost:5000/shop/getOrderStatusBreakdown", { headers }).catch(() => ({ data: null })),
-          axios.get("http://localhost:5000/shop/getComplaintsAndReviews", { headers }).catch(() => ({ data: null })),
+          axios
+            .get("http://localhost:5000/shop/numWork", { headers })
+            .catch(() => ({ data: { numWork: 0 } })),
+          axios
+            .get("http://localhost:5000/shop/getScore", { headers })
+            .catch(() => ({ data: { score: 0, totalReviews: 0 } })),
+          axios
+            .get("http://localhost:5000/shop/getIncome", { headers })
+            .catch(() => ({ data: { income: 0, orderCount: 0 } })),
+          axios
+            .get("http://localhost:5000/shop/getTopOrder", { headers })
+            .catch(() => ({ data: [] })),
+          axios
+            .get("http://localhost:5000/shop/getFinancialOverview", {
+              headers,
+            })
+            .catch(() => ({ data: null })),
+          axios
+            .get("http://localhost:5000/shop/getOrderStatusBreakdown", {
+              headers,
+            })
+            .catch(() => ({ data: null })),
+          axios
+            .get("http://localhost:5000/shop/getComplaintsAndReviews", {
+              headers,
+            })
+            .catch(() => ({ data: null })),
         ]);
 
         setNum(`${numRes.data.numWork ?? 0} รายการ`);
         setScore(`${Number(scoreRes.data.score ?? 0).toFixed(1)} / 5.0`);
-        setIncome(`${Number(incomeRes.data.income ?? 0).toLocaleString()} บาท`);
+        setIncome(
+          `${Number(incomeRes.data.income ?? 0).toLocaleString()} บาท`
+        );
 
         setTodayOrdersCount(incomeRes.data.orderCount ?? 0);
         setTotalReviewsCount(scoreRes.data.totalReviews ?? 0);
@@ -150,7 +176,12 @@ export default function ShopPage() {
             totalFee: 0,
             totalNet: 0,
             transactions: [],
-            financialTrend: { daily: [], weekly: [], monthly: [], yearly: [] },
+            financialTrend: {
+              daily: [],
+              weekly: [],
+              monthly: [],
+              yearly: [],
+            },
           }
         );
         setBreakdownData(
@@ -199,25 +230,32 @@ export default function ShopPage() {
 
         {/* 3 Dashboard Summary Cards */}
         <div className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-3">
-          <DashboardCard
-            title="รายการที่รอการดำเนินการ"
-            value={num}
-            subtitle="รอการดำเนินการ / รอพิมพ์"
-            icon={Clock}
-            active={activeView === "orders"}
-            onClick={() => setActiveView(activeView === "orders" ? null : "orders")}
-          />
-
-          <DashboardCard
-            title="รายได้ทั้งหมด"
-            value={income}
-            subtitle={`${todayOrdersCount} คำสั่งพิมพ์วันนี้`}
-            icon={DollarSign}
-            active={activeView === "financial"}
-            onClick={() => setActiveView(activeView === "financial" ? null : "financial")}
+          <div
+            className={`cursor-pointer rounded-2xl transition-all ${
+              activeView === "orders" ? "ring-2 ring-[#0F2942]" : ""
+            }`}
+            onClick={() =>
+              setActiveView(activeView === "orders" ? null : "orders")
+            }
           >
             <DashboardCard
-              title="รายได้วันนี้"
+              title="รายการที่รอการดำเนินการ"
+              value={num}
+              subtitle="รอการดำเนินการ / รอพิมพ์"
+              icon={Clock}
+            />
+          </div>
+
+          <div
+            className={`cursor-pointer rounded-2xl transition-all ${
+              activeView === "financial" ? "ring-2 ring-[#0F2942]" : ""
+            }`}
+            onClick={() =>
+              setActiveView(activeView === "financial" ? null : "financial")
+            }
+          >
+            <DashboardCard
+              title="รายได้ทั้งหมด"
               value={income}
               subtitle={`${todayOrdersCount} คำสั่งพิมพ์วันนี้`}
               icon={DollarSign}
@@ -228,7 +266,9 @@ export default function ShopPage() {
             className={`cursor-pointer rounded-2xl transition-all ${
               activeView === "reviews" ? "ring-2 ring-[#0F2942]" : ""
             }`}
-            onClick={() => setActiveView(activeView === "reviews" ? null : "reviews")}
+            onClick={() =>
+              setActiveView(activeView === "reviews" ? null : "reviews")
+            }
           >
             <DashboardCard
               title="คะแนนรีวิวเฉลี่ย"
