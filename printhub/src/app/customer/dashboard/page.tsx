@@ -490,15 +490,23 @@ export default function CustomerDashboardPage() {
                             </button>
                           )}
 
-                          {/* ปุ่มแชต */}
-                          {(isPrinting || isReady) && (
+                           {/* ปุ่มแชต (แก้ไข Path ตามโครงสร้างโฟลเดอร์จริง) */}
+                          {!isCanceled && (
                             <button
                               type="button"
-                              onClick={() => router.push(`/customer/chat?order_id=${order.id}&shop_id=${order.shop?.id}`)}
+                              onClick={() => {
+                                const shopId = order.shop?.id || order.shop_id;
+                                if (!order.id || !shopId) {
+                                  showToast("ไม่พบข้อมูลออเดอร์หรือร้านค้า");
+                                  return;
+                                }
+                                // เปลี่ยน Path ให้ตรงกับโฟลเดอร์ customer/order/[shop_id]/chat
+                                router.push(`/customer/order/${shopId}/chat?order_id=${order.id}`);
+                              }}
                               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
                             >
                               <MessageCircle className="w-3.5 h-3.5 text-white" />
-                              <span>แชท</span>
+                              <span>แชต</span>
                             </button>
                           )}
 

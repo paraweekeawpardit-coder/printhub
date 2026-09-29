@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FileText,
   Sticker,
@@ -152,73 +153,69 @@ export default function FilterPillsBar({
     setIsFinishingModalOpen(false);
   };
 
+  // ล้างตัวกรองทั้งหมด
+  const handleClearAll = () => {
+    setSelectedCategory("เอกสาร");
+    setSelectedFinishing([]);
+    setMinPrice("");
+    setMaxPrice("");
+    router.push("?");
+  };
+
   return (
-    <>
-      {/* แถบตัวกรอง Pills Bar ด้านนอก */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1.5 text-xs font-medium relative z-30">
-        <button
-          type="button"
-          onClick={onToggleNearest}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
-            isNearest
-              ? "bg-blue-50 text-blue-600 border-blue-500 shadow-2xs font-semibold"
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <MapPin className="w-3.5 h-3.5 text-blue-600" />
-          <span>ระยะทางใกล้ที่สุด</span>
-        </button>
+    <div className="w-full bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4 overflow-x-auto">
+        {/* แถบสรุปตัวเลือกหลักที่เลือกไว้ */}
+        <div className="flex items-center gap-2 flex-nowrap">
+          <button
+            type="button"
+            onClick={handleOpenModal}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition cursor-pointer border border-blue-200/60 shrink-0"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span>กรองสเปกงานพิมพ์</span>
+            {(selectedFinishing.length > 0 || minPrice || maxPrice) && (
+              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-extrabold ml-0.5">
+                {selectedFinishing.length + (minPrice || maxPrice ? 1 : 0)}
+              </span>
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={onToggleOpenOnly}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
-            isOpenOnly
-              ? "bg-emerald-50 text-emerald-700 border-emerald-500 shadow-2xs font-semibold"
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <span className={`w-2 h-2 rounded-full ${isOpenOnly ? "bg-emerald-500" : "bg-slate-300"}`} />
-          <span>เปิดให้บริการ</span>
-        </button>
+          <div className="h-5 w-[1px] bg-slate-200 mx-1 shrink-0" />
 
-        <button
-          type="button"
-          onClick={onToggleTopRated}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
-            isTopRated
-              ? "bg-amber-50 text-amber-600 border-amber-500 shadow-2xs font-semibold"
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-          <span>คะแนนสูงสุด</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={handleOpenModal}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
-            hasActiveSpecs
-              ? "bg-blue-50 text-blue-600 border-blue-500 shadow-2xs font-semibold"
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span>
-            {hasActiveSpecs ? `ตัวกรองสเปก (${filterCount})` : "สเปกงานพิมพ์และช่วงราคา"}
+          {/* แสดง Tag หมวดหมู่ */}
+          <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-medium shrink-0">
+            ประเภท: <strong className="text-slate-900">{selectedCategory}</strong>
           </span>
-          {hasActiveSpecs && <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
-        </button>
 
-        <button
-          type="button"
-          onClick={onResetAll}
-          className="px-3.5 py-1.5 rounded-full border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold shrink-0 transition-all shadow-2xs cursor-pointer ml-auto flex items-center gap-1.5"
-        >
-          <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
-          <span>ล้างตัวกรอง</span>
-        </button>
+          {/* แสดง Tag สเปกที่เลือก */}
+          {selectedFinishing.map((item) => (
+            <span
+              key={item}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100 shrink-0"
+            >
+              {item}
+            </span>
+          ))}
+
+          {/* แสดง Tag ช่วงราคา */}
+          {(minPrice || maxPrice) && (
+            <span className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-100 shrink-0">
+              ฿{minPrice || "0"} - ฿{maxPrice || "ไม่จำกัด"}
+            </span>
+          )}
+
+          {/* ปุ่มล้างตัวกรองทั้งหมด */}
+          {(selectedFinishing.length > 0 || minPrice || maxPrice) && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="text-xs text-rose-500 hover:text-rose-600 hover:underline font-medium ml-2 cursor-pointer shrink-0"
+            >
+              ล้างทั้งหมด
+            </button>
+          )}
+        </div>
       </div>
 
       {/* POP-UP MODAL สเปกย่อยและช่วงราคา */}
@@ -455,6 +452,6 @@ export default function FilterPillsBar({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

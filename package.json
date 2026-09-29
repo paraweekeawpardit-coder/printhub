@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "recharts": "^3.10.1"
     "@supabase/supabase-js": "^2.112.4",
     "lucide-react": "^1.47.0",
     "multer": "^2.4.0",

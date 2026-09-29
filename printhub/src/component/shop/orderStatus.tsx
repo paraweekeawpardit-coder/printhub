@@ -1,11 +1,8 @@
 "use client";
 
-export type OrderStatusFilter =
-  | "ทั้งหมด"
-  | "รอการดำเนินงาน"
-  | "กำลังพิมพ์"
-  | "พิมพ์เสร็จสิ้น"
-  | "ยกเลิกการพิมพ์";
+import { OrderStatus } from "./order-action";
+
+export type OrderStatusFilter = "ทั้งหมด" | OrderStatus;
 
 const TABS: OrderStatusFilter[] = [
   "ทั้งหมด",
@@ -25,13 +22,14 @@ export default function OrderStatusTabs({
   onChange,
 }: OrderStatusTabsProps) {
   return (
-    <div className="flex flex-wrap gap-2 p-1.5 bg-slate-200/50 backdrop-blur-md rounded-2xl w-fit">
+    <div className="flex flex-wrap gap-1.5 p-1.5 bg-slate-200/50 backdrop-blur-md rounded-2xl w-fit">
       {TABS.map((tab) => {
         const isActive = active === tab;
 
         return (
           <button
             key={tab}
+            type="button"
             onClick={() => onChange(tab)}
             className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all duration-200 ${
               isActive

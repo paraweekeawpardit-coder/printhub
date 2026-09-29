@@ -1,19 +1,11 @@
-import { MessageCircle, ArrowUpRight, FileText } from "lucide-react";
+import { MessageCircle, ExternalLink, FileText } from "lucide-react";
 import CustomerBadge from "./customer-badge";
-import OrderActions from "./order-action";
-
-// ==========================================
-// Types
-// ==========================================
-// NOTE: cart lets a customer add several items (with different
-// files/specs) into one checkout, so one order can now contain
-// several "sub-order" items. `items` replaces the old flat
-// qty/type/detail/file_name/file_url fields.
+import OrderActions, { OrderStatus } from "./order-action";
 
 export type OrderItemDetail = {
   id: string;
   category: string;
-  describe: string;
+  describe?: string;
   file_url: string | null;
   quantity: number;
   unit_price: number;
@@ -27,7 +19,7 @@ export type OrderDetail = {
   date: string;
   customer_name: string;
   customer_avatar?: string;
-  status: string;
+  status: OrderStatus | string;
   amount: number;
   items: OrderItemDetail[];
 };
@@ -35,14 +27,15 @@ export type OrderDetail = {
 type Props = {
   order: OrderDetail;
   onClick?: () => void;
-  onUpdateStatus?: (orderId: string, newStatus: string) => void;
+  onUpdateStatus?: (orderId: string, newStatus: OrderStatus) => void;
+  onChatClick?: (orderId: string) => void;
 };
 
 const STATUS_CONFIG: Record<
   string,
   { dot: string; text: string; bg: string }
 > = {
-  รอการดำเนินงาน: {
+  รอการดำเนินการ: {
     dot: "bg-amber-500 animate-pulse",
     text: "text-amber-700",
     bg: "bg-amber-500/10",
@@ -53,6 +46,11 @@ const STATUS_CONFIG: Record<
     bg: "bg-blue-500/10",
   },
   พิมพ์เสร็จสิ้น: {
+    dot: "bg-purple-500",
+    text: "text-purple-700",
+    bg: "bg-purple-500/10",
+  },
+  รายการเสร็จสิ้น: {
     dot: "bg-emerald-500",
     text: "text-emerald-700",
     bg: "bg-emerald-500/10",
@@ -64,7 +62,7 @@ const STATUS_CONFIG: Record<
   },
 };
 
-const FALLBACK = {
+const FALLBACK_STATUS = {
   dot: "bg-slate-400",
   text: "text-slate-600",
   bg: "bg-slate-100",
@@ -85,9 +83,19 @@ export default function OrderDetailCard({
   order,
   onClick,
   onUpdateStatus,
+  onChatClick,
 }: Props) {
-  const s = STATUS_CONFIG[order.status] ?? FALLBACK;
+  const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
+
+  // ฟังก์ชันนำทางไปหน้าแชทของออเดอร์นี้
+  const handleGoToChat = (e: React.MouseEvent) => {
+    e.stopPropagation(); // ป้องกันไม่ให้ทะลุไปโดน onClick หลักของการ์ด
+    const shopId = localStorage.getItem("shop_id") || "";
+    if (shopId && order.order_id) {
+      router.push(`/shop/order/${shopId}/chat?order_id=${order.order_id}`);
+    }
+  };
 
   return (
     <div
@@ -95,44 +103,40 @@ export default function OrderDetailCard({
       className="group relative flex w-full cursor-pointer flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200"
     >
       <div>
-        {/* Header: Status Dot & Date */}
+        {/* Header: Status & Date */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${s.bg} ${s.text}`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-              {order.status || "ไม่ทราบสถานะ"}
-            </span>
-          </div>
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`} />
+            {order.status || "ไม่ทราบสถานะ"}
+          </span>
 
           <span className="text-[11px] font-medium text-slate-400 tracking-wider">
             {formatDate(order.date)}
           </span>
         </div>
 
-        {/* Order ID + Customer */}
+        {/* Order ID & Customer */}
         <div className="mt-4 flex items-center justify-between gap-2">
           <div>
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               ORDER
             </span>
             <h3 className="text-xl font-black text-slate-900 tracking-tight leading-none mt-0.5">
-              #
-              {order.order_no ?? order.order_id.slice(0, 8)}
+              #{order.order_no ?? order.order_id.slice(0, 8)}
             </h3>
           </div>
 
           <CustomerBadge
             name={order.customer_name}
-            avatar={order.customer_avatar || "/avatar.png"}
           />
         </div>
 
-        {/* Sub-orders (items from cart) */}
+        {/* Items List */}
         <div className="mt-5">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               รายการ ({items.length})
             </span>
           </div>
@@ -142,7 +146,7 @@ export default function OrderDetailCard({
               items.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between gap-3 bg-slate-50/80 rounded-2xl p-3 border border-slate-100"
+                  className="flex items-center justify-between gap-3 bg-slate-50/80 rounded-2xl p-3 border border-slate-100/80"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-slate-800 text-sm truncate">
@@ -153,12 +157,10 @@ export default function OrderDetailCard({
                         {item.describe}
                       </p>
                     )}
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-1 flex-wrap">
+                    <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1 flex-wrap">
                       <span>{item.quantity} ชิ้น</span>
-                      {item.page_count ? (
-                        <span>· {item.page_count} หน้า</span>
-                      ) : null}
-                      <span>· ฿{item.unit_price}/ชิ้น</span>
+                      {item.page_count && <span>· {item.page_count} หน้า</span>}
+                      <span>· ฿{item.unit_price.toLocaleString()}/ชิ้น</span>
                     </div>
                   </div>
 
@@ -172,7 +174,7 @@ export default function OrderDetailCard({
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline"
+                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline"
                       >
                         <FileText size={12} />
                         ไฟล์
@@ -182,25 +184,30 @@ export default function OrderDetailCard({
                 </div>
               ))
             ) : (
-              <p className="text-xs text-slate-400 py-2">ไม่มีรายการ</p>
+              <p className="text-xs text-slate-400 py-3 text-center">
+                ไม่มีรายการสินค้า
+              </p>
             )}
           </div>
         </div>
 
-        {/* Chat Link */}
-        <a
-          href="#"
-          onClick={(e) => e.stopPropagation()}
-          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
+        {/* Chat Action */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onChatClick?.(order.order_id);
+          }}
+          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
         >
           <MessageCircle size={14} />
           <span>แชทกับลูกค้า</span>
-          <ArrowUpRight size={12} className="opacity-60" />
-        </a>
+          <ExternalLink size={12} className="opacity-60" />
+        </button>
       </div>
 
-      {/* Footer: Total Amount & Actions */}
-      <div className="mt-6 pt-4 border-t border-slate-100/80">
+      {/* Footer */}
+      <div className="mt-6 pt-4 border-t border-slate-100">
         <div className="flex items-baseline justify-between mb-4">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
             ยอดรวม

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
-import { supabase } from "@/src/config/supabase";
+import { supabase } from "@/config/supabase";
 import ChatBox from "../../../../../component/ChatBox";
 
 export default function CustomerOrderChatPage() {
@@ -20,6 +20,26 @@ export default function CustomerOrderChatPage() {
 
   const [statusName, setStatusName] = useState("กำลังโหลดสถานะ...");
   const [isChatDisabled, setIsChatDisabled] = useState(false);
+
+  // ฟังก์ชันสไตล์สีตามสถานะให้เหมือนฝั่งร้านค้า
+  const getStatusBadgeClass = (status: string) => {
+    const s = status.trim().toLowerCase();
+    
+    if (s.includes("กำลังพิมพ์") || s.includes("printing")) {
+      return "bg-blue-50 text-blue-600 border border-blue-200"; // สีฟ้าอ่อน
+    }
+    if (s.includes("รอการดำเนินงาน") || s.includes("pending")) {
+      return "bg-amber-50 text-amber-600 border border-amber-200"; // สีส้มอ่อน
+    }
+    if (s.includes("เสร็จสิ้น") || s.includes("completed")) {
+      return "bg-slate-100 text-slate-600 border border-slate-300"; // สีเทาอ่อน
+    }
+    if (s.includes("ยกเลิก") || s.includes("cancel")) {
+      return "bg-rose-50 text-rose-600 border border-rose-200"; // สีแดง/ชมพูอ่อน
+    }
+    
+    return "bg-emerald-50 text-emerald-600 border border-emerald-200"; // สีเขียวพื้นฐาน
+  };
 
   useEffect(() => {
     if (!orderId) {
@@ -63,8 +83,8 @@ export default function CustomerOrderChatPage() {
     const updateStatusUI = (state: string) => {
       setStatusName(state);
       const stateClean = state.trim().toLowerCase();
+      
       const disabledStates = [
-        "พิมพ์เสร็จสิ้น",
         "รายการเสร็จสิ้น",
         "เสร็จสิ้น",
         "ยกเลิกการพิมพ์",
@@ -101,8 +121,10 @@ export default function CustomerOrderChatPage() {
   }, [orderId]);
 
   return (
-    <div className="min-h-screen bg-[#F4F6F9] flex flex-col font-sans">
-      <header className="bg-[#001B3A] text-white px-6 py-4 flex items-center shadow-md">
+    // 1. ล็อกความสูงเท่าหน้าจอพอดี (h-screen) และซ่อน Scrollbar นอกสุด (overflow-hidden)
+    <div className="h-screen w-full bg-[#F4F6F9] flex flex-col font-sans overflow-hidden">
+      {/* 2. Header ล็อกขนาด ไม่ให้โดนบีบย่อ (shrink-0) */}
+      <header className="bg-[#001B3A] text-white px-6 py-4 flex items-center shadow-md shrink-0">
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.back()}
@@ -129,9 +151,11 @@ export default function CustomerOrderChatPage() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col my-2 h-[calc(100vh-100px)]">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white">
+      {/* 3. Main ใช้ flex-1 min-h-0 overflow-hidden บังคับให้ขยายกินพื้นที่ที่เหลือในหน้าจอโดยไม่ล้น */}
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col min-h-0 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Header ด้านในกล่องแชต ล็อกขนาดคงที่ (shrink-0) */}
+          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
             <div>
               <h2 className="font-bold text-slate-800 text-sm">
                 PrintHub Official Store
@@ -143,23 +167,24 @@ export default function CustomerOrderChatPage() {
 
             <div className="flex items-center gap-2">
               <span
-                className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
-                  isChatDisabled
-                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                    : "bg-blue-50 text-blue-700 border border-blue-200"
-                }`}
+                className={`text-xs px-3 py-1.5 rounded-lg font-medium ${getStatusBadgeClass(
+                  statusName
+                )}`}
               >
                 {statusName}
               </span>
             </div>
           </div>
 
+          {/* 4. กล่องส่วน ChatBox ที่จะ Scroll เฉพาะภายใน */}
           {orderId ? (
-            <ChatBox
-              orderId={orderId}
-              role="customer"
-              isChatDisabled={isChatDisabled}
-            />
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <ChatBox
+                orderId={orderId}
+                role="customer"
+                isChatDisabled={isChatDisabled}
+              />
+            </div>
           ) : (
             <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
               ไม่พบรหัสออเดอร์

@@ -37,21 +37,21 @@ export const getTotalScore = async (
     const count = reviewList.length;
     const avg =
       count > 0
-        ? reviewList.reduce((sum, review) => sum + review.score, 0) / count
+        ? reviewList.reduce((sum, review) => sum + Number(review.score || 0), 0) / count
         : 0;
 
     return res.status(200).json({
-      score: Number(avg.toFixed(2)),
+      score: Number(avg.toFixed(1)),
       totalReviews: count,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error in getTotalScore:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
 
 // ==========================================
-// Get Today's Income & Order Count
+// Card 2: รายได้รวมที่หักค่าธรรมเนียมเรียบร้อยแล้ว (สุทธิ)
 // ==========================================
 export const getTodayInCome = async (
   req: Request,
@@ -64,52 +64,50 @@ export const getTodayInCome = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
+    // 1. ดึง id ของสถานะ "รายการเสร็จสิ้น"
+    const { data: statusData, error: statusError } = await supabase
+      .from("status")
+      .select("id")
+      .eq("state", "รายการเสร็จสิ้น")
+      .single();
+
+    if (statusError || !statusData) {
+      return res.status(200).json({ income: 0, orderCount: 0 });
+    }
+
+    // 2. ดึงคำสั่งซื้อที่เสร็จสิ้นแล้วทั้งหมดของร้าน
     const { data: orders, error: orderError } = await supabase
       .from("print_order")
-      .select("id")
-      .eq("shop_id", shop_id);
+      .select("total_price")
+      .eq("shop_id", shop_id)
+      .eq("current_status_id", statusData.id);
 
     if (orderError) {
       return res.status(400).json({ error: orderError.message });
     }
 
-    const orderIds = (orders ?? []).map((order) => order.id);
+    const orderList = orders ?? [];
+    const FEE_RATE = 0.05; // อัตราค่าธรรมเนียม 5%
 
-    if (orderIds.length === 0) {
-      return res.status(200).json({ income: 0, orderCount: 0 });
-    }
-
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const { data: incomeRows, error: findError } = await supabase
-      .from("payment")
-      .select("amount, shop_income")
-      .in("order_id", orderIds)
-      .gte("payment_date", startOfDay.toISOString());
-
-    if (findError) {
-      return res.status(400).json({ error: findError.message });
-    }
-
-    const rows = (incomeRows ?? []) as PaymentRow[];
-    const total = rows.reduce(
-      (sum, row) => sum + Number(row.shop_income ?? row.amount ?? 0),
-      0
-    );
+    // คำนวณยอดเงินสุทธิหลังหักค่าธรรมเนียม
+    const netIncome = orderList.reduce((sum, order) => {
+      const gross = Number(order.total_price || 0);
+      const fee = gross * FEE_RATE;
+      return sum + (gross - fee);
+    }, 0);
 
     return res.status(200).json({
-      income: Number(total.toFixed(2)),
-      orderCount: rows.length,
+      income: Number(netIncome.toFixed(2)),
+      orderCount: orderList.length,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error in getTodayInCome:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
 
 // ==========================================
-// Get Number of Unaccepted Orders
+// Card 1: ออเดอร์ที่อยู่ในสถานะรอดำเนินการ (กำลังเตรียม / รอพิมพ์)
 // ==========================================
 export const getNumOrderUnAccept = async (
   req: Request,
@@ -122,21 +120,24 @@ export const getNumOrderUnAccept = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
-    const { data: statusData, error: statusError } = await supabase
+    // ดึง ID ของสถานะที่ถือว่ารอดำเนินการ
+    const { data: statuses, error: statusError } = await supabase
       .from("status")
       .select("id")
-      .eq("state", "รอการดำเนินการ")
-      .single();
+      .in("state", ["รอการดำเนินการ", "กำลังพิมพ์"]);
 
-    if (statusError || !statusData) {
+    if (statusError || !statuses || statuses.length === 0) {
       return res.status(200).json({ numWork: 0 });
     }
 
+    const statusIds = statuses.map((s) => s.id);
+
+    // นับจำนวนออเดอร์ที่อยู่ในสถานะดังกล่าว
     const { count, error } = await supabase
       .from("print_order")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shop_id)
-      .eq("current_status_id", statusData.id);
+      .in("current_status_id", statusIds);
 
     if (error) {
       return res.status(400).json({ error: error.message });
@@ -226,7 +227,7 @@ export const getTopOrder = async (
 };
 
 // ==========================================
-// Get Financial Overview & Transactions (ส่วนใหม่)
+// Get Financial Overview & Transactions
 // ==========================================
 export const getFinancialOverview = async (
   req: Request,
@@ -239,75 +240,169 @@ export const getFinancialOverview = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
-    // 1. ดึง order_ids ของร้านนี้
-    const { data: orders, error: orderErr } = await supabase
-      .from("print_order")
-      .select("id, order_date, customer(first_name, last_name)")
-      .eq("shop_id", shop_id);
+    // 1. ดึง id ของสถานะ "รายการเสร็จสิ้น" จากตาราง status
+    const { data: statusData, error: statusError } = await supabase
+      .from("status")
+      .select("id")
+      .eq("state", "รายการเสร็จสิ้น")
+      .single();
 
-    if (orderErr) return res.status(400).json({ error: orderErr.message });
-
-    const orderMap = new Map(orders?.map((o: any) => [o.id, o]));
-    const orderIds = Array.from(orderMap.keys());
-
-    if (orderIds.length === 0) {
+    if (statusError || !statusData) {
+      // หากไม่พบสถานะ ให้คืนค่าเปล่าเป็น 0
       return res.status(200).json({
         totalGross: 0,
         totalFee: 0,
         totalNet: 0,
         transactions: [],
+        financialTrend: {
+          daily: [],
+          weekly: [],
+          monthly: [],
+          yearly: [],
+        },
       });
     }
 
-    // 2. ดึงข้อมูล Payment
-    const { data: payments, error: payErr } = await supabase
-      .from("payment")
-      .select("*")
-      .in("order_id", orderIds)
-      .order("payment_date", { ascending: false });
+    // 2. ดึงเฉพาะรายการสั่งซื้อที่มี current_status_id เป็น "รายการเสร็จสิ้น"
+    const { data: orders, error } = await supabase
+      .from("print_order")
+      .select(`
+        id,
+        order_date,
+        total_price,
+        customer (first_name, last_name)
+      `)
+      .eq("shop_id", shop_id)
+      .eq("current_status_id", statusData.id)
+      .order("order_date", { ascending: false });
 
-    if (payErr) return res.status(400).json({ error: payErr.message });
+    if (error) return res.status(400).json({ error: error.message });
+
+    const orderList = orders ?? [];
+    
+    // อัตราค่าธรรมเนียมแพลตฟอร์ม (เช่น 5%)
+    const FEE_RATE = 0.05;
 
     let totalGross = 0;
     let totalFee = 0;
     let totalNet = 0;
 
-    const transactions = (payments || []).map((p: any) => {
-      const gross = Number(p.amount || 0);
-      const net = Number(p.shop_income ?? gross);
-      const fee = Number((gross - net).toFixed(2));
+    const transactions = orderList.map((o: any) => {
+      const gross = Number(o.total_price || 0);
+      const fee = gross * FEE_RATE;
+      const net = gross - fee;
 
       totalGross += gross;
       totalFee += fee;
       totalNet += net;
 
-      const orderInfo: any = orderMap.get(p.order_id);
-
       return {
-        paymentId: p.id,
-        orderId: p.order_id,
-        customerName: orderInfo?.customer
-          ? `${orderInfo.customer.first_name} ${orderInfo.customer.last_name}`
-          : "ลูกค้าทั่วไป",
-        paymentDate: p.payment_date || orderInfo?.order_date,
-        grossAmount: gross,
-        feeAmount: fee,
-        netIncome: net,
-        status: p.status || "ชำระเงินแล้ว",
+        id: o.id,
+        date: o.order_date,
+        customer_name: `${o.customer?.first_name || ""} ${o.customer?.last_name || ""}`.trim() || "ลูกค้าทั่วไป",
+        gross,
+        fee,
+        net,
       };
     });
 
+    const now = new Date();
+    const currentYear = now.getFullYear();
+
+    const getYearFromOrder = (dateVal: any): number => {
+      if (!dateVal) return 0;
+      const d = new Date(dateVal);
+      if (!isNaN(d.getTime())) {
+        let y = d.getFullYear();
+        if (y > 2400) y -= 543;
+        return y;
+      }
+      const str = String(dateVal);
+      if (str.includes("2569") || str.includes("2026")) return 2026;
+      if (str.includes("2568") || str.includes("2025")) return 2025;
+      if (str.includes("2567") || str.includes("2024")) return 2024;
+      return 0;
+    };
+
+    const getMonthFromOrder = (dateVal: any): number => {
+      const d = new Date(dateVal);
+      return isNaN(d.getTime()) ? -1 : d.getMonth();
+    };
+
+    // 1. รายวัน (จ.-อา.)
+    const daysName = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
+    const currDay = now.getDay();
+    const mondayOffset = currDay === 0 ? -6 : 1 - currDay;
+
+    const dailyTrend = [];
+    for (let i = 0; i < 7; i++) {
+      const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + i);
+      const targetDateStr = targetDate.toISOString().split("T")[0];
+
+      const amount = transactions
+        .filter((t: any) => String(t.date).includes(targetDateStr))
+        .reduce((sum: number, t: any) => sum + t.net, 0);
+
+      dailyTrend.push({ label: daysName[targetDate.getDay()], amount });
+    }
+
+    // 2. รายสัปดาห์
+    const weeklyTrend = [];
+    for (let w = 1; w <= 4; w++) {
+      const startDay = (w - 1) * 7 + 1;
+      const endDay = w === 4 ? 31 : w * 7;
+
+      const amount = transactions
+        .filter((t: any) => {
+          const y = getYearFromOrder(t.date);
+          const m = getMonthFromOrder(t.date);
+          const d = new Date(t.date).getDate();
+          return y === currentYear && m === now.getMonth() && d >= startDay && d <= endDay;
+        })
+        .reduce((sum: number, t: any) => sum + t.net, 0);
+
+      weeklyTrend.push({ label: `สัปดาห์ ${w}`, amount });
+    }
+
+    // 3. รายเดือน
+    const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const monthlyTrend = monthNames.map((mName, mIdx) => {
+      const amount = transactions
+        .filter((t: any) => getYearFromOrder(t.date) === currentYear && getMonthFromOrder(t.date) === mIdx)
+        .reduce((sum: number, t: any) => sum + t.net, 0);
+
+      return { label: mName, amount };
+    });
+
+    // 4. รายปี (5 ย้อนหลัง)
+    const yearlyTrend = [];
+    for (let i = 4; i >= 0; i--) {
+      const targetYear = currentYear - i;
+      const amount = transactions
+        .filter((t: any) => getYearFromOrder(t.date) === targetYear)
+        .reduce((sum: number, t: any) => sum + t.net, 0);
+
+      yearlyTrend.push({ label: `${targetYear + 543}`, amount });
+    }
+
     return res.status(200).json({
-      totalGross: Number(totalGross.toFixed(2)),
-      totalFee: Number(totalFee.toFixed(2)),
-      totalNet: Number(totalNet.toFixed(2)),
+      totalGross,
+      totalFee,
+      totalNet,
       transactions,
+      financialTrend: {
+        daily: dailyTrend,
+        weekly: weeklyTrend,
+        monthly: monthlyTrend,
+        yearly: yearlyTrend,
+      },
     });
   } catch (err) {
     console.error("Error in getFinancialOverview:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
+
 // ==========================================
 // Get Order Status Breakdown & All Orders
 // ==========================================
@@ -338,12 +433,37 @@ export const getOrderStatusBreakdown = async (
 
     const orderList = orders ?? [];
 
-    // นับสัดส่วนแต่ละสถานะ
     const counts: Record<string, number> = {
       "รอการดำเนินการ": 0,
       "กำลังพิมพ์": 0,
       "พิมพ์เสร็จสิ้น": 0,
-      "ยกเลิก": 0,
+      "รายการเสร็จสิ้น": 0,
+      "ยกเลิกการพิมพ์": 0,
+    };
+
+    // Helper: แปลง และ Normalize ให้เป็น Date Object ใน ค.ศ. ชัวร์ 100%
+    const parseSafeDate = (dateStr: any) => {
+      if (!dateStr) return null;
+      
+      // กรณีเป็น String เช่น "2026-09-28" หรือ "2569-09-28"
+      const cleanStr = String(dateStr).split("T")[0];
+      const parts = cleanStr.split(/[-/]/);
+      
+      if (parts.length === 3) {
+        let year = parseInt(parts[0], 10);
+        let month = parseInt(parts[1], 10) - 1;
+        let day = parseInt(parts[2], 10);
+
+        // ถ้าเก็บปีเป็น พ.ศ. (เช่น > 2400) ให้แปลงเป็น ค.ศ.
+        if (year > 2400) year -= 543;
+
+        return new Date(year, month, day);
+      }
+
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return null;
+      if (d.getFullYear() > 2400) d.setFullYear(d.getFullYear() - 543);
+      return d;
     };
 
     orderList.forEach((o: any) => {
@@ -351,9 +471,87 @@ export const getOrderStatusBreakdown = async (
       counts[st] = (counts[st] || 0) + 1;
     });
 
+    const now = new Date();
+    const currentYear = now.getFullYear(); // เช่น 2026
+
+    // 1. รายวัน (จันทร์ - อาทิตย์ ของสัปดาห์นี้)
+    const daysName = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
+    const currDay = now.getDay();
+    const mondayOffset = currDay === 0 ? -6 : 1 - currDay;
+
+    const dailyData: { label: string; count: number }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + i);
+
+      const count = orderList.filter((o: any) => {
+        const od = parseSafeDate(o.order_date);
+        if (!od) return false;
+        return (
+          od.getFullYear() === targetDate.getFullYear() &&
+          od.getMonth() === targetDate.getMonth() &&
+          od.getDate() === targetDate.getDate()
+        );
+      }).length;
+
+      dailyData.push({ label: daysName[targetDate.getDay()], count });
+    }
+
+    // 2. รายสัปดาห์ (สัปดาห์ 1 - 4 ของเดือนปัจจุบัน)
+    const weeklyData: { label: string; count: number }[] = [];
+    for (let w = 1; w <= 4; w++) {
+      const startDay = (w - 1) * 7 + 1;
+      const endDay = w === 4 ? 31 : w * 7;
+
+      const count = orderList.filter((o: any) => {
+        const od = parseSafeDate(o.order_date);
+        if (!od) return false;
+        return (
+          od.getFullYear() === currentYear &&
+          od.getMonth() === now.getMonth() &&
+          od.getDate() >= startDay &&
+          od.getDate() <= endDay
+        );
+      }).length;
+
+      weeklyData.push({ label: `สัปดาห์ ${w}`, count });
+    }
+
+    // 3. รายเดือน (ม.ค. - ธ.ค. ของปีปัจจุบัน)
+    const monthNames = [
+      "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+      "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
+    ];
+    const monthlyData: { label: string; count: number }[] = monthNames.map((mName, mIdx) => {
+      const count = orderList.filter((o: any) => {
+        const od = parseSafeDate(o.order_date);
+        if (!od) return false;
+        return od.getFullYear() === currentYear && od.getMonth() === mIdx;
+      }).length;
+      return { label: mName, count };
+    });
+
+    // 4. รายปี (5 ปีย้อนหลังนับจากปีปัจจุบัน)
+    const yearlyData: { label: string; count: number }[] = [];
+    for (let i = 4; i >= 0; i--) {
+      const yr = currentYear - i;
+      const count = orderList.filter((o: any) => {
+        const od = parseSafeDate(o.order_date);
+        if (!od) return false;
+        return od.getFullYear() === yr;
+      }).length;
+      
+      yearlyData.push({ label: `${yr + 543}`, count }); // แสดงเป็น พ.ศ. บนแท่งกราฟ
+    }
+
     return res.status(200).json({
       total: orderList.length,
       counts,
+      trendData: {
+        daily: dailyData,
+        weekly: weeklyData,
+        monthly: monthlyData,
+        yearly: yearlyData,
+      },
       orders: orderList.map((o: any) => ({
         ...o,
         latest_status: o.current_status?.state || "ไม่ทราบสถานะ",
@@ -364,10 +562,8 @@ export const getOrderStatusBreakdown = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
+ 
 
-// ==========================================
-// Get Complaints & Reviews (รายการร้องเรียนและรีวิว)
-// ==========================================
 export const getComplaintsAndReviews = async (
   req: Request,
   res: Response
@@ -393,8 +589,8 @@ export const getComplaintsAndReviews = async (
 
     if (revErr) return res.status(400).json({ error: revErr.message });
 
-    // 2. ดึงรายการร้องเรียน (ถ้ามีตาราง report หรือ complaint)
-    const { data: reports } = await supabase
+    // 2. ดึงรายการร้องเรียน
+    const { data: reports, error: repErr } = await supabase
       .from("report")
       .select(
         `
@@ -405,9 +601,48 @@ export const getComplaintsAndReviews = async (
       .eq("shop_id", shop_id)
       .order("created_at", { ascending: false });
 
+    if (repErr) console.error("Report Fetch Error:", repErr.message);
+
+    const safeReviews = reviews ?? [];
+    const safeReports = reports ?? [];
+
+    // 3. คำนวณ สรุปผลรีวิว (Summary) สำหรับแสดงผลส่วนดาวบน UI
+    const total_reviews = safeReviews.length;
+
+    // นับจำนวนรีวิวแยกตามดาว (1-5 ดาว)
+    const rating_counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let sumRating = 0;
+
+    safeReviews.forEach((rev) => {
+      const score = Number(rev.score || rev.rating || 0);
+      sumRating += score;
+      if (score >= 1 && score <= 5) {
+        rating_counts[score] = (rating_counts[score] || 0) + 1;
+      }
+    });
+
+    // คำนวณคะแนนเฉลี่ย
+    const average_rating = total_reviews > 0 ? Number((sumRating / total_reviews).toFixed(1)) : 0;
+
+    // สรุปสถิติเปอร์เซ็นต์แต่ละดาวสำหรับ Progress Bar
+    const rating_breakdown = [5, 4, 3, 2, 1].map((stars) => {
+      const count = rating_counts[stars] || 0;
+      const percentage = total_reviews > 0 ? Number(((count / total_reviews) * 100).toFixed(1)) : 0;
+      return {
+        stars,
+        count,
+        percentage,
+      };
+    });
+
     return res.status(200).json({
-      reviews: reviews ?? [],
-      complaints: reports ?? [],
+      summary: {
+        average_rating,
+        total_reviews,
+        rating_breakdown,
+      },
+      reviews: safeReviews,
+      complaints: safeReports,
     });
   } catch (err) {
     console.error("Error in getComplaintsAndReviews:", err);

@@ -30,6 +30,9 @@ type Order = {
   };
 };
 
+type TrendItem = { label: string; count: number };
+type FinancialTrendItem = { label: string; amount: number };
+
 export default function ShopPage() {
   const [num, setNum] = useState<string>("0 รายการ");
   const [score, setScore] = useState<string>("0.0 / 5.0");
@@ -43,26 +46,41 @@ export default function ShopPage() {
 
   const [activeView, setActiveView] = useState<"orders" | "financial" | "reviews" | null>(null);
 
+  // Financial Data State (เพิ่ม financialTrend สำหรับกราฟการเงิน)
   const [financialData, setFinancialData] = useState<{
     totalGross: number;
     totalFee: number;
     totalNet: number;
     transactions: Transaction[];
+    financialTrend?: {
+      daily: FinancialTrendItem[];
+      weekly: FinancialTrendItem[];
+      monthly: FinancialTrendItem[];
+      yearly: FinancialTrendItem[];
+    };
   }>({
     totalGross: 0,
     totalFee: 0,
     totalNet: 0,
     transactions: [],
+    financialTrend: { daily: [], weekly: [], monthly: [], yearly: [] },
   });
 
   const [breakdownData, setBreakdownData] = useState<{
     total: number;
     counts: Record<string, number>;
     orders: any[];
+    trendData?: {
+      daily: TrendItem[];
+      weekly: TrendItem[];
+      monthly: TrendItem[];
+      yearly: TrendItem[];
+    };
   }>({
     total: 0,
     counts: {},
     orders: [],
+    trendData: { daily: [], weekly: [], monthly: [], yearly: [] },
   });
 
   const [reviewData, setReviewData] = useState<{
@@ -126,9 +144,26 @@ export default function ShopPage() {
         setTotalReviewsCount(scoreRes.data.totalReviews ?? 0);
 
         setOrders(ordersRes.data ?? []);
-        if (financeRes.data) setFinancialData(financeRes.data);
-        if (breakdownRes.data) setBreakdownData(breakdownRes.data);
-        if (reviewRes.data) setReviewData(reviewRes.data);
+        setFinancialData(
+          financeRes.data ?? {
+            totalGross: 0,
+            totalFee: 0,
+            totalNet: 0,
+            transactions: [],
+            financialTrend: { daily: [], weekly: [], monthly: [], yearly: [] },
+          }
+        );
+        setBreakdownData(
+          breakdownRes.data ?? {
+            total: 0,
+            counts: {},
+            orders: [],
+            trendData: { daily: [], weekly: [], monthly: [], yearly: [] },
+          }
+        );
+        setReviewData(
+          reviewRes.data ?? { reviews: [], complaints: [] }
+        );
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
       } finally {
@@ -164,24 +199,21 @@ export default function ShopPage() {
 
         {/* 3 Dashboard Summary Cards */}
         <div className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-3">
-          <div
-            className={`cursor-pointer rounded-2xl transition-all ${
-              activeView === "orders" ? "ring-2 ring-[#0F2942]" : ""
-            }`}
+          <DashboardCard
+            title="รายการที่รอการดำเนินการ"
+            value={num}
+            subtitle="รอการดำเนินการ / รอพิมพ์"
+            icon={Clock}
+            active={activeView === "orders"}
             onClick={() => setActiveView(activeView === "orders" ? null : "orders")}
-          >
-            <DashboardCard
-              title="ออเดอร์รอการดำเนินการ"
-              value={num}
-              subtitle="กำลังเตรียม / รอพิมพ์"
-              icon={Clock}
-            />
-          </div>
+          />
 
-          <div
-            className={`cursor-pointer rounded-2xl transition-all ${
-              activeView === "financial" ? "ring-2 ring-[#0F2942]" : ""
-            }`}
+          <DashboardCard
+            title="รายได้ทั้งหมด"
+            value={income}
+            subtitle={`${todayOrdersCount} คำสั่งพิมพ์วันนี้`}
+            icon={DollarSign}
+            active={activeView === "financial"}
             onClick={() => setActiveView(activeView === "financial" ? null : "financial")}
           >
             <DashboardCard
@@ -214,6 +246,7 @@ export default function ShopPage() {
               counts={breakdownData.counts}
               total={breakdownData.total}
               orders={breakdownData.orders}
+              trendData={breakdownData.trendData}
               onOrderClick={handleOrderClick}
             />
           </div>
@@ -226,6 +259,7 @@ export default function ShopPage() {
               totalFee={financialData.totalFee}
               totalNet={financialData.totalNet}
               transactions={financialData.transactions}
+              financialTrend={financialData.financialTrend}
               onOrderClick={handleOrderClick}
             />
           </div>
