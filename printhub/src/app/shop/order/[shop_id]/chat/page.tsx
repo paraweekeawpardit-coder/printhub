@@ -15,29 +15,28 @@ interface OrderChat {
   status_name?: string;
 }
 
-// 🟢 ฟังก์ชันสำหรับกำหนดสี Badge ตามสถานะ
+// 🟢 ปรับเปลี่ยนสี Badge แต่ละสถานะ (รายการเสร็จสิ้น = สีเทา)
 const getStatusBadgeStyle = (statusName: string = "") => {
-  const clean = statusName.trim().toLowerCase();
+  const clean = statusName.trim();
 
-  // กลุ่มเสร็จสิ้น -> สีเขียว (Emerald)
-  if (
-    ["พิมพ์เสร็จสิ้น", "รายการเสร็จสิ้น", "เสร็จสิ้น", "completed"].includes(clean)
-  ) {
-    return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  switch (clean) {
+    case "กำลังพิมพ์":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+
+    case "พิมพ์เสร็จสิ้น":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+
+    case "รายการเสร็จสิ้น":
+      // 🟢 ปรับเป็นสีเทา (Slate) ตามที่ขอครับ
+      return "bg-slate-100 text-slate-600 border-slate-300";
+
+    case "ยกเลิกการพิมพ์":
+      return "bg-rose-50 text-rose-700 border-rose-200";
+
+    case "รอการดำเนินงาน":
+    default:
+      return "bg-amber-50 text-amber-700 border-amber-200";
   }
-
-  // กลุ่มยกเลิก -> สีแดง (Rose)
-  if (["ยกเลิกการพิมพ์", "ยกเลิก", "cancelled"].includes(clean)) {
-    return "bg-rose-50 text-rose-700 border-rose-200";
-  }
-
-  // กลุ่มกำลังพิมพ์ -> สีฟ้า/น้ำเงิน (Blue)
-  if (["กำลังพิมพ์", "กำลังดำเนินการ", "in progress"].includes(clean)) {
-    return "bg-blue-50 text-blue-700 border-blue-200";
-  }
-
-  // สถานะอื่นๆ / รอดำเนินการ -> สีส้มอ่อน (Amber)
-  return "bg-amber-50 text-amber-700 border-amber-200";
 };
 
 export default function ShopChatPage() {
@@ -91,7 +90,7 @@ export default function ShopChatPage() {
                 fullName || `ลูกค้า (#${item.order_no || item.id.slice(0, 6)})`,
               latest_message: item.description || "แตะเพื่อดูแชต",
               updated_at: item.order_date,
-              status_name: item.status?.state || "กำลังดำเนินการ",
+              status_name: item.status?.state || "รอการดำเนินงาน",
             };
           });
 
@@ -117,7 +116,7 @@ export default function ShopChatPage() {
     fetchShopChats();
   }, [rawOrderId, isFromNavbar]);
 
-  // 2. ดึงสถานะออเดอร์เมื่อมีการคลิกเลือก selectedOrderId
+  // 2. ดึงสถานะออเดอร์เพื่อเช็กการเปิด/ปิดช่องแชต
   useEffect(() => {
     if (!selectedOrderId) {
       setStatusName("");
@@ -142,27 +141,21 @@ export default function ShopChatPage() {
           return;
         }
 
-        const stateName = (data.status as any)?.state || "กำลังดำเนินการ";
+        const stateName = (data.status as any)?.state || "";
         setStatusName(stateName);
 
-        const stateClean = String(stateName).trim().toLowerCase();
-        const disabledStates = [
-          "พิมพ์เสร็จสิ้น",
-          "รายการเสร็จสิ้น",
-          "เสร็จสิ้น",
-          "ยกเลิกการพิมพ์",
-          "ยกเลิก",
-          "completed",
-          "cancelled",
-        ];
+        const cleanState = String(stateName).trim();
 
-        setIsChatDisabled(
-          disabledStates.some((s) => s.toLowerCase() === stateClean)
-        );
+        // 🟢 เปิดให้แชตได้ทั้ง "กำลังพิมพ์" และ "พิมพ์เสร็จสิ้น"
+        // ล็อคแชตเฉพาะ "รอการดำเนินงาน", "รายการเสร็จสิ้น", และ "ยกเลิกการพิมพ์"
+        const allowedToChatStates = ["กำลังพิมพ์", "พิมพ์เสร็จสิ้น"];
+        
+        setIsChatDisabled(!allowedToChatStates.includes(cleanState));
+
       } catch (err) {
         console.error("Fetch status error:", err);
         setStatusName("เชื่อมต่อผิดพลาด");
-        setIsChatDisabled(false);
+        setIsChatDisabled(true);
       }
     };
 
@@ -219,7 +212,6 @@ export default function ShopChatPage() {
                     <span className="font-bold text-sm text-slate-800 truncate">
                       {chat.customer_name}
                     </span>
-                    {/*  ปรับปรุงสี Badge ในกล่องข้อความฝั่งซ้าย */}
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded border font-medium shrink-0 ${getStatusBadgeStyle(
                         chat.status_name
@@ -252,7 +244,6 @@ export default function ShopChatPage() {
                   </h3>
                 </div>
                 {statusName && (
-                  /*  ปรับปรุงสี Badge ฝั่งขวา ใช้ฟังก์ชัน getStatusBadgeStyle */
                   <span
                     className={`text-xs font-medium px-3 py-1 rounded-lg border ${getStatusBadgeStyle(
                       statusName
@@ -273,7 +264,6 @@ export default function ShopChatPage() {
               </div>
             </>
           ) : (
-            /* ข้อความแนะนำเมื่อกดมาจาก Navbar */
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-2 p-6 text-center">
               <div className="p-4 rounded-full bg-slate-50 text-slate-300 mb-1">
                 <MessageSquare size={36} />
