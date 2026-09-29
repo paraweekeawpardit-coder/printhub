@@ -37,7 +37,7 @@ export function SlipUploader({ previewUrl, isExpired, onFileChange }: SlipUpload
             ↑
           </div>
           <p className="text-sm font-semibold text-gray-700">คลิกเพื่ออัปโหลดสลิปโอนเงิน</p>
-          <p className="text-xs text-gray-400 mt-1">รองรับไฟล์ JPG, PNG (สูงสุด 5MB)</p>
+          <p className="text-xs text-gray-400 mt-1">รองรับไฟล์ JPG, JPEG, PNG (สูงสุด 5MB)</p>
         </>
       )}
     </label>
