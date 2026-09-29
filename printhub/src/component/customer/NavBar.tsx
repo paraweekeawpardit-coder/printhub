@@ -2,9 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Printer, Home, ShoppingCart, ClipboardList, LogOut } from "lucide-react";
-import NotificationBell from "@/src/component/NotificationBell";
 import { usePathname, useRouter } from "next/navigation";
 import { 
   Printer, 
@@ -17,6 +14,7 @@ import {
   LogOut,
   LayoutDashboard
 } from "lucide-react";
+import NotificationBell from "@/component/NotificationBell";
 
 interface NavBarProps {
   cartCount?: number;
@@ -45,7 +43,6 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        // เช็กคีย์ทุกแบบที่เป็นไปได้
         const actualId =
           user.customer_id ||
           user.id ||
@@ -60,37 +57,26 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
     }
   }, []);
 
-  // ฟังก์ชันสำหรับการออกจากระบบ
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    sessionStorage.clear();
-    router.push("/");
-
-  useEffect(() => {
-    const id = localStorage.getItem("customer_id") || localStorage.getItem("id");
-    if (id) {
-      setCustomerId(id);
-    }
-  }, []);
-
+  // ตรวจจับ active path
   const isHomeActive = pathname === "/customer" || pathname === "/";
   const isOrdersActive = pathname.startsWith("/customer/orders") || pathname.startsWith("/customer/order");
   const isChatActive = pathname.startsWith("/customer/chat");
   const isSettingActive = pathname.startsWith("/customer/setting") || pathname.startsWith("/customer/profile");
+  const isDashboardActive = pathname.startsWith("/customer/dashboard");
 
+  // ฟังก์ชันสำหรับการออกจากระบบ
   const handleLogout = () => {
     if (typeof window !== "undefined") {
       localStorage.removeItem("customer_id");
       localStorage.removeItem("id");
+      localStorage.removeItem("user_id");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("user");
       localStorage.removeItem("token");
+      sessionStorage.clear();
     }
     router.push("/login");
   };
-
-  // ตรวจจับ active path **********************************************
-  const isDashboardActive = pathname.startsWith("/customer/dashboard");
-
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur shadow-sm">
@@ -143,25 +129,14 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </span>
           </Link>
 
-          {/* แชท (เพิ่มใหม่) */}
-          <Link
-            href="/customer/chat"
-            title="แชท"
-            className={`flex items-center gap-2 h-10 px-3.5 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
-              isChatActive
-                ? "bg-[#0F2942] text-white"
-                : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
-            }`}
-          >
-            <MessageCircle size={16} />
-            <span className={isChatActive ? "inline" : "hidden md:inline"}>
-              แชท
-            </span>
-          </Link>
         </div>
 
-        {/* ฝั่งขวา: ตะกร้าสินค้า, โปรไฟล์พร้อมไอคอนฟันเฟือง, ปุ่มออกจากระบบ */}
+        {/* ฝั่งขวา: กระดิ่งแจ้งเตือน, ตะกร้าสินค้า, โปรไฟล์, แดชบอร์ด, ปุ่มออกจากระบบ */}
         <div className="flex items-center gap-2 sm:gap-3">
+          
+          {/* กระดิ่งแจ้งเตือนสำหรับลูกค้า */}
+          {customerId && <NotificationBell userId={customerId} role="customer" />}
+
           {/* ตะกร้าสินค้า */}
           <button
             type="button"
@@ -177,18 +152,14 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             )}
           </button>
 
-          {/* โปรไฟล์ผู้ใช้ + ฟันเฟือง Settings สไตล์เดียวกับร้านค้า */}
+          {/* โปรไฟล์ผู้ใช้ */}
           <Link
             href="/customer/setting"
             title="ตั้งค่าบัญชี"
             className="flex items-center gap-2 pr-1 cursor-pointer focus:outline-none group"
           >
-            {/* <span className="hidden lg:block text-sm font-medium text-slate-600 group-hover:text-[#0F2942]">
-              User
-            </span> */}
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative shadow-xs">
               <User size={18} />
-              {/* ตราฟันเฟืองซ้อนมุมขวาล่าง */}
               <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-md">
                 <Settings 
                   size={13} 
@@ -198,8 +169,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </div>
           </Link>
 
-
-          {/* ************************************************ */}
+          {/* แดชบอร์ด */}
           <Link
             href="/customer/dashboard"
             title="แดชบอร์ด"

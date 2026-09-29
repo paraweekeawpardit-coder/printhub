@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Printer, Home, ClipboardList, MessageCircle, Settings } from "lucide-react";
-import NotificationBell from "@/src/component/NotificationBell";
+import NotificationBell from "@/component/NotificationBell";
 
 export default function ShopNavbar() {
   const pathname = usePathname();
@@ -18,8 +18,8 @@ export default function ShopNavbar() {
   }, []);
 
   const isHomeActive = pathname === "/shop";
-  const isOrderActive = pathname.startsWith("/shop/order");
-  const isChatActive = pathname.startsWith("/shop/chat");
+  const isOrderActive = pathname.startsWith("/shop/order") && !pathname.endsWith("/chat");
+  const isChatActive = pathname.includes("/chat");
   const isSettingActive = pathname.startsWith("/shop/setting");
 
   const goTo = (path: string) => {
@@ -30,16 +30,17 @@ export default function ShopNavbar() {
     }
 
     if (path === "chat") {
-      router.push(`/shop/order/${activeShopId}/chat`);
+      // ส่งไปที่ Route ของร้านค้าพร้อม Query Parameter ?from=navbar
+      router.push(`/shop/order/${shopId}/chat?from=navbar`); 
       return;
     }
 
     if (path === "order") {
-      router.push(`/shop/order/${activeShopId}`);
+      router.push(`/shop/order/${shopId}`);
       return;
     }
 
-    router.push(`/shop/${path}/${activeShopId}`);
+    router.push(`/shop/${path}/${shopId}`);
   };
 
   return (
@@ -104,7 +105,7 @@ export default function ShopNavbar() {
 
         </div>
 
-        {/* โซนเมนูขวาบน: เพิ่มNotificationBell ข้างๆ โปรไฟล์ */}
+        {/* โซนเมนูขวาบน */}
         <div className="flex items-center gap-2">
           {shopId && <NotificationBell userId={shopId} role="shop" />}
 
