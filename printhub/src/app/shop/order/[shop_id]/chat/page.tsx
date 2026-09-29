@@ -1,182 +1,133 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter, useSearchParams, useParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { supabase } from "@/src/config/supabase";
-import ChatBox from "../../../../../component/ChatBox";
+import { useSearchParams, useParams, useRouter } from "next/navigation";
+import { io, Socket } from "socket.io-client";
 
-interface OrderChatItem {
-  id: string;
-  customer_name?: string;
-  status?: string;
-  updated_at?: string;
-  latest_message?: string;
-}
+let socket: Socket;
 
 export default function ShopChatPage() {
   const router = useRouter();
-  const params = useParams();
   const searchParams = useSearchParams();
+  const params = useParams();
 
-  const shopId =
-    (params?.shop_id as string) ||
-    (typeof window !== "undefined" ? localStorage.getItem("shop_id") || "" : "");
-  const urlOrderId = searchParams.get("order_id");
+  const paramOrderId = (params?.order_id as string) || (params?.shop_id as string) || "";
+  const queryOrderId = searchParams.get("order_id") || "";
+  
+  const validOrderId = (queryOrderId && queryOrderId !== "undefined") 
+    ? queryOrderId 
+    : (paramOrderId && paramOrderId !== "undefined") 
+    ? paramOrderId 
+    : "";
 
-  const [orderChats, setOrderChats] = useState<OrderChatItem[]>([]);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(urlOrderId);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [shopOrderStatus, setShopOrderStatus] = useState<string>("กำลังโหลดสถานะ...");
-  const [isShopChatDisabled, setIsShopChatDisabled] = useState<boolean>(false);
+  const [selectedOrderId, setSelectedOrderId] = useState(validOrderId);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState("");
+  const [statusName, setStatusName] = useState<string>("กำลังโหลดสถานะ...");
+  const [isChatDisabled, setIsChatDisabled] = useState<boolean>(false);
 
-  // 1. ดึงรายการออเดอร์ทั้งหมด
   useEffect(() => {
-    const fetchShopOrders = async () => {
-      setLoading(true);
-      try {
-        let query = supabase.from("print_order").select("*");
+    if (validOrderId) setSelectedOrderId(validOrderId);
+  }, [validOrderId]);
 
-        if (shopId && shopId !== "undefined" && shopId !== "null") {
-          query = query.eq("shop_id", shopId);
-        }
-
-        let { data: orders, error } = await query;
-
-        if (error || !orders || orders.length === 0) {
-          const fallback = await supabase.from("print_order").select("*");
-          orders = fallback.data || [];
-        }
-
-        if (orders && orders.length > 0) {
-          const customerIds = orders
-            .map((o: any) => o.customer_id)
-            .filter((id: any) => Boolean(id));
-
-          let customerMap: Record<string, string> = {};
-
-          if (customerIds.length > 0) {
-            const { data: customers } = await supabase
-              .from("customer")
-              .select("id, first_name, last_name")
-              .in("id", customerIds);
-
-            if (customers) {
-              customers.forEach((c: any) => {
-                const fname = c.first_name || "";
-                const lname = c.last_name || "";
-                customerMap[c.id] = `${fname} ${lname}`.trim();
-              });
-            }
-          }
-
-          const formattedOrders: OrderChatItem[] = orders.map((o: any) => {
-            const fullName = customerMap[o.customer_id];
-
-            return {
-              id: o.id,
-              customer_name:
-                fullName && fullName !== ""
-                  ? fullName
-                  : `ลูกค้า (${o.customer_id ? o.customer_id.slice(0, 6) : "ทั่วไป"})`,
-              status: o.status || "กำลังดำเนินการ",
-              updated_at: o.created_at || new Date().toISOString(),
-              latest_message: "กดเพื่อเปิดกล่องแชต",
-            };
-          });
-
-          setOrderChats(formattedOrders);
-
-          if (!selectedOrderId && formattedOrders.length > 0) {
-            setSelectedOrderId(formattedOrders[0].id);
-          }
-        } else {
-          setOrderChats([]);
-        }
-      } catch (err) {
-        console.error("Fetch Exception:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchShopOrders();
-  }, [shopId]);
-
-  // 2. ดึงสถานะออเดอร์ปัจจุบันตรงจาก Supabase
+  // 1. ดึงสถานะออเดอร์ผ่าน Backend API
   useEffect(() => {
-    if (!selectedOrderId) return;
+    if (!selectedOrderId || selectedOrderId === "undefined") {
+      setStatusName("ไม่พบรหัสออเดอร์");
+      setIsChatDisabled(true);
+      return;
+    }
 
-    const fetchStatus = async () => {
+    const fetchOrderStatus = async () => {
       try {
-        const { data, error } = await supabase
-          .from("print_order")
-          .select(`
-            current_status_id,
-            status:current_status_id ( state )
-          `)
-          .eq("id", selectedOrderId)
-          .single();
-
-        if (error || !data || !data.status) {
-          const { data: fallbackData } = await supabase
-            .from("print_order")
-            .select("status")
-            .eq("id", selectedOrderId)
-            .single();
-
-          const state = fallbackData?.status || "กำลังดำเนินการ";
-          updateStatusUI(state);
+        const res = await fetch(`http://localhost:5000/api/orders/${selectedOrderId}/status`);
+        
+        if (!res.ok) {
+          console.warn(`API Status Error: ${res.status}`);
+          setStatusName("ไม่สามารถดึงสถานะได้");
+          setIsChatDisabled(false);
           return;
         }
 
-        const stateName = (data.status as any)?.state || "กำลังดำเนินการ";
-        updateStatusUI(stateName);
+        const data = await res.json();
+        console.log("📌 Shop Page - Order Status Received:", data);
+
+        if (data.success && data.state) {
+          setStatusName(data.state);
+          
+          // 🟢 ล็อกแชตเฉพาะคำที่ระบุว่าเสร็จสิ้นหรือยกเลิกจริงๆ เท่านั้น
+          const stateClean = String(data.state).trim().toLowerCase();
+          const disabledStates = ["พิมพ์เสร็จสิ้น", "เสร็จสิ้น", "ยกเลิกการพิมพ์", "ยกเลิก", "completed", "cancelled"];
+          
+          if (disabledStates.some(s => s.toLowerCase() === stateClean)) {
+            setIsChatDisabled(true);
+          } else {
+            setIsChatDisabled(false);
+          }
+        } else {
+          setStatusName("กำลังดำเนินการ");
+          setIsChatDisabled(false);
+        }
       } catch (err) {
         console.error("Fetch status error:", err);
-        setShopOrderStatus("กำลังดำเนินการ");
+        setStatusName("เชื่อมต่อผิดพลาด");
+        setIsChatDisabled(false);
       }
     };
 
-    const updateStatusUI = (state: string) => {
-      setShopOrderStatus(state);
+    fetchOrderStatus();
+  }, [selectedOrderId]);
 
-      const stateClean = state.trim().toLowerCase();
-      const disabledStates = [
-        "พิมพ์เสร็จสิ้น",
-        "รายการเสร็จสิ้น",
-        "เสร็จสิ้น",
-        "ยกเลิกการพิมพ์",
-        "ยกเลิก",
-        "completed",
-        "cancelled",
-      ];
+  // 2. จัดการ Socket
+  useEffect(() => {
+    if (!selectedOrderId || selectedOrderId === "undefined") return;
 
-      setIsShopChatDisabled(
-        disabledStates.some((st) => st.toLowerCase() === stateClean)
-      );
-    };
+    setMessages([]);
+    socket = io("http://localhost:5000");
 
-    fetchStatus();
+    socket.emit("join_order_chat", selectedOrderId);
+    socket.emit("mark_as_read", { orderId: selectedOrderId, reader: "shop" });
 
-    const channel = supabase
-      .channel(`shop_order_status_${selectedOrderId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "print_order",
-          filter: `id=eq.${selectedOrderId}`,
-        },
-        () => fetchStatus()
-      )
-      .subscribe();
+    socket.on("load_chat_history", (history) => {
+      setMessages(history || []);
+    });
+
+    socket.on("receive_message", (data) => {
+      if (data.orderId === selectedOrderId) {
+        setMessages((prev) => [...prev, data]);
+        if (data.sender === "customer") {
+          socket.emit("mark_as_read", { orderId: selectedOrderId, reader: "shop" });
+        }
+      }
+    });
+
+    socket.on("messages_read", (data) => {
+      if (data.reader === "customer") {
+        setMessages((prev) =>
+          prev.map((msg) => (msg.sender === "shop" ? { ...msg, isRead: true } : msg))
+        );
+      }
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      if (socket) socket.disconnect();
     };
   }, [selectedOrderId]);
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isChatDisabled || !selectedOrderId) return;
+
+    const messageData = {
+      orderId: selectedOrderId,
+      sender: "shop",
+      text: input,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    socket.emit("send_message", messageData);
+    setInput("");
+  };
 
   return (
     // 1. ล็อกความสูงพอดีจอภาพ (h-screen) และปิด scrollbar ของเบราว์เซอร์
@@ -216,18 +167,24 @@ export default function ShopChatPage() {
             <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
               {orderChats.map((chat) => (
                 <div
-                  key={chat.id}
-                  onClick={() => setSelectedOrderId(chat.id)}
-                  className={`p-3.5 rounded-xl cursor-pointer transition-all border ${
-                    selectedOrderId === chat.id
-                      ? "bg-slate-100 border-slate-300 shadow-sm"
-                      : "border-transparent hover:bg-slate-50"
-                  }`}
+                  key={i}
+                  className={`flex flex-col ${msg.sender === "shop" ? "items-end" : "items-start"}`}
                 >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="font-bold text-sm text-slate-800">
-                      {chat.customer_name}
-                    </span>
+                  <div
+                    className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${
+                      msg.sender === "shop"
+                        ? "bg-[#001B3A] text-white rounded-br-none"
+                        : "bg-white text-slate-800 border border-slate-200 rounded-bl-none"
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
+                  
+                  <div className="flex items-center gap-1 mt-1 px-1 text-[10px] text-slate-400">
+                    <span>{msg.time}</span>
+                    {msg.sender === "shop" && msg.isRead && (
+                      <span className="text-blue-600 font-semibold">• อ่านแล้ว</span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500 truncate mb-1">
                     {chat.latest_message}

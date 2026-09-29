@@ -1,4 +1,6 @@
 import express from 'express';
+import multer from "multer";
+import { createClient } from "@supabase/supabase-js";
 import { 
   getShops, 
   getAllServiceTypes, 
@@ -8,13 +10,16 @@ import {
 import { 
   getCart, 
   addToCart, 
-  clearCart 
+  clearCart,
+  removeCartItem
 } from '../controller/cartController.js';
 
 import { 
   createOrder, 
   getCustomerOrders, 
-  updateWorkStatus 
+  updateWorkStatus,
+  cancelOrder, 
+  confirmReceivedOrder
 } from '../controller/orderController.js';
 
 import { 
@@ -22,6 +27,10 @@ import {
   submitOrderReview, 
   submitOrderReport 
 } from '../controller/reviewController.js';
+
+import { 
+  getCustomerDashboard
+} from '../controller/customerController.js';
 
 const router = express.Router();
 
@@ -38,6 +47,7 @@ router.get('/shops/:shopId/services', getShopServices);
 router.get('/cart', getCart);
 router.post('/cart', addToCart);
 router.delete('/cart', clearCart);
+router.delete('/cart/item/:itemId', removeCartItem);
 
 // ==========================================
 // 3. คำสั่งซื้อและสถานะ (Order)
@@ -52,5 +62,56 @@ router.patch('/order/:orderId/status', updateWorkStatus);
 router.get('/order/:orderId/review', getReviewOrderDetail);
 router.post('/review', submitOrderReview);
 router.post('/report', submitOrderReport);
+
+// Route หน้า Dashboard
+router.get("/dashboard", getCustomerDashboard);
+
+// Route ปรับสถานะออเดอร์
+router.put("/order/:id/cancel", cancelOrder);
+router.put("/order/:id/confirm-received", confirmReceivedOrder);
+
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+// สร้าง Supabase client ฝั่ง Backend
+const supabase = createClient(
+  process.env.SUPABASE_URL || "https://bhypxtuezgawvnluktvn.supabase.co",
+  process.env.SUPABASE_ANON_KEY || ""
+);
+
+router.post("/upload-file", upload.single("file"), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const fileExt = file.originalname.split(".").pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+    const filePath = `orders/${fileName}`;
+
+    // Backend อัปโหลดตรงเข้า bucket print_files
+    const { data, error } = await supabase.storage
+      .from("print_files")
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (error) {
+      console.error("Supabase Storage Error:", error);
+      return res.status(500).json({ message: error.message });
+    }
+
+    // ดึง Public URL คืนกลับไปให้หน้าบ้าน
+    const { data: publicData } = supabase.storage
+      .from("print_files")
+      .getPublicUrl(filePath);
+
+    return res.json({ url: publicData.publicUrl });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+});
 
 export default router;

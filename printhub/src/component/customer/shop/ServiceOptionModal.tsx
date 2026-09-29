@@ -4,7 +4,8 @@ import React, { useState, useMemo, useEffect } from "react";
 import { X, FileUp, Plus, Eye, FileText, Trash2, Loader2, AlertCircle } from "lucide-react";
 import { ServiceType, OptionItem } from "./ServiceMenuGrid";
 
-// กำหนด Worker สำหรับอ่านและนับหน้า PDF
+import supabase from "@/config/supabase";
+
 let pdfjsLib: any = null;
 if (typeof window !== "undefined") {
   pdfjsLib = require("pdfjs-dist");
@@ -45,66 +46,85 @@ export default function ServiceOptionModal({
   const [isDoubleSided, setIsDoubleSided] = useState(false);
   const [quantity, setQuantity] = useState(1);
 
-  // States สำหรับรายการไฟล์หลายไฟล์
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>([]);
   const [activePreviewIndex, setActivePreviewIndex] = useState<number>(0);
   const [isProcessingFile, setIsProcessingFile] = useState<boolean>(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const [fileError, setFileError] = useState<string>("");
 
-  // คืน Memory เมื่อปิด Modal หรือไฟล์ถูกลบ
+  const serviceTypeName = service.type_name || service.type || "บริการงานพิมพ์";
+
+  const rawOptions: OptionItem[] = useMemo(() => {
+    return (service.options && service.options.length > 0)
+      ? service.options
+      : (service.service_detail || []);
+  }, [service]);
+
   useEffect(() => {
     return () => {
       uploadedFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
     };
   }, []);
 
-  // รวมจำนวนหน้าจริงจากทุกไฟล์ที่อัปโหลด
+  const requiredGroups = useMemo(() => {
+    const allGroups = Array.from(new Set(rawOptions.map((o) => o.group_type)));
+    return allGroups.filter((g) => {
+      const lower = g.toLowerCase();
+      return (
+        !lower.includes("เข้าเล่ม") &&
+        !lower.includes("ตกแต่ง") &&
+        !lower.includes("finishing")
+      );
+    });
+  }, [rawOptions]);
+
+  const missingGroups = useMemo(() => {
+    return requiredGroups.filter((g) => !modalOptions[g]);
+  }, [requiredGroups, modalOptions]);
+
+  const canAddToCart = uploadedFiles.length > 0 && missingGroups.length === 0 && !isUploading;
+
   const totalPages = useMemo(() => {
     if (uploadedFiles.length === 0) return 1;
     return uploadedFiles.reduce((sum, f) => sum + f.pageCount, 0);
   }, [uploadedFiles]);
 
-  // ฟังก์ชันสลับเลือก/ยกเลิกตัวเลือก (Toggle Selection)
   const handleToggleOption = (group: string, opt: OptionItem) => {
     setModalOptions((prev) => {
-      // ถ้าเลือกตัวเลือกเดิมอยู่แล้ว ให้ทำการลบออก (ยกเลิกการเลือก)
       if (prev[group]?.id === opt.id) {
         const updated = { ...prev };
         delete updated[group];
         return updated;
       }
-      // ถ้ายังไม่ได้เลือก ให้ตั้งค่าตัวเลือกนั้น
       return { ...prev, [group]: opt };
     });
   };
 
-  // 🧮 คำนวณราคาแบบแยกประเภทการพิมพ์และตัวเลือกเสริม
   const priceCalculations = useMemo(() => {
     let perPageOptionsSum = 0;
     let finishingOptionsSum = 0;
 
     Object.entries(modalOptions).forEach(([groupName, item]) => {
-      const price = Number(item.unit_price || 0);
-      // แยก Option สำหรับเข้าเล่ม/ตกแต่งออกจากราคาพิมพ์ต่อหน้า
-      if (groupName.includes("เข้าเล่ม") || groupName.includes("ตกแต่ง") || groupName.includes("finishing")) {
+      const price = Number(item.unit_price ?? item.price ?? 0);
+      const lowerGroup = groupName.toLowerCase();
+
+      if (
+        lowerGroup.includes("เข้าเล่ม") ||
+        lowerGroup.includes("ตกแต่ง") ||
+        lowerGroup.includes("finishing")
+      ) {
         finishingOptionsSum += price;
       } else {
         perPageOptionsSum += price;
       }
     });
 
-    // หากเลือกพิมพ์หน้า-หลัง เพิ่มตัวคูณ 2 ในกรณีบริการเอกสาร
-    const printMultiplier = service.type_name === "เอกสาร" && isDoubleSided ? 2 : 1;
+    const pricePerPage = perPageOptionsSum;
     
-    // ราคาต่อหน้า/หน่วย
-    const pricePerPage = perPageOptionsSum * printMultiplier;
-    
-    // ราคารวม 1 ชุด = (ราคาต่อหน้า x จำนวนหน้า) + ค่าเข้าเล่ม
-    const singleSetPrice = service.type_name === "เอกสาร" 
+    const singleSetPrice = serviceTypeName === "เอกสาร" 
       ? (pricePerPage * totalPages) + finishingOptionsSum
       : (pricePerPage + finishingOptionsSum);
 
-    // ราคารวมสุทธิทั้งหมด = ราคา 1 ชุด x จำนวนชุดที่สั่ง
     const finalTotalPrice = singleSetPrice * quantity;
 
     return {
@@ -112,9 +132,8 @@ export default function ServiceOptionModal({
       singleSetPrice,
       finalTotalPrice,
     };
-  }, [modalOptions, service.type_name, isDoubleSided, totalPages, quantity]);
+  }, [modalOptions, serviceTypeName, totalPages, quantity]);
 
-  // ฟังก์ชันคำนวณจำนวนหน้าของ PDF
   const countPdfPages = async (file: File): Promise<number> => {
     try {
       if (!pdfjsLib) return 1;
@@ -127,22 +146,36 @@ export default function ServiceOptionModal({
     }
   };
 
-  // Logic อัปโหลดหลายไฟล์ พร้อมตรวจขนาดไม่เกิน 100MB ต่อไฟล์
+  // 🌟 ตรวจสอบขนาดและจำกัดจำนวนไฟล์ตาม FR-2.2 และ FR-2.3
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError("");
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    if (uploadedFiles.length + files.length > 10) {
+      setFileError("สามารถอัปโหลดได้สูงสุดไม่เกิน 10 ไฟล์ต่อรายการ (FR-2.3)");
+      e.target.value = "";
+      return;
+    }
+
     setIsProcessingFile(true);
     const newItems: UploadedFileInfo[] = [];
+    let currentTotalSize = uploadedFiles.reduce((sum, item) => sum + item.file.size, 0);
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
-      if (file.size > 100 * 1024 * 1024) {
-        setFileError(`ไฟล์ ${file.name} มีขนาดเกิน 100MB`);
+      if (file.size > 50 * 1024 * 1024) {
+        setFileError(`ไฟล์ ${file.name} มีขนาดเกิน 50MB (FR-2.3)`);
         continue;
       }
+
+      if (currentTotalSize + file.size > 100 * 1024 * 1024) {
+        setFileError("ขนาดไฟล์รวมทั้งหมดเกิน 100MB (FR-2.3)");
+        break;
+      }
+
+      currentTotalSize += file.size;
 
       const isPdf = file.type === "application/pdf" || file.name.endsWith(".pdf");
       const isImage = file.type.startsWith("image/");
@@ -178,35 +211,69 @@ export default function ServiceOptionModal({
     });
   };
 
-  const handleSubmit = () => {
-    const fileNames = uploadedFiles.map((f) => f.file.name).join(", ");
+  const getOptionValue = (keys: string[], fallback: string) => {
+    for (const k of keys) {
+      const opt = modalOptions[k];
+      if (opt) return opt.detail || opt.option_name || fallback;
+    }
+    return fallback;
+  };
 
-    onAddToCart({
-      category: service.type_name,
-      selected_size:
-        modalOptions["ขนาดกระดาษ"]?.option_name ||
-        modalOptions["ขนาดมาตรฐาน"]?.option_name ||
-        modalOptions["size"]?.option_name ||
-        "A4",
-      color_type:
-        modalOptions["รูปแบบสีการพิมพ์"]?.option_name ||
-        modalOptions["color"]?.option_name ||
-        "ขาว-ดำ",
-      paper_type:
-        modalOptions["ความหนาและชนิดกระดาษ"]?.option_name ||
-        modalOptions["paper"]?.option_name ||
-        "80 แกรม",
-      finishing_option: `${
-        modalOptions["รูปแบบการเข้าเล่ม/ตกแต่ง"]?.option_name ||
-        modalOptions["finishing"]?.option_name ||
-        "ไม่มี"
-      }${service.type_name === "เอกสาร" && isDoubleSided ? " (พิมพ์หน้า-หลัง)" : ""}`,
-      quantity: Number(quantity),
-      unit_price: priceCalculations.singleSetPrice,
-      subtotal: priceCalculations.finalTotalPrice,
-      file_url: fileNames || "https://example.com/demo.pdf",
-      total_pages: totalPages,
-    });
+  // 🌟 ฟังก์ชันอัปโหลดไฟล์ไปยัง Supabase Storage และคืนค่าเป็น Public URLs
+  const uploadFilesToSupabase = async (): Promise<string[]> => {
+    const urls: string[] = [];
+
+    // เปลี่ยนจาก files เป็น uploadedFiles ตามชื่อ state จริง
+    for (const item of uploadedFiles) {
+      const formData = new FormData();
+      formData.append("file", item.file);
+
+      const response = await fetch("http://localhost:5000/api/customer/upload-file", {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Upload failed");
+      }
+
+      const resData = await response.json();
+      urls.push(resData.url);
+    }
+
+    return urls;
+  };
+
+  const handleSubmit = async () => {
+    try {
+      setIsUploading(true);
+      setFileError("");
+
+      // 1. อัปโหลดไฟล์ขึ้น Supabase Storage และรับ URL จริง
+      const fileUrls = await uploadFilesToSupabase();
+      const combinedFileUrls = fileUrls.join(", ");
+
+      // 2. ส่งข้อมูลสินค้าและ URL ของไฟล์ไปยังตะกร้า
+      onAddToCart({
+        category: serviceTypeName,
+        selected_size: getOptionValue(["ขนาด", "ขนาดกระดาษ", "ขนาดมาตรฐาน", "size"], "A4"),
+        color_type: getOptionValue(["ระบบสี", "รูปแบบสีการพิมพ์", "color", "สี"], ""),
+        paper_type: getOptionValue(["วัสดุ", "ความหนาและชนิดกระดาษ", "paper", "กระดาษ"], ""),
+        finishing_option: `${getOptionValue(["การเข้าเล่มและตกแต่ง", "รูปแบบการเข้าเล่ม/ตกแต่ง", "finishing", "เข้าเล่ม"], "ไม่มี")}${
+          serviceTypeName === "เอกสาร" && isDoubleSided ? " (พิมพ์หน้า-หลัง)" : ""
+        }`,
+        quantity: Number(quantity),
+        unit_price: priceCalculations.singleSetPrice,
+        subtotal: priceCalculations.finalTotalPrice,
+        file_url: combinedFileUrls,
+        total_pages: totalPages,
+      });
+    } catch (err: any) {
+      setFileError(err.message || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const currentPreviewFile = uploadedFiles[activePreviewIndex];
@@ -218,14 +285,15 @@ export default function ServiceOptionModal({
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h3 className="font-bold text-base sm:text-lg text-slate-900">
-              กำหนดสเปก: {service.type_name}
+              กำหนดสเปก: {serviceTypeName}
             </h3>
             <span className="text-xs text-slate-400">
-              อัปโหลดไฟล์ (สูงสุด 100MB/ไฟล์) ตรวจสอบพรีวิว และกำหนดสเปก
+              อัปโหลดไฟล์ (สูงสุด 50MB/ไฟล์, รวมไม่เกิน 100MB, สูงสุด 10 ไฟล์)
             </span>
           </div>
           <button
             type="button"
+            disabled={isUploading}
             onClick={onClose}
             className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
           >
@@ -235,7 +303,7 @@ export default function ServiceOptionModal({
 
         {/* Content 2 คอลัมน์ */}
         <div className="flex-1 grid grid-cols-1 md:grid-cols-12 overflow-hidden">
-          {/* ฝั่งซ้าย: อัปโหลดหลายไฟล์ + รายการไฟล์ + พรีวิว */}
+          {/* ฝั่งซ้าย: อัปโหลด + พรีวิว */}
           <div className="md:col-span-6 p-5 sm:p-6 bg-slate-50/70 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col overflow-y-auto space-y-4">
             <div>
               <span className="text-xs font-bold text-slate-700 block mb-1.5">
@@ -255,7 +323,7 @@ export default function ServiceOptionModal({
                       คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวาง
                     </span>
                     <span className="text-[11px] text-slate-400 block mt-0.5">
-                      PDF, JPG, PNG (ไม่เกิน 100MB ต่อไฟล์)
+                      PDF, JPG, PNG (ไม่เกิน 50MB ต่อไฟล์, รวมไม่เกิน 100MB)
                     </span>
                   </>
                 )}
@@ -264,19 +332,19 @@ export default function ServiceOptionModal({
                   multiple
                   accept=".pdf,image/png,image/jpeg,image/jpg"
                   className="hidden"
-                  disabled={isProcessingFile}
+                  disabled={isProcessingFile || isUploading}
                   onChange={handleFileChange}
                 />
               </label>
 
               {fileError && (
                 <p className="text-xs text-rose-500 mt-1.5 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" /> {fileError}
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {fileError}
                 </p>
               )}
             </div>
 
-            {/* รายการไฟล์ที่อัปโหลดแล้ว */}
+            {/* รายการไฟล์ */}
             {uploadedFiles.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
@@ -312,6 +380,7 @@ export default function ServiceOptionModal({
                         </span>
                         <button
                           type="button"
+                          disabled={isUploading}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleRemoveFile(idx);
@@ -327,7 +396,7 @@ export default function ServiceOptionModal({
               </div>
             )}
 
-            {/* กล่อง Preview เอกสาร */}
+            {/* พรีวิว */}
             <div className="flex-1 flex flex-col min-h-[220px]">
               <span className="text-xs font-bold text-slate-700 block mb-1">
                 ตัวอย่างเอกสาร: {currentPreviewFile?.file.name || "(ยังไม่มีไฟล์)"}
@@ -363,10 +432,9 @@ export default function ServiceOptionModal({
             </div>
           </div>
 
-          {/* ฝั่งขวา: กำหนดสเปกย่อย & จำนวนชุด */}
+          {/* ฝั่งขวา: กำหนดสเปก */}
           <div className="md:col-span-6 p-5 sm:p-6 overflow-y-auto space-y-4 bg-white">
-            {/* หน้าเดียว vs หน้า-หลัง */}
-            {service.type_name === "เอกสาร" && (
+            {serviceTypeName === "เอกสาร" && (
               <div className="space-y-1.5 bg-blue-50/60 p-3.5 rounded-2xl border border-blue-100">
                 <span className="text-xs font-bold text-blue-900 block">หน้าที่ต้องการพิมพ์</span>
                 <div className="grid grid-cols-2 gap-2">
@@ -379,7 +447,7 @@ export default function ServiceOptionModal({
                         : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    พิมพ์หน้าเดียว (ราคาปกติ)
+                    พิมพ์หน้าเดียว 
                   </button>
                   <button
                     type="button"
@@ -390,21 +458,37 @@ export default function ServiceOptionModal({
                         : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    พิมพ์หน้า-หลัง (x2)
+                    พิมพ์หน้า-หลัง
                   </button>
                 </div>
               </div>
             )}
 
-            {/* รายการสเปกย่อยตาม Template พร้อมปุ่มกดสลับ Toggle */}
-            {Array.from(new Set(service.options.map((o) => o.group_type))).map((group) => {
-              const groupItems = service.options.filter((o) => o.group_type === group);
+            {/* แสดงตัวเลือกย่อยจาก Supabase */}
+            {Array.from(new Set(rawOptions.map((o) => o.group_type))).map((group) => {
+              const groupItems = rawOptions.filter((o) => o.group_type === group);
+              const isOptionalGroup =
+                group.includes("เข้าเล่ม") ||
+                group.includes("ตกแต่ง") ||
+                group.includes("finishing");
+
               return (
                 <div key={group} className="space-y-1.5">
-                  <span className="text-xs font-bold text-slate-700 block">{group}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 block">{group}</span>
+                    {isOptionalGroup ? (
+                      <span className="text-[10px] text-slate-400">(ไม่บังคับเลือก)</span>
+                    ) : (
+                      <span className="text-[10px] text-rose-500 font-bold">* จำเป็น</span>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2">
                     {groupItems.map((opt) => {
                       const isSelected = modalOptions[group]?.id === opt.id;
+                      const displayName = opt.detail || opt.option_name || "ตัวเลือก";
+                      const itemPrice = Number(opt.price ?? opt.unit_price ?? 0);
+
                       return (
                         <button
                           key={opt.id}
@@ -416,8 +500,10 @@ export default function ServiceOptionModal({
                               : "border-slate-200 hover:bg-slate-50 text-slate-700"
                           }`}
                         >
-                          <span>{opt.option_name}</span>
-                          <span className="text-[11px] text-slate-500">฿{opt.unit_price}</span>
+                          <span className="truncate pr-2">{displayName}</span>
+                          <span className="text-[11px] text-slate-500 shrink-0">
+                            {itemPrice > 0 ? `฿${itemPrice}` : "ฟรี"}
+                          </span>
                         </button>
                       );
                     })}
@@ -426,7 +512,7 @@ export default function ServiceOptionModal({
               );
             })}
 
-            {/* จำนวนชุด / สำเนา */}
+            {/* จำนวนชุด */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-700 block">จำนวนชุดที่ต้องการ</span>
@@ -453,31 +539,45 @@ export default function ServiceOptionModal({
           </div>
         </div>
 
-        {/* Footer คำนวณราคาถูกต้อง */}
-        <div className="p-4 sm:px-6 border-t border-slate-100 bg-white flex items-center justify-between">
+        {/* Footer */}
+        <div className="p-4 sm:px-6 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
             <span className="text-[11px] text-slate-400 block">
-              {service.type_name === "เอกสาร"
+              {serviceTypeName === "เอกสาร"
                 ? `ราคาคำนวณ (${totalPages} หน้า × ${quantity} ชุด)`
                 : "ราคาคำนวณสุทธิ"}
             </span>
             <span className="text-base font-extrabold text-blue-600">
               ฿{priceCalculations.finalTotalPrice.toFixed(2)}
             </span>
+            {uploadedFiles.length > 0 && missingGroups.length > 0 && (
+              <span className="text-[10px] text-amber-600 font-medium block mt-0.5">
+                * กรุณาเลือก: {missingGroups.join(", ")}
+              </span>
+            )}
           </div>
 
           <button
             type="button"
-            disabled={uploadedFiles.length === 0}
+            disabled={!canAddToCart}
             onClick={handleSubmit}
-            className={`px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md transition cursor-pointer ${
-              uploadedFiles.length > 0
+            className={`w-full sm:w-auto px-6 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md transition cursor-pointer ${
+              canAddToCart
                 ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20"
                 : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
             }`}
           >
-            <Plus className="w-4 h-4" />
-            ใส่ตะกร้า
+            {isUploading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>กำลังอัปโหลดไฟล์ขึ้นเซิร์ฟเวอร์...</span>
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4" />
+                <span>ใส่ตะกร้า</span>
+              </>
+            )}
           </button>
         </div>
       </div>

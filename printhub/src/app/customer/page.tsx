@@ -1,24 +1,36 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import ShopCard, { Shop, checkIsShopOpen } from "../../component/customer/ShopCard";
 import SearchBar from "../../component/customer/SearchBar";
 import ServiceCategoryList from "../../component/customer/ServiceCategoryList";
 import FilterPillsBar from "../../component/customer/FilterPillsBar";
 import LocationMapModal from "../../component/customer/LocationMapModal";
-import { MapPinSearch, Loader2 } from "lucide-react";
+import { 
+  MapPinSearch, 
+  Loader2, 
+  Layers, 
+  FileText, 
+  Smile, 
+  Flag, 
+  Contact, 
+  Image as ImageIcon 
+} from "lucide-react";
 import NavBar from "../../component/customer/NavBar";
+import { useRouter } from "next/navigation";
 
-const getServiceIcon = (typeName: string) => {
-  if (typeName.includes("เอกสาร") || typeName.includes("ชีท")) return "📄";
-  if (typeName.includes("โปสเตอร์")) return "🖼️";
-  if (typeName.includes("นามบัตร") || typeName.includes("การ์ด")) return "💳";
-  if (typeName.includes("สติกเกอร์") || typeName.includes("ฉลาก")) return "🏷️";
-  if (typeName.includes("ไวนิล")) return "🚩";
-  return "🖨️";
-};
+// กำหนดหมวดหมู่และไอคอนจาก lucide-react แทน Emoji เดิมทั้งหมด
+const CATEGORIES = [
+  { name: "ทั้งหมด", icon: Layers },
+  { name: "เอกสาร", icon: FileText },
+  { name: "แผ่นสติกเกอร์", icon: Smile },
+  { name: "ป้ายไวนิล", icon: Flag },
+  { name: "นามบัตร", icon: Contact },
+  { name: "โปสเตอร์", icon: ImageIcon },
+];
 
 export default function CustomerHomePage() {
+  const router = useRouter();
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -27,18 +39,37 @@ export default function CustomerHomePage() {
   const [selectedFinishing, setSelectedFinishing] = useState<string[]>([]);
   const [minPrice, setMinPrice] = useState<number | undefined>(undefined);
   const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined);
-  
-  const [isOpenOnly, setIsOpenOnly] = useState(false);
-  const [isNearest, setIsNearest] = useState(false);
+
+  const [isOpenOnly, setIsOpenOnly] = useState(true);
+  const [isNearest, setIsNearest] = useState(true);
   const [isTopRated, setIsTopRated] = useState(false);
 
-  const [serviceCategories, setServiceCategories] = useState<{ name: string; icon: string }[]>([
-    { name: "ทั้งหมด", icon: "✨" },
-  ]);
+  const [cartItems, setCartItems] = useState<any[]>([]);
 
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [locationName, setLocationName] = useState("ระบุตำแหน่งของคุณบนแผนที่");
+  const [locationName, setLocationName] = useState<string>("ระบุตำแหน่งของคุณบนแผนที่");
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+
+  // ดึงข้อมูลตะกร้าสินค้าของลูกค้า
+  const fetchCartData = useCallback(async () => {
+    try {
+      const customerId = localStorage.getItem("customer_id") || localStorage.getItem("id");
+      if (!customerId) return;
+
+      const res = await fetch(`http://localhost:5000/api/customer/cart?customer_id=${customerId}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        const items =
+          json.data.cart_item ||
+          json.data.cart_items ||
+          json.data.items ||
+          (Array.isArray(json.data) ? json.data : []);
+        setCartItems(items);
+      }
+    } catch (err) {
+      console.error("Fetch home cart error:", err);
+    }
+  }, []);
 
   const fetchCurrentGps = useCallback(() => {
     if (typeof window !== "undefined" && navigator.geolocation) {
@@ -55,42 +86,34 @@ export default function CustomerHomePage() {
     }
   }, []);
 
-  const fetchServiceTypes = useCallback(async () => {
-    try {
-      const res = await fetch("http://localhost:5000/api/customer/service-types");
-      if (!res.ok) throw new Error("API not found");
-      const result = await res.json();
-      if (result.success && Array.isArray(result.data)) {
-        const uniqueTypes = result.data.map((type: string) => ({
-          name: type,
-          icon: getServiceIcon(type),
-        }));
-        setServiceCategories([{ name: "ทั้งหมด", icon: "✨" }, ...uniqueTypes]);
-      }
-    } catch {
-      setServiceCategories([
-        { name: "ทั้งหมด", icon: "✨" },
-        { name: "เอกสาร", icon: "📄" },
-        { name: "แผ่นสติกเกอร์", icon: "🏷️" },
-        { name: "ป้ายไวนิล", icon: "🚩" },
-        { name: "นามบัตร", icon: "💳" },
-        { name: "โปสเตอร์", icon: "🖼️" },
-      ]);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchCurrentGps();
-    fetchServiceTypes();
-  }, [fetchCurrentGps, fetchServiceTypes]);
+    const savedCoords = localStorage.getItem("user_coords");
+    const savedName = localStorage.getItem("user_location_name");
+
+    if (savedName) setLocationName(savedName);
+
+    if (savedCoords) {
+      try {
+        setUserCoords(JSON.parse(savedCoords));
+      } catch {
+        fetchCurrentGps();
+      }
+    } else {
+      fetchCurrentGps();
+    }
+
+    fetchCartData();
+  }, [fetchCurrentGps, fetchCartData]);
 
   const fetchShops = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (keyword) params.append("search", keyword);
-      if (selectedService && selectedService !== "ทั้งหมด") params.append("service_type", selectedService);
-      
+      if (selectedService && selectedService !== "ทั้งหมด") {
+        params.append("service_type", selectedService);
+      }
+
       if (selectedFinishing && selectedFinishing.length > 0) {
         params.append("finishing_service", selectedFinishing.join(", "));
       }
@@ -111,24 +134,23 @@ export default function CustomerHomePage() {
         params.append("user_lng", userCoords.lng.toString());
       }
 
-      // 🌟 ยิง API ไปที่ Backend Express Server
       const res = await fetch(`http://localhost:5000/api/customer/shops?${params.toString()}`);
-      
       if (!res.ok) {
         setShops([]);
         return;
       }
 
       const json = await res.json();
-      if (json.success && Array.isArray(json.data)) {
-        let list: Shop[] = json.data;
-        
-        // 🌟 กรองเฉพาะร้านที่เปิดทำการจริง
+      const rawList = Array.isArray(json) ? json : json.data;
+
+      if (Array.isArray(rawList)) {
+        let list: Shop[] = rawList;
         if (isOpenOnly) {
           list = list.filter((shop) => checkIsShopOpen(shop));
         }
-
         setShops(list);
+      } else {
+        setShops([]);
       }
     } catch (err) {
       console.error("Fetch shops error:", err);
@@ -152,6 +174,21 @@ export default function CustomerHomePage() {
     fetchShops();
   }, [fetchShops]);
 
+  // ตัวกรองหมวดหมู่ฝั่ง Client-side ป้องกันกรณี API ยังไม่ได้กรองประเภทบริการมาให้
+  const displayedShops = useMemo(() => {
+    if (!selectedService || selectedService === "ทั้งหมด") return shops;
+
+    return shops.filter((shop: any) => {
+      const types = shop.service_types || shop.services || shop.service_type || [];
+      if (!Array.isArray(types) || types.length === 0) return true;
+
+      return types.some((st: any) => {
+        const name = typeof st === "string" ? st : (st.type || st.category || "");
+        return name.trim() === selectedService.trim();
+      });
+    });
+  }, [shops, selectedService]);
+
   const handleResetFilters = () => {
     setIsNearest(false);
     setIsTopRated(false);
@@ -165,19 +202,27 @@ export default function CustomerHomePage() {
 
   const handleServiceChange = (serviceName: string) => {
     setSelectedService(serviceName);
-    setSelectedFinishing([]); 
+    setSelectedFinishing([]);
   };
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col font-sans text-slate-800 antialiased pb-12">
-      <NavBar />
+      <NavBar 
+        cartCount={cartItems.length}
+        onOpenCart={() => router.push("/customer/cart")}
+      />
 
       <main className="max-w-5xl w-full mx-auto px-4 py-4 space-y-4 flex-1">
         <div className="flex items-center justify-between bg-white border border-slate-200/90 rounded-2xl px-4 py-3 shadow-xs">
           <div className="flex items-center gap-2 text-xs truncate mr-2">
             <MapPinSearch className="w-4 h-4 text-blue-600 shrink-0" />
             <span className="text-slate-500 font-medium shrink-0">ค้นหาใกล้:</span>
-            <span className="font-bold text-slate-900 truncate">{locationName}</span>
+            <span 
+              className="font-bold text-slate-900 truncate"
+              suppressHydrationWarning
+            >
+              {locationName}
+            </span>
           </div>
           <button
             type="button"
@@ -188,8 +233,9 @@ export default function CustomerHomePage() {
           </button>
         </div>
 
+        {/* ส่ง CATEGORIES ที่เป็น Lucide Icons เข้าไปแสดงผล */}
         <ServiceCategoryList
-          categories={serviceCategories}
+          categories={CATEGORIES}
           selectedService={selectedService}
           onSelectService={handleServiceChange}
         />
@@ -207,6 +253,9 @@ export default function CustomerHomePage() {
 
           <FilterPillsBar
             selectedCategory={selectedService}
+            onSelectCategory={(category) => {
+              setSelectedService(category);
+            }}
             isNearest={isNearest}
             onToggleNearest={() => setIsNearest(!isNearest)}
             isOpenOnly={isOpenOnly}
@@ -230,7 +279,7 @@ export default function CustomerHomePage() {
             <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
             <span>กำลังค้นหาร้านค้าตามเงื่อนไข...</span>
           </div>
-        ) : shops.length === 0 ? (
+        ) : displayedShops.length === 0 ? (
           <div className="text-center py-20 text-slate-400 space-y-2">
             <p className="text-3xl">🔍</p>
             <p className="text-sm font-bold text-slate-700">ไม่พบร้านค้าที่ตรงกับเงื่อนไข</p>
@@ -238,7 +287,7 @@ export default function CustomerHomePage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 pt-1">
-            {shops.map((shop) => (
+            {displayedShops.map((shop) => (
               <ShopCard key={shop.id} shop={shop} />
             ))}
           </div>
@@ -250,9 +299,15 @@ export default function CustomerHomePage() {
         initialCoords={userCoords || { lat: 13.7298, lng: 100.7782 }}
         onClose={() => setIsMapModalOpen(false)}
         onConfirmLocation={(coords, placeName) => {
+          const finalName = placeName || `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`;
           setUserCoords(coords);
-          setLocationName(placeName || `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
+          setLocationName(finalName);
           setIsMapModalOpen(false);
+
+          if (typeof window !== "undefined") {
+            localStorage.setItem("user_coords", JSON.stringify(coords));
+            localStorage.setItem("user_location_name", finalName);
+          }
         }}
         onUseGps={fetchCurrentGps}
       />
