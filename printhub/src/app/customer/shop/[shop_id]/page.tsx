@@ -1,4 +1,5 @@
 "use client";
+import { supabase } from "@/config/supabase";
 
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -105,6 +106,44 @@ export default function ShopMainPage() {
   }, [shopId, customerId]);
 
   const handleAddToCart = async (itemPayload: any) => {
+    let uploadedUrls: string[] = [];
+
+    // 🌟 รองรับกรณีเลือกหลายไฟล์ (files: File[]) หรือไฟล์เดี่ยว (file: File)
+    const rawFiles: File[] = Array.isArray(itemPayload.files)
+      ? itemPayload.files
+      : itemPayload.file instanceof File
+      ? [itemPayload.file]
+      : [];
+
+    if (rawFiles.length > 0) {
+      for (const file of rawFiles) {
+        try {
+          const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+          const filePath = `${customerId}/${Date.now()}_${cleanFileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from("print_files")
+            .upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+          if (!uploadError) {
+            const { data: publicData } = supabase.storage
+              .from("print_files")
+              .getPublicUrl(filePath);
+            uploadedUrls.push(publicData.publicUrl);
+          } else {
+            console.error("Upload error:", uploadError.message);
+          }
+        } catch (uploadErr) {
+          console.error("Storage upload exception:", uploadErr);
+        }
+      }
+    }
+
+    // รวม URL หากมีหลายไฟล์ (คั่นด้วยลูกน้ำแบบไม่มีช่องว่าง) หรือใช้ URL เดิมถ้าไม่ได้แนบไฟล์ใหม่
+    const finalFileUrl = uploadedUrls.length > 0 
+      ? uploadedUrls.join(",") 
+      : (itemPayload.file_url || null);
+
     const qty = Number(itemPayload.quantity) || 1;
     const unitPrice = Number(itemPayload.unit_price) || 0;
     const computedSubtotal = itemPayload.subtotal ? Number(itemPayload.subtotal) : unitPrice * qty;
@@ -112,7 +151,7 @@ export default function ShopMainPage() {
     const payload = {
       customer_id: customerId,
       shop_id: shopId,
-      file_url: itemPayload.file_url || "https://example.com/demo.pdf",
+      file_url: finalFileUrl,
       category: itemPayload.category,
       selected_size: itemPayload.selected_size,
       color_type: itemPayload.color_type,
@@ -148,24 +187,20 @@ export default function ShopMainPage() {
       });
 
       if (res.status === 409) {
-        // 1. ล้างตะกร้าเดิมทันที
         await fetch("http://localhost:5000/api/customer/cart", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ customer_id: customerId }),
         });
 
-        // 2. เพิ่มสินค้าจากร้านใหม่เข้าไป
         await fetch("http://localhost:5000/api/customer/cart", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
 
-        // 3. อัปเดต UI State ให้เหลือแค่สินค้าชิ้นใหม่
         setCartItems([tempItem]);
       }
-
 
       const resCart = await fetch(
         `http://localhost:5000/api/customer/cart?customer_id=${customerId}`

@@ -43,7 +43,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
       localStorage.removeItem("id");
       localStorage.removeItem("token");
     }
-    router.push("/login");
+    router.push("/auth");
   };
 
   // ตรวจจับ active path **********************************************

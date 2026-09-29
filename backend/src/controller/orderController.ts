@@ -4,10 +4,11 @@ import supabase from '../config/supabase.js';
 // Helper Function คำนวณราคา
 export const calculateOrderPricing = (items: Array<any>) => {
   const subtotal = items.reduce((sum, item) => {
-    const pages = Number(item.page_count || item.total_pages) || 1;
-    const qty = Number(item.quantity) || 1;
-    const price = Number(item.unit_price) || 0;
-    return sum + (price * pages * qty);
+    const itemSubtotal = item.subtotal !== undefined && item.subtotal !== null
+      ? Number(item.subtotal)
+      : (Number(item.unit_price) || 0) * (Number(item.quantity) || 1);
+
+    return sum + itemSubtotal;
   }, 0);
 
   let smallOrderFee = 0;
@@ -94,7 +95,7 @@ export const createOrder = async (req: Request, res: Response) => {
           description: description || null,
           receive_date: receive_date || null,
           appointment_time: appointment_time || null,
-          current_status_id: statusRow?.id || "8c416cf8-140c-4563-a912-6a4a6c0a4d9f", // 👈 ใส่ fallback รหัสนี้ไว้ได้เลย
+          current_status_id: statusRow?.id || "8c416cf8-140c-4563-a912-6a4a6c0a4d9f",
           subtotal_price: pricing.subtotal_price,
           small_order_fee: pricing.small_order_fee,
           platform_fee: pricing.platform_fee,
@@ -116,7 +117,6 @@ export const createOrder = async (req: Request, res: Response) => {
       unit_price: item.unit_price,
       subtotal: item.subtotal || item.quantity * item.unit_price,
       page_count: item.page_count || 1,
-      // เก็บพวกรายละเอียดขนาด, สี, กระดาษ รวมไว้ใน describe เพื่อไม่ให้ข้อมูลหาย
       describe: [
         item.selected_size,
         item.color_type,
@@ -126,16 +126,57 @@ export const createOrder = async (req: Request, res: Response) => {
       ].filter(Boolean).join(" | ") || null,
     }));
 
-    const { error: itemsError } = await supabase.from("print_order_item").insert(orderItems);
+    // ✅ รับค่าเข้า data: insertedItems ชัดเจน
+    const { data: insertedItems, error: itemsError } = await supabase
+      .from("print_order_item")
+      .insert(orderItems)
+      .select("id, file_url, category, page_count");
+
     if (itemsError) throw itemsError;
 
-    if (statusRow?.id) {
-      await supabase.from("work_status").insert([
-        {
+    // =========================================================================
+    // 🌟 3. บันทึกลงตาราง print_file เพื่อเชื่อมโยง Storage URL เข้ากับ Database
+    // =========================================================================
+    // ใน createOrder ตอนบันทึกลง print_file
+    const filesToInsert: any[] = [];
+
+    (cart.cart_item || []).forEach((item: any, idx: number) => {
+      if (!item.file_url) return;
+
+      const correspondingItemId = (insertedItems as any)?.[idx]?.id || null;
+      // แยก URL ออกจากกันหากมีหลายไฟล์
+      const urls = item.file_url.split(",").map((u: string) => u.trim()).filter(Boolean);
+
+      urls.forEach((url: string, fileIdx: number) => {
+        const fileNameFromUrl = url.split("/").pop() || `${item.category}_${fileIdx + 1}.pdf`;
+        filesToInsert.push({
           order_id: newOrder.id,
-          status_id: statusRow.id,
-        },
-      ]);
+          item_id: correspondingItemId,
+          filename: urls.length > 1 ? `${item.category || "เอกสาร"}_ไฟล์ที่_${fileIdx + 1}` : fileNameFromUrl,
+          file_url: url,
+          file_size_mb: 0,
+          page_count: Number(item.page_count || item.total_pages) || 1,
+        });
+      });
+    });
+
+    if (filesToInsert.length > 0) {
+      await supabase.from("print_file").insert(filesToInsert);
+    }
+
+    // =========================================================================
+
+    if (statusRow?.id) {
+      try {
+        await supabase.from("work_status").insert([
+          {
+            order_id: newOrder.id,
+            status_id: statusRow.id,
+          },
+        ]);
+      } catch (wsErr) {
+        console.warn("work_status trigger warning:", wsErr);
+      }
     }
 
     await supabase.from("cart_item").delete().eq("cart_id", cart.id);
