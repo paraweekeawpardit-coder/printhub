@@ -166,3 +166,25 @@ export const getApprovedBankAccount = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
+// ==========================================
+// 3. ดึงรายชื่อลูกค้าทั้งหมดสำหรับ Admin
+// ==========================================
+export const getAllCustomers = async (req: Request, res: Response) => {
+  try {
+    const { data: customers, error } = await supabase
+      .from("customer")
+      .select("*") // ดึงมาทุกคอลัมน์ก่อนเพื่อไม่ให้เกิด Error คอลัมน์หาไม่เจอ
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Fetch all customers error:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json(customers);
+  } catch (err: any) {
+    console.error("Get all customers exception:", err.message || err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};

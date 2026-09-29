@@ -1,12 +1,36 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
+// GET: ดึงข้อมูลโปรไฟล์ตาม admin_id หรือ email เท่านั้น (ห้ามสุ่มดึงตัวแรก)
 export const getAdminProfile = async (req: Request, res: Response): Promise<Response> => {
   try {
+    const { id, email } = req.query;
+
+    // ถ้าไม่มีทั้ง id และ email ส่งมา ให้ปฏิเสธการเข้าถึงทันที
+    if (!id && !email) {
+      return res.status(401).json({ error: "Unauthorized: ไม่ระบุตัวตนผู้ใช้งาน" });
+    }
+
+    let query = supabase.from("admin").select("id, name, contact, avatar");
+
+    if (id) {
+      query = query.eq("id", id as string);
+    } else if (email) {
+      query = query.eq("contact", email as string);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error || !data) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลแอดมิน" });
+    }
+
     return res.status(200).json({
-      name: "Admin User",
-      email: "admin@printhub.com",
+      id: data.id,
+      name: data.name,
+      email: data.contact,
       role: "Super Admin",
+      avatar: data.avatar || "",
     });
   } catch (err: any) {
     console.error("getAdminProfile Error:", err.message || err);
@@ -14,12 +38,50 @@ export const getAdminProfile = async (req: Request, res: Response): Promise<Resp
   }
 };
 
+// PUT: อัปเดตข้อมูลโปรไฟล์โดยระบุ ID ของแอดมินคนนั้นๆ
 export const updateAdminProfile = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { name, email } = req.body;
+    const { id, name, email, avatar } = req.body;
+
+    let targetId = id;
+    if (!targetId && email) {
+      const { data: foundAdmin } = await supabase
+        .from("admin")
+        .select("id")
+        .eq("contact", email)
+        .maybeSingle();
+      targetId = foundAdmin?.id;
+    }
+
+    if (!targetId) {
+      return res.status(400).json({ error: "ระบุ ID หรือ Email ของแอดมินที่ต้องการอัปเดต" });
+    }
+
+    const { data, error } = await supabase
+      .from("admin")
+      .update({
+        name: name,
+        contact: email,
+        avatar: avatar,
+      })
+      .eq("id", targetId)
+      .select("id, name, contact, avatar")
+      .single();
+
+    if (error) {
+      console.error("Supabase Update Error:", error.message);
+      return res.status(400).json({ error: "บันทึกข้อมูลไม่สำเร็จ" });
+    }
+
     return res.status(200).json({
-      message: "Profile updated successfully",
-      data: { name, email },
+      message: "อัปเดตโปรไฟล์เรียบร้อยแล้ว",
+      data: {
+        id: data.id,
+        name: data.name,
+        email: data.contact,
+        role: "Super Admin",
+        avatar: data.avatar,
+      },
     });
   } catch (err: any) {
     console.error("updateAdminProfile Error:", err.message || err);
@@ -44,8 +106,8 @@ export const getNotifications = async (req: Request, res: Response): Promise<Res
   try {
     const { data: reports } = await supabase
       .from("report")
-      .select("id, created_at, is_verify")
-      .or("is_verify.eq.false,is_verify.is.null")
+      .select("id, created_at, is_verified")
+      .or("is_verified.eq.false,is_verified.is.null")
       .limit(5);
 
     const notifications = (reports ?? []).map((r: any) => ({

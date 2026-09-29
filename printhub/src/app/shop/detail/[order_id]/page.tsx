@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Lock,
   Layers,
+  Image as ImageIcon,
 } from "lucide-react";
 
 export default function OrderDetailPage() {
@@ -167,6 +168,13 @@ export default function OrderDetailPage() {
       </div>
     );
   }
+
+  const slipUrl =
+    order.slip_url ||
+    order.payment_slip ||
+    order.slipUrl ||
+    order.slip_image ||
+    null;
 
   const isConfirmed =
     order.status_state !== "รอการดำเนินงาน" &&

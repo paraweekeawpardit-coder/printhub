@@ -1,20 +1,27 @@
 "use client";
 
+import React from "react";
+import { Check, X, ArrowRight } from "lucide-react";
+
 export interface BankChangeRequest {
   id: string;
   shop_id: string;
   shop_name: string;
   logo_url?: string;
-  created_at: string;
-  old_account: {
-    bank_name: string;
-    account_number: string;
-    account_name: string;
+  shopLogo?: string;
+  created_at?: string;
+  createdAt?: string;
+  requested_at?: string;
+  updated_at?: string;
+  old_account?: {
+    bank_name?: string;
+    account_number?: string;
+    account_name?: string;
   };
-  new_account: {
-    bank_name: string;
-    account_number: string;
-    account_name: string;
+  new_account?: {
+    bank_name?: string;
+    account_number?: string;
+    account_name?: string;
   };
 }
 
@@ -24,130 +31,153 @@ interface BankRequestCardProps {
   onReject: (id: string) => void;
 }
 
-export default function BankRequestCard({ request, onApprove, onReject }: BankRequestCardProps) {
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+
+// Helper ฟังก์ชันแปลง Path รูปภาพให้เป็น Absolute URL ที่ถูกต้อง
+const getImageUrl = (url?: string) => {
+  if (!url) return undefined;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+
+  const cleanPath = url.startsWith("/") ? url.slice(1) : url;
+  return `${BACKEND_URL}/${cleanPath}`;
+};
+
+export default function BankRequestCard({
+  request,
+  onApprove,
+  onReject,
+}: BankRequestCardProps) {
+  const shopName = request?.shop_name || "ไม่ระบุชื่อร้าน";
+  const rawLogo = request?.logo_url || request?.shopLogo;
+  const logoSrc = getImageUrl(rawLogo);
+
+  // ดึงค่าวันที่โดยรองรับหลายชื่อ field
+  const rawDate =
+    request?.created_at ||
+    request?.createdAt ||
+    request?.requested_at ||
+    request?.updated_at;
+
+  // แปลงรูปแบบวันที่เป็นภาษาไทย (บังคับ Timezone เป็น Asia/Bangkok)
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr || dateStr === "-") return "-";
+
+    const safeDateStr =
+      typeof dateStr === "string" &&
+      !dateStr.endsWith("Z") &&
+      !dateStr.includes("+")
+        ? `${dateStr}Z`
+        : dateStr;
+
+    const date = new Date(safeDateStr);
+    if (isNaN(date.getTime())) return "-";
+
+    return date.toLocaleDateString("th-TH", {
+      timeZone: "Asia/Bangkok",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  };
+
+  const handleApprove = () => {
+    console.log(`Approving bank request ID: ${request?.id}`);
+    onApprove(request?.id);
+  };
+
+  const handleReject = () => {
+    console.log(`Rejecting bank request ID: ${request?.id}`);
+    onReject(request?.id);
+  };
+
   return (
-    <div className="bank-req-card">
-      <div className="req-header">
-        <div className="shop-info">
-          {request.logo_url && <img src={request.logo_url} alt="Logo" className="shop-logo-sm" />}
-          <h4>{request.shop_name}</h4>
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-3">
+          {logoSrc ? (
+            <img
+              src={logoSrc}
+              alt={shopName}
+              className="w-9 h-9 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center font-bold text-sm">
+              {shopName.charAt(0) || "S"}
+            </div>
+          )}
+          <h4 className="m-0 text-lg font-semibold text-slate-800">
+            {shopName}
+          </h4>
         </div>
-        <span className="req-date">ยื่นเมื่อ: {new Date(request.created_at).toLocaleDateString("th-TH")}</span>
+        <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md font-medium">
+          ยื่นเมื่อ: {formatDate(rawDate)}
+        </span>
       </div>
 
-      <div className="comparison-box">
-        <div className="account-col old">
-          <h5>บัญชีเดิม</h5>
-          <p><strong>ธนาคาร:</strong> {request.old_account?.bank_name || "-"}</p>
-          <p><strong>เลขบัญชี:</strong> {request.old_account?.account_number || "-"}</p>
-          <p><strong>ชื่อบัญชี:</strong> {request.old_account?.account_name || "-"}</p>
+      {/* Comparison Box */}
+      <div className="flex items-center bg-slate-50 rounded-xl p-4 gap-4 mb-4">
+        {/* บัญชีเดิม */}
+        <div className="flex-1">
+          <h5 className="m-0 mb-2 text-xs text-slate-500 font-semibold">
+            บัญชีเดิม
+          </h5>
+          <p className="my-1 text-sm text-slate-700">
+            <strong>ธนาคาร:</strong> {request?.old_account?.bank_name || "-"}
+          </p>
+          <p className="my-1 text-sm text-slate-700">
+            <strong>เลขบัญชี:</strong>{" "}
+            {request?.old_account?.account_number || "-"}
+          </p>
+          <p className="my-1 text-sm text-slate-700">
+            <strong>ชื่อบัญชี:</strong> {request?.old_account?.account_name || "-"}
+          </p>
         </div>
 
-        <div className="arrow-divider">➔</div>
+        {/* ลูกศรคั่น */}
+        <div className="flex items-center justify-center text-slate-400">
+          <ArrowRight size={20} />
+        </div>
 
-        <div className="account-col new">
-          <h5>บัญชีใหม่ที่ขอเปลี่ยน</h5>
-          <p><strong>ธนาคาร:</strong> {request.new_account.bank_name}</p>
-          <p><strong>เลขบัญชี:</strong> {request.new_account.account_number}</p>
-          <p><strong>ชื่อบัญชี:</strong> {request.new_account.account_name}</p>
+        {/* บัญชีใหม่ */}
+        <div className="flex-1">
+          <h5 className="m-0 mb-2 text-xs text-sky-600 font-semibold">
+            บัญชีใหม่ที่ขอเปลี่ยน
+          </h5>
+          <p className="my-1 text-sm text-slate-700">
+            <strong>ธนาคาร:</strong> {request?.new_account?.bank_name || "-"}
+          </p>
+          <p className="my-1 text-sm text-slate-700">
+            <strong>เลขบัญชี:</strong>{" "}
+            {request?.new_account?.account_number || "-"}
+          </p>
+          <p className="my-1 text-sm text-slate-700">
+            <strong>ชื่อบัญชี:</strong> {request?.new_account?.account_name || "-"}
+          </p>
         </div>
       </div>
 
-      <div className="req-actions">
-        <button onClick={() => onApprove(request.id)} className="btn-approve">
-          ✓ อนุมัติเปลี่ยนบัญชี
+      {/* Action Buttons */}
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={handleApprove}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white border-none px-4 py-2 rounded-lg font-semibold cursor-pointer flex items-center gap-1.5 text-sm transition-colors"
+        >
+          <Check size={16} />
+          <span>อนุมัติเปลี่ยนบัญชี</span>
         </button>
-        <button onClick={() => onReject(request.id)} className="btn-reject">
-          ✕ ปฏิเสธ
+        <button
+          onClick={handleReject}
+          className="bg-red-600 hover:bg-red-700 text-white border-none px-4 py-2 rounded-lg font-semibold cursor-pointer flex items-center gap-1.5 text-sm transition-colors"
+        >
+          <X size={16} />
+          <span>ปฏิเสธ</span>
         </button>
       </div>
-
-      <style jsx>{`
-        .bank-req-card {
-          background-color: #ffffff;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          padding: 20px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        }
-        .req-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 16px;
-        }
-        .shop-info {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-        .shop-logo-sm {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          object-fit: cover;
-        }
-        .req-header h4 {
-          margin: 0;
-          font-size: 1.1rem;
-        }
-        .req-date {
-          font-size: 0.8rem;
-          color: #94a3b8;
-        }
-        .comparison-box {
-          display: flex;
-          align-items: center;
-          background-color: #f8fafc;
-          border-radius: 12px;
-          padding: 16px;
-          gap: 16px;
-          margin-bottom: 16px;
-        }
-        .account-col {
-          flex: 1;
-        }
-        .account-col h5 {
-          margin: 0 0 8px;
-          font-size: 0.85rem;
-          color: #64748b;
-        }
-        .account-col.new h5 {
-          color: #0284c7;
-        }
-        .account-col p {
-          margin: 4px 0;
-          font-size: 0.9rem;
-        }
-        .arrow-divider {
-          font-size: 1.5rem;
-          color: #94a3b8;
-          font-weight: bold;
-        }
-        .req-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 12px;
-        }
-        .btn-approve {
-          background-color: #16a34a;
-          color: white;
-          border: none;
-          padding: 8px 16px;
-          border-radius: 8px;
-          font-weight: 600;
-          cursor: pointer;
-        }
-        .btn-reject {
-          background-color: #dc2626;
-          color: white;
-          border: none;
-          padding: 8px 16px;
-          border-radius: 8px;
-          font-weight: 600;
-          cursor: pointer;
-        }
-      `}</style>
     </div>
   );
 }

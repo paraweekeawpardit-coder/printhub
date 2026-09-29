@@ -44,7 +44,6 @@ app.use(
   })
 );
 
-// ปรับ Limit ให้รองรับการส่ง Base64 ของรูปภาพหลายไฟล์
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(morgan("dev"));
@@ -55,7 +54,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 // ==========================================
 // 2. Database Connection
 // ==========================================
-connectDB(); // เชื่อมต่อ MongoDB สำหรับระบบแชต
+connectDB();
 
 // ==========================================
 // 3. API Routes Mapping
@@ -91,7 +90,7 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"],
   },
-  maxHttpBufferSize: 1e8, // ปรับ Buffer Size ให้รองรับการส่งไฟล์รูปภาพขนาดใหญ่ผ่าน Socket
+  maxHttpBufferSize: 1e8,
 });
 
 interface IMessage {
@@ -99,7 +98,7 @@ interface IMessage {
   sender: "customer" | "shop";
   text?: string;
   message?: string;
-  images?: string[]; // เพิ่มรองรับ Array รูปภาพ
+  images?: string[];
   time: string;
   isRead: boolean;
   createdAt?: Date;
@@ -110,7 +109,7 @@ const MessageSchema = new Schema(
     orderId: { type: String, required: true, index: true },
     sender: { type: String, required: true, enum: ["customer", "shop"] },
     text: { type: String, default: "" },
-    images: { type: [String], default: [] }, // เพิ่ม Field images รองรับ Array of String
+    images: { type: [String], default: [] },
     time: { type: String, required: true },
     isRead: { type: Boolean, default: false },
   },
@@ -122,7 +121,6 @@ const Message = mongoose.models.Message || mongoose.model("Message", MessageSche
 io.on("connection", (socket) => {
   console.log(`⚡ User connected: ${socket.id}`);
 
-  // เข้าร่วมห้องแชตออเดอร์
   socket.on("join_order_chat", async (orderId: string) => {
     if (!orderId || orderId === "undefined") return;
 
@@ -131,7 +129,6 @@ io.on("connection", (socket) => {
     });
 
     socket.join(orderId);
-    console.log(`📌 User \({socket.id} joined order room:\){orderId}`);
 
     try {
       const history = await Message.find({ orderId }).sort({ createdAt: 1 });
@@ -141,24 +138,20 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ส่งข้อความเฉพาะใน Room ของออเดอร์นั้น
   socket.on("send_message", async (data: IMessage) => {
     if (!data.orderId || data.orderId === "undefined") return;
 
     const messageText = data.text || data.message || "";
     const imageList = data.images || [];
 
-    // ต้องมีอย่างใดอย่างหนึ่ง (ข้อความ หรือ รูปภาพ) ถึงจะบันทึก
     if (!messageText.trim() && imageList.length === 0) return;
-
-    console.log(`💬 [Order #\({data.orderId}]\){data.sender}: \({messageText} (\){imageList.length} images)`);
 
     try {
       const newMessage = new Message({
         orderId: data.orderId,
         sender: data.sender,
         text: messageText,
-        images: imageList, // บันทึก Array รูปภาพลง MongoDB
+        images: imageList,
         time: data.time,
         isRead: false,
       });
@@ -170,7 +163,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // อัปเดตสถานะอ่านแล้ว
   socket.on("mark_as_read", async (data: { orderId: string; reader: string }) => {
     if (!data.orderId || data.orderId === "undefined") return;
     try {
@@ -196,7 +188,6 @@ io.on("connection", (socket) => {
 // 5. REST APIs (Messages & Order Status)
 // ==========================================
 
-// REST API: ดึงข้อความแชตเฉพาะออเดอร์
 app.get("/api/messages/:orderId", async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
@@ -211,7 +202,6 @@ app.get("/api/messages/:orderId", async (req: Request, res: Response) => {
   }
 });
 
-// REST API: ลบข้อความทั้งหมดของออเดอร์นั้นใน MongoDB
 app.delete("/api/messages/:orderId", async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
@@ -228,7 +218,6 @@ app.delete("/api/messages/:orderId", async (req: Request, res: Response) => {
   }
 });
 
-// REST API: ดึงสถานะออเดอร์จาก Supabase
 app.get("/api/orders/:orderId/status", async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
@@ -273,7 +262,6 @@ app.get("/api/orders/:orderId/status", async (req: Request, res: Response) => {
   }
 });
 
-// REST API: ดึงรายการออเดอร์ทั้งหมดของร้านค้าเพื่อแสดงบนแถบแชตฝั่งซ้าย
 app.get("/api/chat/shop-orders", async (req: Request, res: Response) => {
   try {
     const shopId = req.query.shop_id as string;
@@ -289,15 +277,14 @@ app.get("/api/chat/shop-orders", async (req: Request, res: Response) => {
       return res.status(200).json([]);
     }
 
-    // ดึงข้อมูลลูกค้า
     const customerIds = Array.from(new Set(orders.map((o: any) => o.customer_id || o.user_id).filter(Boolean)));
-    let customerMap: any = {};
+    let customerMap: Record<string, string> = {};
 
     if (customerIds.length > 0) {
       const { data: customers } = await supabase.from("customer").select("*").in("id", customerIds);
       if (customers) {
         customers.forEach((c: any) => {
-          const fullName = `\({c.first_name || c.name || ""}\){c.last_name || ""}`.trim();
+          const fullName = `${c.first_name || c.name || ""} ${c.last_name || ""}`.trim();
           if (fullName) customerMap[String(c.id)] = fullName;
         });
       }

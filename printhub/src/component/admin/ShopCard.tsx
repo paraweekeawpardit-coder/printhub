@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye } from "lucide-react";
+import { Eye, Check, X } from "lucide-react";
 
 export interface Shop {
   id?: string;
@@ -31,17 +31,43 @@ interface ShopCardProps {
   onSelectShop?: (shop: Shop) => void;
 }
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+
+// Helper ฟังก์ชันแปลง Image Path ให้เป็น Absolute URL เสมอ
+const getImageUrl = (url?: string) => {
+  if (!url) return undefined;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  
+  // ตัด Slash นำหน้าออกก่อนนำมาเชื่อมต่อ
+  const cleanPath = url.startsWith("/") ? url.slice(1) : url;
+  return `${BACKEND_URL}/${cleanPath}`;
+};
+
 export default function ShopCard({ shop, onVerify, onSelectShop }: ShopCardProps) {
   const shopId = shop.id || shop._id || "";
   const shopName = shop.shop_name || shop.name || "ไม่ระบุชื่อร้าน";
   const ownerName = shop.owner_name || shop.ownerName || "ไม่ระบุ";
-  const imageSrc = shop.profile_image || shop.logoUrl;
+  
+  // แปลง Path รูปภาพผ่าน Helper Function
+  const rawImageSrc = shop.profile_image || shop.logoUrl;
+  const imageSrc = getImageUrl(rawImageSrc);
+
   const openTime = shop.open_time || shop.openTime;
   const closeTime = shop.close_time || shop.closeTime;
 
   const formatTime = (timeStr?: string) => {
     if (!timeStr) return "ไม่ระบุ";
     return timeStr.slice(0, 5) + " น.";
+  };
+
+  const handleApprove = () => {
+    console.log(`Approving shop ID: ${shopId}`);
+    onVerify(shopId, "approve");
+  };
+
+  const handleReject = () => {
+    console.log(`Rejecting shop ID: ${shopId}`);
+    onVerify(shopId, "reject");
   };
 
   return (
@@ -92,8 +118,8 @@ export default function ShopCard({ shop, onVerify, onSelectShop }: ShopCardProps
             className="btn btn-detail"
             onClick={() => onSelectShop(shop)}
           >
-            <Eye className="w-4 h-4 inline-block mr-1" />
-            ดูรายละเอียดข้อมูลร้าน
+            <Eye className="w-4 h-4 inline-block mr-1" size={16} />
+            <span>ดูรายละเอียดข้อมูลร้าน</span>
           </button>
         )}
 
@@ -101,16 +127,18 @@ export default function ShopCard({ shop, onVerify, onSelectShop }: ShopCardProps
           <button
             type="button"
             className="btn btn-reject"
-            onClick={() => onVerify(shopId, "reject")}
+            onClick={handleReject}
           >
-            ปฏิเสธ
+            <X size={16} />
+            <span>ปฏิเสธ</span>
           </button>
           <button
             type="button"
             className="btn btn-approve"
-            onClick={() => onVerify(shopId, "approve")}
+            onClick={handleApprove}
           >
-            อนุมัติร้านค้า
+            <Check size={16} />
+            <span>อนุมัติร้านค้า</span>
           </button>
         </div>
       </div>
@@ -232,6 +260,7 @@ export default function ShopCard({ shop, onVerify, onSelectShop }: ShopCardProps
           display: flex;
           align-items: center;
           justify-content: center;
+          gap: 6px;
         }
         .btn-detail {
           width: 100%;

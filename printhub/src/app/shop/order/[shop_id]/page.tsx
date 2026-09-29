@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
+import { Lock } from "lucide-react";
 import ShopNavbar from "@/component/shop/navbar";
 import PageHeading from "@/component/shop/Pageheading";
 import OrderStatusTabs, {
@@ -30,6 +31,7 @@ export default function OrderPage() {
     useState<OrderStatusFilter>("ทั้งหมด");
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [isSuspended, setIsSuspended] = useState<boolean>(false);
 
   // 2. ถ้า paramShopId ไม่มี ให้ดึงจาก localStorage
   useEffect(() => {
@@ -42,7 +44,27 @@ export default function OrderPage() {
     }
   }, [paramShopId, shopId]);
 
-  // 3. ฟังก์ชันดึงรายการออเดอร์ตามสถานะ
+  // 3. ตรวจสอบสถานะของร้านค้า (Suspended Check)
+  const checkShopStatus = useCallback(async () => {
+    if (!shopId) return;
+    try {
+      const response = await axios.get(`${API_BASE}/api/shop/profile/${shopId}`);
+      const shopData = response.data?.data ?? response.data;
+      if (shopData?.status === "suspended") {
+        setIsSuspended(true);
+      } else {
+        setIsSuspended(false);
+      }
+    } catch (error) {
+      console.error("Check shop status error:", error);
+    }
+  }, [shopId]);
+
+  useEffect(() => {
+    checkShopStatus();
+  }, [checkShopStatus]);
+
+  // 4. ฟังก์ชันดึงรายการออเดอร์ตามสถานะ
   const getOrder = useCallback(async () => {
     if (!shopId) return;
 
@@ -65,10 +87,14 @@ export default function OrderPage() {
     getOrder();
   }, [getOrder]);
 
-  // 4. ฟังก์ชันอัปเดตสถานะออเดอร์
+  // 5. ฟังก์ชันอัปเดตสถานะออเดอร์ (ล็อกไม่ให้ทำงานถ้าร้านโดนระงับ)
   const handleUpdateStatus = useCallback(
     async (orderId: string, newStatus: string) => {
       if (!shopId) return;
+      if (isSuspended) {
+        console.warn("[Action Blocked] Shop is suspended. Cannot update order status.");
+        return;
+      }
 
       try {
         await axios.patch(
@@ -81,7 +107,7 @@ export default function OrderPage() {
         console.error("Update order status error:", error);
       }
     },
-    [shopId, getOrder]
+    [shopId, getOrder, isSuspended]
   );
 
   return (
@@ -90,6 +116,16 @@ export default function OrderPage() {
 
       <main className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
         <PageHeading title="คำสั่งพิมพ์" />
+
+        {/* แถบแจ้งเตือนเมื่อร้านถูกระงับ */}
+        {isSuspended && (
+          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm">
+            <Lock className="h-5 w-5 shrink-0 text-amber-600" />
+            <p className="text-sm font-medium">
+              บัญชีถูกระงับการใช้งาน ระบบปิดการปรับเปลี่ยนสถานะคำสั่งพิมพ์ชั่วคราว
+            </p>
+          </div>
+        )}
 
         <OrderStatusTabs active={activeFilter} onChange={setActiveFilter} />
 
@@ -104,6 +140,7 @@ export default function OrderPage() {
                 <OrderDetailCard
                   key={order.order_id}
                   order={order}
+                  disabled={isSuspended}
                   onClick={() => router.push(`/shop/detail/${order.order_id}`)}
                   onUpdateStatus={handleUpdateStatus}
                 />

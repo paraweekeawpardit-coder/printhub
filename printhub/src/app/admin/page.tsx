@@ -18,34 +18,47 @@ interface DashboardStats {
 
 export default function AdminHomePage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+  const fetchDashboardStats = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/admin/dashboard-stats?t=${Date.now()}`);
+      if (!res.ok) throw new Error("API Error");
+
+      const data = await res.json();
+      setStats({
+        totalCustomers: data.totalCustomers ?? 0,
+        totalActiveShops: data.totalActiveShops ?? 0,
+        pendingReports: data.pendingReports ?? 0,
+        dailyIncome: data.dailyIncome ?? [],
+      });
+    } catch (error) {
+      console.error("Fetch dashboard error:", error);
+      setStats({
+        totalCustomers: 0,
+        totalActiveShops: 0,
+        pendingReports: 0,
+        dailyIncome: [],
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // ใช้ Query Parameter timestamp เพื่อกัน Cache โดยไม่ติด CORS Header
-    fetch(`${API_URL}/dashboard-stats?t=${Date.now()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("API Error");
-        return res.json();
-      })
-      .then((data) => {
-        setStats({
-          totalCustomers: data.totalCustomers ?? 0,
-          totalActiveShops: data.totalActiveShops ?? 0,
-          pendingReports: data.pendingReports ?? 0,
-          dailyIncome: data.dailyIncome ?? [],
-        });
-      })
-      .catch(() => {
-        setStats({
-          totalCustomers: 0,
-          totalActiveShops: 0,
-          pendingReports: 0,
-          dailyIncome: [],
-        });
-      });
-  }, [API_URL]);
+    fetchDashboardStats();
+  }, []);
 
-  if (!stats) return <div>กำลังโหลดข้อมูล...</div>;
+  if (loading || !stats) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <p className="text-gray-500 font-medium">กำลังโหลดข้อมูล...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-page-container">
