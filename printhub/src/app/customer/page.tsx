@@ -14,12 +14,12 @@ import {
   Smile, 
   Flag, 
   Contact, 
-  Image as ImageIcon 
+  Image as ImageIcon,
+  SearchX
 } from "lucide-react";
 import NavBar from "../../component/customer/NavBar";
 import { useRouter } from "next/navigation";
 
-// กำหนดหมวดหมู่และไอคอนจาก lucide-react แทน Emoji เดิมทั้งหมด
 const CATEGORIES = [
   { name: "ทั้งหมด", icon: Layers },
   { name: "เอกสาร", icon: FileText },
@@ -50,7 +50,6 @@ export default function CustomerHomePage() {
   const [locationName, setLocationName] = useState<string>("ระบุตำแหน่งของคุณบนแผนที่");
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
 
-  // ดึงข้อมูลตะกร้าสินค้าของลูกค้า
   const fetchCartData = useCallback(async () => {
     try {
       const customerId = localStorage.getItem("customer_id") || localStorage.getItem("id");
@@ -105,6 +104,7 @@ export default function CustomerHomePage() {
     fetchCartData();
   }, [fetchCurrentGps, fetchCartData]);
 
+  // 🌟 ฟังก์ชันดึงข้อมูลร้านค้าที่เชื่อมกับ Combination Price Logic ของ Backend
   const fetchShops = useCallback(async () => {
     setLoading(true);
     try {
@@ -115,11 +115,16 @@ export default function CustomerHomePage() {
       }
 
       if (selectedFinishing && selectedFinishing.length > 0) {
-        params.append("finishing_service", selectedFinishing.join(", "));
+        params.append("finishing_service", selectedFinishing.join(","));
       }
 
-      if (minPrice !== undefined && minPrice !== null) params.append("min_price", minPrice.toString());
-      if (maxPrice !== undefined && maxPrice !== null) params.append("max_price", maxPrice.toString());
+      // กรองส่งเฉพาะราคาที่มากกว่า 0 เท่านั้น
+      if (minPrice !== undefined && minPrice !== null && Number(minPrice) > 0) {
+        params.append("min_price", minPrice.toString());
+      }
+      if (maxPrice !== undefined && maxPrice !== null && Number(maxPrice) > 0) {
+        params.append("max_price", maxPrice.toString());
+      }
 
       let sortMode = "distance";
       if (isNearest && isTopRated) {
@@ -144,11 +149,7 @@ export default function CustomerHomePage() {
       const rawList = Array.isArray(json) ? json : json.data;
 
       if (Array.isArray(rawList)) {
-        let list: Shop[] = rawList;
-        if (isOpenOnly) {
-          list = list.filter((shop) => checkIsShopOpen(shop));
-        }
-        setShops(list);
+        setShops(rawList);
       } else {
         setShops([]);
       }
@@ -164,7 +165,6 @@ export default function CustomerHomePage() {
     selectedFinishing,
     minPrice,
     maxPrice,
-    isOpenOnly,
     isNearest,
     isTopRated,
     userCoords,
@@ -174,20 +174,14 @@ export default function CustomerHomePage() {
     fetchShops();
   }, [fetchShops]);
 
-  // ตัวกรองหมวดหมู่ฝั่ง Client-side ป้องกันกรณี API ยังไม่ได้กรองประเภทบริการมาให้
   const displayedShops = useMemo(() => {
-    if (!selectedService || selectedService === "ทั้งหมด") return shops;
-
-    return shops.filter((shop: any) => {
-      const types = shop.service_types || shop.services || shop.service_type || [];
-      if (!Array.isArray(types) || types.length === 0) return true;
-
-      return types.some((st: any) => {
-        const name = typeof st === "string" ? st : (st.type || st.category || "");
-        return name.trim() === selectedService.trim();
-      });
+    return shops.filter((shop) => {
+      if (isOpenOnly) {
+        return checkIsShopOpen(shop);
+      }
+      return true;
     });
-  }, [shops, selectedService]);
+  }, [shops, isOpenOnly]);
 
   const handleResetFilters = () => {
     setIsNearest(false);
@@ -233,7 +227,6 @@ export default function CustomerHomePage() {
           </button>
         </div>
 
-        {/* ส่ง CATEGORIES ที่เป็น Lucide Icons เข้าไปแสดงผล */}
         <ServiceCategoryList
           categories={CATEGORIES}
           selectedService={selectedService}
@@ -280,8 +273,10 @@ export default function CustomerHomePage() {
             <span>กำลังค้นหาร้านค้าตามเงื่อนไข...</span>
           </div>
         ) : displayedShops.length === 0 ? (
-          <div className="text-center py-20 text-slate-400 space-y-2">
-            <p className="text-3xl">🔍</p>
+          <div className="text-center py-20 text-slate-400 space-y-2.5 flex flex-col items-center justify-center">
+            <div className="p-3 bg-slate-100 text-slate-400 rounded-full">
+              <SearchX className="w-8 h-8" />
+            </div>
             <p className="text-sm font-bold text-slate-700">ไม่พบร้านค้าที่ตรงกับเงื่อนไข</p>
             <p className="text-xs text-slate-400">ลองปรับคำค้นหา หรือรีเซ็ตตัวกรองใหม่อีกครั้ง</p>
           </div>
