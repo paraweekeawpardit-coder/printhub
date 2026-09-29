@@ -75,7 +75,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
       localStorage.removeItem("token");
       sessionStorage.clear();
     }
-    router.push("/login");
+    router.push("/auth");
   };
 
   return (

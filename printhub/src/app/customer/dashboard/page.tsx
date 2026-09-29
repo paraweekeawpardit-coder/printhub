@@ -412,8 +412,8 @@ export default function CustomerDashboardPage() {
                   : "";
 
                 const itemSummary =
-                  order.order_items && order.order_items.length > 0
-                    ? order.order_items
+                  order.print_order_item && order.print_order_item.length > 0
+                    ? order.print_order_item
                         .map((it: any) => `${it.category || "งานพิมพ์"} (x${it.quantity})`)
                         .join(", ")
                     : "งานพิมพ์เอกสาร";
@@ -490,23 +490,15 @@ export default function CustomerDashboardPage() {
                             </button>
                           )}
 
-                           {/* ปุ่มแชต (แก้ไข Path ตามโครงสร้างโฟลเดอร์จริง) */}
-                          {!isCanceled && (
+                          {/* ปุ่มแชต */}
+                          {(isPrinting || isReady) && (
                             <button
                               type="button"
-                              onClick={() => {
-                                const shopId = order.shop?.id || order.shop_id;
-                                if (!order.id || !shopId) {
-                                  showToast("ไม่พบข้อมูลออเดอร์หรือร้านค้า");
-                                  return;
-                                }
-                                // เปลี่ยน Path ให้ตรงกับโฟลเดอร์ customer/order/[shop_id]/chat
-                                router.push(`/customer/order/${shopId}/chat?order_id=${order.id}`);
-                              }}
+                              onClick={() => router.push(`/customer/chat?order_id=${order.id}&shop_id=${order.shop?.id}`)}
                               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
                             >
                               <MessageCircle className="w-3.5 h-3.5 text-white" />
-                              <span>แชต</span>
+                              <span>แชท</span>
                             </button>
                           )}
 
@@ -545,10 +537,10 @@ export default function CustomerDashboardPage() {
                                 type="button"
                                 onClick={() => router.push(`/customer/review?order_id=${order.id}&shop_id=${order.shop?.id}`)}
                                 className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
-                                >
+                              >
                                 <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                                 <span>รีวิว</span>
-                                </button>
+                              </button>
                             </>
                           )}
 
@@ -575,61 +567,106 @@ export default function CustomerDashboardPage() {
 
                     {/* กล่อง Dropdown รายละเอียด */}
                     {isExpanded && (
-                      <div className="border-t border-slate-100 bg-[#F8FAFC] p-4 sm:p-5 space-y-4">
-                        <div>
-                          <span className="text-xs font-bold text-slate-700 block mb-2">
-                            รายการเอกสารและสเปกงานพิมพ์
-                          </span>
-                          <div className="bg-white rounded-xl border border-slate-200/80 divide-y divide-slate-100 overflow-hidden">
-                            {(order.order_items && order.order_items.length > 0) ? (
-                              order.order_items.map((it: any, idx: number) => (
-                                <div key={idx} className="p-3 flex items-center justify-between text-xs">
-                                  <div>
-                                    <span className="font-semibold text-slate-800">
-                                      {idx + 1}. {it.category || "งานพิมพ์"}
-                                    </span>
-                                    <div className="text-[11px] text-slate-400 mt-0.5">
-                                      จำนวน: {it.quantity} ชุด
-                                      {it.page_count ? ` • ${it.page_count} หน้า/ชุด` : ""}
-                                    </div>
-                                  </div>
-                                  <span className="font-bold text-slate-700">
-                                    ฿{Number(it.subtotal || it.unit_price * it.quantity || 0).toFixed(2)}
-                                  </span>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="p-3 text-xs text-slate-400">ไม่มีข้อมูลสินค้าย่อย</div>
-                            )}
-                          </div>
-                        </div>
+                      <div className="border-t border-slate-100 bg-[#F8FAFC]">
+                        <div className="space-y-4 p-5 bg-white text-slate-800 text-sm font-sans">
+                          {/* หัวข้อหลัก */}
+                          <h3 className="font-extrabold text-[#1e40af] text-base">
+                            รายการงานพิมพ์:
+                          </h3>
 
-                        <div className="bg-white rounded-xl border border-slate-200/80 p-3 space-y-1.5 text-xs">
-                          <div className="flex justify-between text-slate-500">
-                            <span>ค่างานพิมพ์รวม</span>
-                            <span>฿{Number(order.subtotal_price || order.total_price || 0).toFixed(2)}</span>
+                          {/* วนลูปรายการงานพิมพ์ */}
+                          <div className="space-y-4">
+                            {order.print_order_item?.map((item: any, idx: number) => {
+                              const pageCount = Number(item.page_count) || 1;
+                              const unitPrice = Number(item.unit_price) || 0;
+                              const quantity = Number(item.quantity) || 1;
+                              const itemSubtotal = Number(item.subtotal) || (unitPrice * pageCount * quantity);
+                              const pricePerSet = unitPrice * pageCount;
+
+                              // จัดฟอร์แมตสเปกย่อย เช่น A3 (ขาว-ดำ / กระดูกงู)
+                              const formattedSpecs = item.describe
+                                ? item.describe.split("|").map((s: string) => s.trim()).join(" / ")
+                                : "";
+
+                              return (
+                                <div 
+                                  key={item.id || idx} 
+                                  className="pl-3 border-l-4 border-[#3b82f6] space-y-1.5"
+                                >
+                                  {/* ชื่อประเภท เช่น เอกสาร */}
+                                  <div className="font-black text-slate-900 text-base">
+                                    {item.category || "เอกสาร"}
+                                  </div>
+
+                                  {/* สเปกงานพิมพ์ย่อย */}
+                                  <div className="text-slate-700 font-medium">
+                                    - งานพิมพ์{item.category || "เอกสาร"} {formattedSpecs ? `(${formattedSpecs})` : ""}
+                                  </div>
+
+                                  {/* แจกแจงจำนวนหน้าและราคาต่อหน้า */}
+                                  <div className="text-slate-600 font-normal">
+                                    {pageCount} หน้า x {unitPrice.toFixed(2)} บาท/หน้า = {pricePerSet.toFixed(2)} บาท
+                                  </div>
+
+                                  {/* แจกแจงจำนวนชุด และราคารวมของชิ้นนั้น */}
+                                  <div className="flex justify-between items-center pt-1 font-bold">
+                                    <span className="text-slate-800 font-semibold">
+                                      รวม {quantity} ชุด (x{quantity})
+                                    </span>
+                                    <span className="text-slate-900 font-extrabold tracking-tight">
+                                      = {itemSubtotal.toFixed(2)} บาท
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                          {Number(order.small_order_fee || 0) > 0 && (
-                            <div className="flex justify-between text-amber-600">
-                              <span>ค่าธรรมเนียมคำสั่งซื้อขนาดเล็ก (&lt;50 บาท)</span>
-                              <span>+฿{Number(order.small_order_fee).toFixed(2)}</span>
+
+                          {/* แสดงหมายเหตุ (ถ้ามี) */}
+                          {order.description && (
+                            <div className="text-xs text-slate-500 pl-3 pt-1">
+                              หมายเหตุ: {order.description}
                             </div>
                           )}
-                          <div className="flex justify-between font-bold text-slate-800 pt-1.5 border-t border-slate-100">
-                            <span>ยอดชำระสุทธิ</span>
-                            <span className="text-blue-600">
-                              ฿{Number(order.total_amount || order.total_price || 0).toFixed(2)}
+
+                          {/* เส้นคั่นเดี่ยวบาง */}
+                          <hr className="border-t border-slate-300 my-3" />
+
+                          {/* สรุปราคารวมและค่าธรรมเนียม */}
+                          <div className="space-y-2 text-sm font-bold">
+                            <div className="flex justify-between items-center text-slate-900">
+                              <span>รวมค่างานปริ้นท์ทั้งสิ้น</span>
+                              <span className="tracking-tight">
+                                = {Number(order.subtotal_price || order.total_price || 0).toFixed(2)} บาท
+                              </span>
+                            </div>
+
+                            {/* ค่าธรรมเนียมคำสั่งซื้อขนาดเล็ก */}
+                            {Number(order.small_order_fee) > 0 && (
+                              <div>
+                                <div className="flex justify-between items-center text-[#9a3412]">
+                                  <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (Small Order Fee)</span>
+                                  <span className="tracking-tight">
+                                    = +{Number(order.small_order_fee).toFixed(2)} บาท
+                                  </span>
+                                </div>
+                                <p className="text-xs font-normal text-[#c2410c] mt-0.5">
+                                  *เนื่องจากค่างานไม่ถึง 50 บาท (คิดเพิ่ม 20 บาท)
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* เส้นคั่นคู่ด้านล่างแบบในรูป */}
+                          <div className="border-t-2 border-b border-slate-300 h-1 my-3" />
+
+                          {/* ยอดชำระเงินสุทธิ */}
+                          <div className="flex justify-between items-center font-black text-lg text-[#1d4ed8]">
+                            <span>ยอดชำระเงินสุทธิ</span>
+                            <span className="tracking-tight">
+                              = {Number(order.total_amount || order.total_price || 0).toFixed(2)} บาท
                             </span>
                           </div>
-                        </div>
-
-                        <div className="text-[11px] text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                          <span>
-                            ร้านค้า: <strong>{order.shop?.shop_name}</strong> {order.shop?.phone ? `(โทร: ${order.shop.phone})` : ""}
-                          </span>
-                          <span>
-                            เลขอ้างอิง: <code>{order.id}</code>
-                          </span>
                         </div>
                       </div>
                     )}
