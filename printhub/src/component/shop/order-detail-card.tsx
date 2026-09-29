@@ -1,3 +1,5 @@
+"use client";
+
 import { MessageCircle, ExternalLink, FileText } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
@@ -90,12 +92,22 @@ export default function OrderDetailCard({
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
 
-  // ฟังก์ชันนำทางไปหน้าแชทของออเดอร์นี้
+  // 👈 ฟังก์ชันนำทางไปหน้าแชทของออเดอร์นี้
   const handleGoToChat = (e: React.MouseEvent) => {
-    e.stopPropagation(); // ป้องกันไม่ให้ทะลุไปโดน onClick หลักของการ์ด
+    e.stopPropagation(); // ป้องกันไม่ให้คลิกทะลุไปโดน onClick หลักของการ์ด
+
+    // ถ้ามีการส่ง custom callback มาจาก parent ให้รันด้วย
+    if (onChatClick) {
+      onChatClick(order.order_id);
+      return;
+    }
+
+    // กรณีทั่วไป: ดึง shop_id และเปิดหน้าแชทตามออเดอร์
     const shopId = localStorage.getItem("shop_id") || "";
     if (shopId && order.order_id) {
       router.push(`/shop/order/${shopId}/chat?order_id=${order.order_id}`);
+    } else {
+      console.warn("ไม่พบ shop_id ใน localStorage หรือ order_id");
     }
   };
 
@@ -130,9 +142,7 @@ export default function OrderDetailCard({
             </h3>
           </div>
 
-          <CustomerBadge
-            name={order.customer_name}
-          />
+          <CustomerBadge name={order.customer_name} />
         </div>
 
         {/* Items List */}
@@ -196,11 +206,8 @@ export default function OrderDetailCard({
         {/* Chat Action */}
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onChatClick?.(order.order_id);
-          }}
-          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
+          onClick={handleGoToChat} // 👈 เปลี่ยนมาใช้ handleGoToChat ตรงนี้
+          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
         >
           <MessageCircle size={14} />
           <span>แชทกับลูกค้า</span>
