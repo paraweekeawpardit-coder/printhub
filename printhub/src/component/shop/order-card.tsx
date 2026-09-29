@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { Check, X, Printer, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
@@ -31,25 +30,64 @@ type Props = {
 
 const API_BASE = "http://localhost:5000";
 
+const STATUS = {
+  PENDING: "รอการดำเนินงาน",
+  PRINTING: "กำลังพิมพ์",
+  DONE: "พิมพ์เสร็จสิ้น",
+  COMPLETED: "รายการเสร็จสิ้น",
+  CANCELLED: "ยกเลิกการพิมพ์",
+} as const;
+
+// สีของสถานะ: ป้ายพื้นอ่อน + จุดสีเข้ม
+const STATUS_STYLE: Record<string, { badge: string; dot: string }> = {
+  [STATUS.PENDING]: {
+    badge: "bg-amber-50 text-amber-700 border-amber-200",
+    dot: "bg-amber-500",
+  },
+  [STATUS.PRINTING]: {
+    badge: "bg-blue-50 text-blue-700 border-blue-200",
+    dot: "bg-blue-500",
+  },
+  [STATUS.DONE]: {
+    badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    dot: "bg-emerald-500",
+  },
+  [STATUS.COMPLETED]: {
+    badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    dot: "bg-emerald-500",
+  },
+  [STATUS.CANCELLED]: {
+    badge: "bg-rose-50 text-rose-700 border-rose-200",
+    dot: "bg-rose-500",
+  },
+};
+
+const FALLBACK_STYLE = {
+  badge: "bg-slate-50 text-slate-600 border-slate-200",
+  dot: "bg-slate-400",
+};
+
 export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
-  // อ่านค่าสถานะล่าสุดจาก latest_status หรือ current_status.state
   const initialStatus =
-    order.latest_status || order.current_status?.state || "รอการดำเนินการ";
+    order.latest_status || order.current_status?.state || STATUS.PENDING;
 
   const [currentState, setCurrentState] = useState<string>(initialStatus);
-  const [updating, setUpdating] = useState<boolean>(false);
+  // เก็บว่ากำลังกดปุ่มไหนอยู่ เพื่อให้หมุนเฉพาะปุ่มที่กด
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const updating = pendingAction !== null;
 
   useEffect(() => {
     setCurrentState(
-      order.latest_status || order.current_status?.state || "รอการดำเนินการ"
+      order.latest_status || order.current_status?.state || STATUS.PENDING
     );
   }, [order]);
 
   async function updateState(newStatus: string) {
     if (updating) return;
 
-    setUpdating(true);
+    setPendingAction(newStatus);
     setErrorMsg(null);
 
     const url = `${API_BASE}/shop/orders/${order.id}/status`;
@@ -65,157 +103,135 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
       onUpdateStatus?.(order.id, newStatus);
     } catch (err) {
       console.error("[OrderCard] request failed:", err);
-
-      if (axios.isAxiosError(err)) {
-        if (err.response) {
-          setErrorMsg(
-            `เกิดข้อผิดพลาด (${err.response.status}): ${
-              err.response.data?.error || "ไม่สามารถเปลี่ยนสถานะได้"
-            }`
-          );
-        } else {
-          setErrorMsg("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้");
-        }
-      } else {
-        setErrorMsg("เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
-      }
+      setErrorMsg("ไม่สามารถเปลี่ยนสถานะได้ กรุณาลองใหม่อีกครั้ง");
     } finally {
-      setUpdating(false);
+      setPendingAction(null);
     }
   }
+
+  const customerName = order.customer
+    ? `${order.customer.first_name || ""} ${order.customer.last_name || ""}`.trim()
+    : "ลูกค้าทั่วไป";
+  const initialLetter = order.customer?.first_name?.charAt(0) || "U";
+
+  const style = STATUS_STYLE[currentState] ?? FALLBACK_STYLE;
 
   return (
     <div
       onClick={onClick}
-      className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between"
+      className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer flex flex-col justify-between"
     >
       <div>
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="font-semibold text-[#0F2942]">
+        {/* Header: Order ID + สถานะ */}
+        <div className="flex justify-between items-start gap-3">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-slate-900 text-base tracking-tight">
               Order #{order.id.slice(0, 8)}
             </h3>
-            <p className="text-slate-400 text-xs mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               {new Date(order.order_date).toLocaleDateString("th-TH")}
             </p>
           </div>
 
-          <Image
-            src="/avatar.png"
-            alt=""
-            width={38}
-            height={38}
-            className="rounded-full border border-slate-200 object-cover"
-          />
+          <span
+            className={`inline-flex shrink-0 items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full border ${style.badge}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+            {currentState}
+          </span>
         </div>
 
-        <div className="space-y-4 mt-5">
-          <div className="flex gap-3 items-center">
-            <Image
-              src="/paper.png"
-              alt=""
-              width={52}
-              height={52}
-              className="rounded-lg border border-slate-100 object-cover"
-            />
+        {/* Info: ลูกค้า + รายละเอียด + ยอดชำระ */}
+        <div className="mt-6 mb-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 font-medium text-slate-600 text-sm">
+              {initialLetter}
+            </div>
 
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-[#0F2942] text-sm truncate">
-                {order.customer
-                  ? `${order.customer.first_name} ${order.customer.last_name}`
-                  : "ลูกค้า"}
+            <div className="min-w-0">
+              <p className="font-medium text-slate-900 text-sm truncate">
+                {customerName}
               </p>
-              <p className="text-xs text-slate-400 truncate">
+              <p className="text-xs text-slate-400 truncate mt-0.5">
                 {order.description || "ไม่มีรายละเอียดเพิ่มเติม"}
               </p>
             </div>
-
-            <span className="text-xs text-slate-400 whitespace-nowrap">
-              {order.total_price} บาท
-            </span>
           </div>
+
+          <p className="shrink-0 text-slate-900 font-semibold text-base tabular-nums">
+            {Number(order.total_price || 0).toLocaleString()}
+            <span className="ml-1 text-xs font-normal text-slate-400">บาท</span>
+          </p>
         </div>
       </div>
 
+      {/* Error Message */}
       {errorMsg && (
-        <div
-          className="mt-3 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-600"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <p role="alert" className="mb-3 text-xs text-rose-600">
           {errorMsg}
-        </div>
+        </p>
       )}
 
-      <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center gap-2">
-        <span
-          className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap shrink-0 ${
-            currentState === "รอการดำเนินการ"
-              ? "bg-amber-50 text-amber-600 border border-amber-200"
-              : currentState === "กำลังพิมพ์"
-              ? "bg-blue-50 text-blue-600 border border-blue-200"
-              : currentState === "พิมพ์เสร็จสิ้น"
-              ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-              : currentState === "ยกเลิกการพิมพ์"
-              ? "bg-rose-50 text-rose-600 border border-rose-200"
-              : "bg-slate-50 text-slate-500 border border-slate-200"
-          }`}
-        >
-          {currentState || "ไม่ทราบสถานะ"}
-        </span>
-
-        {currentState === "รอการดำเนินการ" && (
-          <div
-            className="flex gap-2 shrink-0"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {/* Footer: ปุ่มดำเนินการ */}
+      <div onClick={(e) => e.stopPropagation()}>
+        {currentState === STATUS.PENDING && (
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => updateState("ยกเลิกการพิมพ์")}
+              onClick={() => updateState(STATUS.CANCELLED)}
               disabled={updating}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 text-rose-500 text-xs font-medium hover:bg-rose-50 transition-colors whitespace-nowrap disabled:opacity-50"
+              className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-rose-200 bg-white text-rose-600 text-sm font-medium hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {updating ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+              {pendingAction === STATUS.CANCELLED ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <X size={15} />
+              )}
               ปฏิเสธ
             </button>
             <button
               type="button"
-              onClick={() => updateState("กำลังพิมพ์")}
+              onClick={() => updateState(STATUS.PRINTING)}
               disabled={updating}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-500 text-xs font-medium hover:bg-emerald-50 transition-colors whitespace-nowrap disabled:opacity-50"
+              className="flex items-center justify-center gap-1.5 h-10 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {updating ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              {pendingAction === STATUS.PRINTING ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <Check size={15} />
+              )}
               ยืนยัน
             </button>
           </div>
         )}
 
-        {currentState === "กำลังพิมพ์" && (
+        {currentState === STATUS.PRINTING && (
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              updateState("พิมพ์เสร็จสิ้น");
-            }}
+            onClick={() => updateState(STATUS.DONE)}
             disabled={updating}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 text-xs font-medium hover:bg-blue-50 transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {updating ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+            {pendingAction === STATUS.DONE ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <Printer size={15} />
+            )}
             พิมพ์เสร็จสิ้น
           </button>
         )}
 
-        {currentState === "พิมพ์เสร็จสิ้น" && (
-          <div className="flex items-center gap-1 text-emerald-500 text-xs font-medium shrink-0">
-            <Check size={14} />
-            เสร็จสิ้น
-          </div>
+        {(currentState === STATUS.DONE ||
+          currentState === STATUS.COMPLETED) && (
+          <p className="text-sm text-emerald-600 font-medium text-center">
+            เสร็จสิ้นเรียบร้อยแล้ว
+          </p>
         )}
 
-        {currentState === "ยกเลิกการพิมพ์" && (
-          <div className="flex items-center gap-1 text-rose-500 text-xs font-medium shrink-0">
-            <X size={14} />
+        {currentState === STATUS.CANCELLED && (
+          <p className="text-sm text-rose-500 font-medium text-center">
             ยกเลิกแล้ว
-          </div>
+          </p>
         )}
       </div>
     </div>

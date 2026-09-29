@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 1, "column": 0}, "map": {"version":3,"sources":["turbopack:///[next]/internal/font/google/instrument_sans_740967ca.module.css"],"sourcesContent":["@font-face {\n    font-family: 'Instrument Sans Fallback';\n    src: local(\"Arial\");\n    ascent-override: 94.42%;\ndescent-override: 24.33%;\nline-gap-override: 0.00%;\nsize-adjust: 102.74%;\n\n}\n.className {\n    font-family: 'Instrument Sans', 'Instrument Sans Fallback';\n    font-style: normal;\n\n}\n.variable {\n    --font-instrument-sans: 'Instrument Sans', 'Instrument Sans Fallback';\n}\n"],"names":[],"mappings":"AAAA;;;;;;;;;AASA;;;;;AAKA","ignoreList":[0]}}]
+}

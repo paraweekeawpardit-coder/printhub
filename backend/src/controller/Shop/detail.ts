@@ -70,7 +70,8 @@ export const getOrder = async (
           filename,
           file_url,
           file_size_mb,
-          page_count
+          page_count,
+          item_id
         )
         `
       )
@@ -150,6 +151,18 @@ export const getOrder = async (
       page_count: item.page_count ?? null,
     }));
 
+    // ==========================================
+    // Files (mapped with item_id)
+    // ==========================================
+    const files = (order.print_file || []).map((f: any) => ({
+      id: f.id,
+      filename: f.filename,
+      file_url: f.file_url,
+      file_size_mb: f.file_size_mb,
+      page_count: f.page_count,
+      item_id: f.item_id || null,
+    }));
+
     return res.status(200).json({
       order: {
         id: order.id,
@@ -176,7 +189,7 @@ export const getOrder = async (
         },
 
         items,
-        files: order.print_file || [],
+        files,
         payment: paymentRow || null,
         review: reviewRow || null,
       },

@@ -17,7 +17,7 @@ import {
   Loader2,
   AlertCircle,
   Lock,
-  Image as ImageIcon,
+  Layers,
 } from "lucide-react";
 
 export default function OrderDetailPage() {
@@ -30,6 +30,7 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchOrder = async () => {
@@ -98,6 +99,38 @@ export default function OrderDetailPage() {
     }
   };
 
+  // ฟังก์ชันช่วยดาวน์โหลดไฟล์โดยตรง ไม่เปิดหน้าใหม่
+  const handleDownloadFile = async (
+    fileUrl: string,
+    filename: string,
+    fileId: string
+  ) => {
+    try {
+      setDownloadingId(fileId);
+      const response = await fetch(fileUrl);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename || "download-file";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Download failed:", err);
+      // Fallback ลิงก์ตรงหาก fetch ติด CORS
+      const link = document.createElement("a");
+      link.href = fileUrl;
+      link.download = filename;
+      link.click();
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -114,7 +147,7 @@ export default function OrderDetailPage() {
   if (error || !order) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-center max-w-sm w-full">
+        <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-xs text-center max-w-sm w-full">
           <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="text-red-500" size={22} />
           </div>
@@ -146,8 +179,7 @@ export default function OrderDetailPage() {
     ยกเลิกการพิมพ์: "bg-red-50 text-red-700 ring-1 ring-red-200",
   };
 
-  // ดึง URL สลิป (รองรับทั้ง order.slip_url, order.slip, หรือ order.payment_slip)
-  const slipUrl = order.slip_url || order.slip || order.payment_slip;
+  const allFiles = order.files || [];
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">
@@ -175,7 +207,7 @@ export default function OrderDetailPage() {
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-6 sm:mt-8">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs mb-6">
           <div className="flex items-center gap-3">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
               รายละเอียดคำสั่งพิมพ์
@@ -206,7 +238,7 @@ export default function OrderDetailPage() {
                 <button
                   onClick={() => handleUpdateStatus("กำลังพิมพ์")}
                   disabled={isUpdating}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors shadow-sm shadow-blue-600/20 disabled:opacity-50"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors shadow-xs shadow-blue-600/20 disabled:opacity-50"
                 >
                   {isUpdating ? (
                     <Loader2 size={16} className="animate-spin" />
@@ -222,7 +254,7 @@ export default function OrderDetailPage() {
               <button
                 onClick={() => handleUpdateStatus("พิมพ์เสร็จสิ้น")}
                 disabled={isUpdating}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-medium transition-colors shadow-sm shadow-emerald-600/20 disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-medium transition-colors shadow-xs shadow-emerald-600/20 disabled:opacity-50"
               >
                 <RefreshCw
                   size={16}
@@ -236,118 +268,157 @@ export default function OrderDetailPage() {
 
         {/* Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Side */}
+          {/* Left Side: Sub-Orders & Files */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Files Section */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-              <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <FileText size={17} className="text-blue-600" />
-                ไฟล์สำหรับพิมพ์
-                <span className="text-gray-400 font-normal">
-                  ({order.files?.length || 0} ไฟล์)
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs">
+              <div className="flex items-center justify-between mb-5 pb-3 border-b border-gray-100">
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <Layers size={18} className="text-blue-600" />
+                  รายการออเดอร์ย่อย ({order.items?.length || 0} รายการ)
+                </h2>
+                <span className="text-xs text-gray-400">
+                  รวมทั้งหมด {allFiles.length} ไฟล์
                 </span>
-              </h2>
+              </div>
 
-              {!isConfirmed ? (
-                <div className="p-5 bg-gray-50 rounded-xl border border-dashed border-gray-300 text-center">
-                  <Lock size={18} className="mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-500">
-                    กรุณา{" "}
-                    <span className="font-semibold text-blue-600">
-                      ยืนยันออเดอร์
-                    </span>{" "}
-                    ก่อน จึงจะดาวน์โหลดไฟล์ได้
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {order.files?.map((file: any) => (
+              {/* แสดงแต่ละ Sub-Order */}
+              <div className="space-y-6">
+                {order.items?.map((item: any, index: number) => {
+                  // กรองไฟล์เฉพาะของ item นี้ (ถ้าไม่มี item_id จะพิจารณาไฟล์ตามลำดับหรือ item.file_url)
+                  const itemFiles = allFiles.filter(
+                    (f: any) =>
+                      f.item_id === item.id ||
+                      (!f.item_id && f.file_url === item.file_url)
+                  );
+
+                  return (
                     <div
-                      key={file.id}
-                      className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200"
+                      key={item.id || index}
+                      className="bg-slate-50/70 border border-slate-200/90 rounded-xl p-4.5 space-y-4"
                     >
-                      <div className="truncate pr-2">
-                        <p className="text-sm font-medium text-gray-700 truncate">
-                          {file.filename}
-                        </p>
-                        {file.file_size_mb && (
-                          <p className="text-xs text-gray-400">
-                            {file.file_size_mb} MB
+                      {/* Header ของออเดอร์ย่อย */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="bg-blue-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-md">
+                              #รายการที่ {index + 1}
+                            </span>
+                            <h3 className="font-semibold text-gray-900 text-base">
+                              {item.category}
+                            </h3>
+                          </div>
+                          {item.describe && (
+                            <p className="text-xs text-gray-500 mt-1 whitespace-pre-line leading-relaxed bg-white p-2.5 rounded-lg border border-slate-200/60">
+                              {item.describe}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <p className="text-xs text-gray-400">ราคารวมย่อย</p>
+                          <p className="text-base font-bold text-slate-800">
+                            ฿{Number(item.subtotal || 0).toLocaleString()}
                           </p>
+                        </div>
+                      </div>
+
+                      {/* รายละเอียดคุณลักษณะ (Quantity / Unit Price) */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs bg-white p-3 rounded-lg border border-slate-200/60">
+                        <div>
+                          <span className="text-gray-400 block">จำนวน</span>
+                          <span className="font-semibold text-gray-700">
+                            {item.quantity} ชุด
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 block">ราคา/หน่วย</span>
+                          <span className="font-semibold text-gray-700">
+                            ฿{Number(item.unit_price || 0).toLocaleString()}
+                          </span>
+                        </div>
+                        {item.page_count && (
+                          <div>
+                            <span className="text-gray-400 block">จำนวนหน้า</span>
+                            <span className="font-semibold text-gray-700">
+                              {item.page_count} หน้า
+                            </span>
+                          </div>
                         )}
                       </div>
 
-                      <a
-                        href={file.file_url}
-                        download
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors shrink-0 ml-3"
-                      >
-                        <Download size={13} />
-                        โหลดไฟล์
-                      </a>
+                      {/* ไฟล์งานของออเดอร์ย่อยนี้ */}
+                      <div className="pt-2 border-t border-slate-200/60">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                            <FileText size={14} className="text-blue-600" />
+                            ไฟล์สำหรับรายการนี้ ({itemFiles.length} ไฟล์)
+                          </span>
+                        </div>
+
+                        {!isConfirmed ? (
+                          <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-200/60 text-center text-xs text-amber-700 flex items-center justify-center gap-1.5">
+                            <Lock size={14} />
+                            ยืนยันออเดอร์ก่อนดาวน์โหลดไฟล์
+                          </div>
+                        ) : itemFiles.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic bg-white p-2.5 rounded-lg border border-slate-200/60 text-center">
+                            ไม่มีไฟล์แนบในรายการนี้
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {itemFiles.map((file: any) => (
+                              <div
+                                key={file.id}
+                                className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200/80 shadow-xs"
+                              >
+                                <div className="truncate pr-2">
+                                  <p className="text-xs font-medium text-gray-800 truncate">
+                                    {file.filename || "ไฟล์สิ่งพิมพ์"}
+                                  </p>
+                                  <p className="text-[11px] text-gray-400">
+                                    {file.file_size_mb
+                                      ? `${file.file_size_mb} MB`
+                                      : ""}{" "}
+                                    {file.page_count
+                                      ? `• ${file.page_count} หน้า`
+                                      : ""}
+                                  </p>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDownloadFile(
+                                      file.file_url,
+                                      file.filename,
+                                      file.id
+                                    )
+                                  }
+                                  disabled={downloadingId === file.id}
+                                  className="flex items-center gap-1.5 text-xs font-medium text-blue-600 bg-blue-50/80 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors shrink-0 disabled:opacity-50"
+                                >
+                                  {downloadingId === file.id ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <Download size={13} />
+                                  )}
+                                  โหลดไฟล์
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Items Section */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-              <h2 className="text-sm font-semibold text-gray-900 mb-4">
-                รายการบริการที่สั่งพิมพ์
-              </h2>
-
-              <div className="overflow-x-auto -mx-2">
-                <table className="w-full text-left text-sm text-gray-600 min-w-[480px]">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="py-2.5 px-2 text-xs font-medium text-gray-400 uppercase tracking-wide">
-                        รายละเอียด
-                      </th>
-                      <th className="py-2.5 px-2 text-center text-xs font-medium text-gray-400 uppercase tracking-wide">
-                        จำนวน
-                      </th>
-                      <th className="py-2.5 px-2 text-right text-xs font-medium text-gray-400 uppercase tracking-wide">
-                        ราคา/หน่วย
-                      </th>
-                      <th className="py-2.5 px-2 text-right text-xs font-medium text-gray-400 uppercase tracking-wide">
-                        ราคารวม
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {order.items?.map((item: any) => (
-                      <tr key={item.id}>
-                        <td className="py-3 px-2">
-                          <p className="font-medium text-gray-800">
-                            {item.group_name}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {item.detail}
-                          </p>
-                        </td>
-                        <td className="py-3 px-2 text-center">
-                          {item.quantity}
-                        </td>
-                        <td className="py-3 px-2 text-right">
-                          ฿{Number(item.unit_price || 0).toFixed(2)}
-                        </td>
-                        <td className="py-3 px-2 text-right font-semibold text-gray-800">
-                          ฿{Number(item.subtotal || 0).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  );
+                })}
               </div>
 
-              {/* สรุปยอดเงิน */}
-              <div className="mt-4 pt-4 border-t border-gray-200 space-y-2 text-sm">
+              {/* สรุปยอดเงินรวม */}
+              <div className="mt-6 pt-4 border-t border-gray-200 space-y-2 text-sm">
                 {order.subtotal_price > 0 && (
                   <div className="flex justify-between items-center text-gray-500">
-                    <span>ราคาสินค้า/บริการ</span>
+                    <span>ราคาสินค้า/บริการรวม</span>
                     <span>฿{Number(order.subtotal_price).toFixed(2)}</span>
                   </div>
                 )}
@@ -369,17 +440,17 @@ export default function OrderDetailPage() {
                     ราคารวมทั้งหมด
                   </span>
                   <span className="text-xl font-bold text-[#12356b]">
-                    ฿{Number(order.total_price || 0).toFixed(2)}
+                    ฿{Number(order.total_amount || order.subtotal_price || 0).toFixed(2)}
                   </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Side */}
+          {/* Right Side: Customer & Schedule Info */}
           <div className="space-y-6">
             {/* Customer Info */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs">
               <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <User size={17} className="text-blue-600" />
                 ข้อมูลลูกค้า
@@ -437,7 +508,7 @@ export default function OrderDetailPage() {
             </div>
 
             {/* Schedule Info */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3">
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs space-y-3">
               <h2 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
                 <Clock size={17} className="text-blue-600" />
                 เวลานัดหมาย
