@@ -130,60 +130,42 @@ export default function ShopChatPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F6F9] flex flex-col font-sans">
-      {/* Navbar สีน้ำเงิน - ปุ่มย้อนกลับซ้ายสุด + เส้นคั่น + โลโก้ */}
-      <header className="bg-[#001B3A] text-white px-6 py-4 flex items-center shadow-md">
-        <div className="flex items-center gap-4">
-          {/* ปุ่มย้อนกลับ */}
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors font-medium"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-              className="w-5 h-5"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-            <span>ย้อนกลับ</span>
-          </button>
-
-          {/* เส้นคั่นกลาง */}
-          <div className="h-5 w-[1px] bg-slate-600" />
-
-          {/* โลโก้ */}
-          <span className="font-bold text-xl tracking-tight">PrintHub Management</span>
-        </div>
+    // 1. ล็อกความสูงพอดีจอภาพ (h-screen) และปิด scrollbar ของเบราว์เซอร์
+    <div className="h-screen w-full bg-[#F4F6F9] flex flex-col font-sans overflow-hidden">
+      {/* Header หลักด้านบน ล็อกขนาดคงที่ (shrink-0) */}
+      <header className="bg-[#001B3A] text-white h-14 px-6 flex items-center justify-between shadow-md shrink-0">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors cursor-pointer"
+        >
+          <ArrowLeft size={18} />
+          ย้อนกลับ
+        </button>
+        <div className="font-bold text-lg tracking-tight">PrintHub Management</div>
+        <div className="w-16"></div>
       </header>
 
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 flex gap-4 my-2 h-[calc(100vh-100px)]">
-        <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-white flex justify-between items-center">
-            <div>
-              <h3 className="font-bold text-slate-800 text-base">กล่องข้อความสำหรับออเดอร์</h3>
-              <p className="text-xs text-slate-400">ออเดอร์ปัจจุบัน: {selectedOrderId || "ยังไม่ได้เลือกออเดอร์"}</p>
+      {/* Main Container ครอบพื้นที่ทั้งหมดที่เหลือ */}
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex gap-4 min-h-0 overflow-hidden">
+        
+        {/* ================= ฝั่งซ้าย: กล่องข้อความทั้งหมด ================= */}
+        <div className="w-1/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex flex-col min-h-0 overflow-hidden">
+          <h2 className="text-base font-bold text-slate-800 mb-3 px-1 shrink-0">
+            กล่องข้อความทั้งหมด
+          </h2>
+
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center text-xs text-slate-400">
+              กำลังโหลดรายการ...
             </div>
-
-            <span className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
-              isChatDisabled 
-                ? "bg-emerald-100 text-emerald-700 border border-emerald-200" 
-                : "bg-blue-50 text-blue-700 border border-blue-200"
-            }`}>
-              {statusName}
-            </span>
-          </div>
-
-          <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#F8FAFC]">
-            {messages.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                ไม่มีประวัติการสนทนาสำหรับออเดอร์นี้
-              </div>
-            ) : (
-              messages.map((msg, i) => (
+          ) : orderChats.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-xs text-slate-400">
+              ไม่มีรายการแชต
+            </div>
+          ) : (
+            /* overflow-y-auto + min-h-0 สั่งให้ scroll เฉพาะฝั่งซ้ายเมื่อรายชื่อเยอะ */
+            <div className="overflow-y-auto flex-1 min-h-0 space-y-2 pr-1">
+              {orderChats.map((chat) => (
                 <div
                   key={i}
                   className={`flex flex-col ${msg.sender === "shop" ? "items-end" : "items-start"}`}
@@ -204,42 +186,57 @@ export default function ShopChatPage() {
                       <span className="text-blue-600 font-semibold">• อ่านแล้ว</span>
                     )}
                   </div>
+                  <p className="text-xs text-slate-500 truncate mb-1">
+                    {chat.latest_message}
+                  </p>
+                  <span className="text-[10px] text-slate-400">
+                    ออเดอร์: #{chat.id ? chat.id.slice(0, 8) : "-"}
+                  </span>
                 </div>
-              ))
-            )}
-          </div>
-
-          <form onSubmit={handleSend} className="p-3 bg-white border-t border-slate-100 flex gap-2">
-            <input
-              type="text"
-              value={input}
-              disabled={isChatDisabled}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={
-                isChatDisabled 
-                  ? "ออเดอร์นี้เสร็จสิ้นแล้ว ไม่สามารถส่งข้อความได้" 
-                  : "พิมพ์ข้อความ..."
-              }
-              className={`flex-1 px-4 py-2.5 text-sm rounded-xl focus:outline-none transition ${
-                isChatDisabled
-                  ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
-                  : "bg-slate-50 border border-slate-200 focus:border-[#001B3A]"
-              }`}
-            />
-            <button 
-              type="submit" 
-              disabled={isChatDisabled}
-              className={`px-6 py-2.5 rounded-xl text-sm font-medium transition ${
-                isChatDisabled
-                  ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                  : "bg-[#001B3A] text-white hover:bg-slate-800"
-              }`}
-            >
-              ส่ง
-            </button>
-          </form>
+              ))}
+            </div>
+          )}
         </div>
-      </main>
+
+        {/* ================= ฝั่งขวา: แสดง ChatBox ================= */}
+        <div className="w-2/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col min-h-0 overflow-hidden">
+          {selectedOrderId ? (
+            <>
+              {/* Header ฝั่งขวา ล็อกขนาดคงที่ (shrink-0) */}
+              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm md:text-base">
+                    ออเดอร์ #{selectedOrderId}
+                  </h3>
+                </div>
+                <span
+                  className={`text-xs font-medium px-3 py-1 rounded-lg ${
+                    isShopChatDisabled
+                      ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                      : "bg-blue-50 text-blue-700 border border-blue-200"
+                  }`}
+                >
+                  {shopOrderStatus}
+                </span>
+              </div>
+
+              {/* คอนเทนเนอร์สำหรับกล่องแชต สั่งล็อกความสูงและปล่อยให้ ChatBox ภายในทำการ scroll ข้อความเอง */}
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <ChatBox
+                  orderId={selectedOrderId}
+                  role="shop"
+                  isChatDisabled={isShopChatDisabled}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+              เลือกรายการแชตด้านซ้ายเพื่อเริ่มสนทนา
+            </div>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 }

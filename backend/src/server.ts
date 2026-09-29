@@ -24,7 +24,7 @@ const app = express();
 const server = http.createServer(app);
 
 // ==========================================
-// 1. CORS & Middlewares Setup (รวมของเดิม + ของเพื่อน)
+// 1. CORS & Middlewares Setup
 // ==========================================
 app.use(
   cors({
@@ -44,10 +44,12 @@ app.use(
   })
 );
 
-app.use(express.json());
+// ปรับ Limit ให้รองรับการส่ง Base64 ของรูปภาพหลายไฟล์
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(morgan("dev"));
 
-// 🌟 Static File Serving (รองรับการอัปโหลดไฟล์/รูปภาพของเพื่อน)
+// Static File Serving
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // ==========================================
@@ -56,7 +58,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 connectDB(); // เชื่อมต่อ MongoDB สำหรับระบบแชต
 
 // ==========================================
-// 3. API Routes Mapping (รวมของเดิม + ของเพื่อน)
+// 3. API Routes Mapping
 // ==========================================
 app.get("/", (req: Request, res: Response) => {
   res.send("PrintHub Backend is running!");
@@ -89,12 +91,15 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"],
   },
+  maxHttpBufferSize: 1e8, // ปรับ Buffer Size ให้รองรับการส่งไฟล์รูปภาพขนาดใหญ่ผ่าน Socket
 });
 
 interface IMessage {
   orderId: string;
   sender: "customer" | "shop";
-  text: string;
+  text?: string;
+  message?: string;
+  images?: string[]; // เพิ่มรองรับ Array รูปภาพ
   time: string;
   isRead: boolean;
   createdAt?: Date;
@@ -104,14 +109,15 @@ const MessageSchema = new Schema(
   {
     orderId: { type: String, required: true, index: true },
     sender: { type: String, required: true, enum: ["customer", "shop"] },
-    text: { type: String, required: true },
+    text: { type: String, default: "" },
+    images: { type: [String], default: [] }, // เพิ่ม Field images รองรับ Array of String
     time: { type: String, required: true },
     isRead: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
-const Message = mongoose.model("Message", MessageSchema);
+const Message = mongoose.models.Message || mongoose.model("Message", MessageSchema);
 
 io.on("connection", (socket) => {
   console.log(`⚡ User connected: ${socket.id}`);
@@ -137,15 +143,22 @@ io.on("connection", (socket) => {
 
   // ส่งข้อความเฉพาะใน Room ของออเดอร์นั้น
   socket.on("send_message", async (data: IMessage) => {
-    if (!data.orderId || data.orderId === "undefined" || !data.text) return;
+    if (!data.orderId || data.orderId === "undefined") return;
 
-    console.log(`💬 [Order #\({data.orderId}]\){data.sender}: ${data.text}`);
+    const messageText = data.text || data.message || "";
+    const imageList = data.images || [];
+
+    // ต้องมีอย่างใดอย่างหนึ่ง (ข้อความ หรือ รูปภาพ) ถึงจะบันทึก
+    if (!messageText.trim() && imageList.length === 0) return;
+
+    console.log(`💬 [Order #\({data.orderId}]\){data.sender}: \({messageText} (\){imageList.length} images)`);
 
     try {
       const newMessage = new Message({
         orderId: data.orderId,
         sender: data.sender,
-        text: data.text,
+        text: messageText,
+        images: imageList, // บันทึก Array รูปภาพลง MongoDB
         time: data.time,
         isRead: false,
       });

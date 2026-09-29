@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { supabase } from "@/src/config/supabase";
+import { Paperclip, X } from "lucide-react";
 
 interface Message {
   _id?: string;
@@ -11,6 +12,7 @@ interface Message {
   sender: "customer" | "shop";
   text?: string;
   message?: string;
+  images?: string[];
   time?: string;
   createdAt?: string;
   isRead?: boolean;
@@ -30,11 +32,26 @@ export default function ChatBox({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [statusState, setStatusState] = useState<string>("");
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null); // Ref สำหรับอ้างอิงจุดล่างสุด
+
+  // ฟังก์ชันเลื่อนลงล่างสุดอัตโนมัติ
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // เลื่อนลงล่างสุดเมื่อมีข้อความใหม่
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   // --------------------------------------------------
-  // 1. ดึงสถานะออเดอร์จาก Supabase (Join status.state)
+  // 1. ดึงสถานะออเดอร์จาก Supabase
   // --------------------------------------------------
   useEffect(() => {
     if (!orderId) return;
@@ -82,7 +99,6 @@ export default function ChatBox({
     };
   }, [orderId]);
 
-  // ตรวจสอบรายการสถานะที่ต้องสั่ง "ล็อกแชต"
   const lockedStates = [
     "พิมพ์เสร็จสิ้น",
     "รายการเสร็จสิ้น",
@@ -97,7 +113,7 @@ export default function ChatBox({
   const isLocked = Boolean(propIsChatDisabled || isFinished);
 
   // --------------------------------------------------
-  // 2. Socket.io (รับ-ส่ง ข้อความ Real-time)
+  // 2. Socket.io
   // --------------------------------------------------
   useEffect(() => {
     if (!orderId) return;
@@ -141,34 +157,92 @@ export default function ChatBox({
     };
   }, [orderId, role]);
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files);
+
+    if (selectedImages.length + files.length > 10) {
+      alert("สามารถแนบรูปภาพได้สูงสุดไม่เกิน 10 รูปต่อการส่ง 1 ครั้ง");
+      return;
+    }
+
+    const newFiles = [...selectedImages, ...files];
+    setSelectedImages(newFiles);
+
+    const newPreviews = files.map((file) => URL.createObjectURL(file));
+    setImagePreviews((prev) => [...prev, ...newPreviews]);
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const convertFilesToBase64 = (files: File[]): Promise<string[]> => {
+    return Promise.all(
+      files.map(
+        (file) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = (error) => reject(error);
+          })
+      )
+    );
+  };
+
   // --------------------------------------------------
   // 3. ฟังก์ชันส่งข้อความ
   // --------------------------------------------------
-  const handleSend = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSend = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim() || isLocked || !orderId) return;
+    if (
+      (!input.trim() && selectedImages.length === 0) ||
+      isLocked ||
+      !orderId
+    )
+      return;
 
     const socket = socketRef.current;
     if (!socket) return;
 
-    const messageData = {
-      orderId: orderId,
-      sender: role,
-      text: input.trim(),
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
+    setIsUploading(true);
 
-    socket.emit("send_message", messageData);
-    setInput("");
+    try {
+      let imageBase64List: string[] = [];
+      if (selectedImages.length > 0) {
+        imageBase64List = await convertFilesToBase64(selectedImages);
+      }
+
+      const messageData = {
+        orderId: orderId,
+        sender: role,
+        text: input.trim(),
+        images: imageBase64List,
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+
+      socket.emit("send_message", messageData);
+
+      setInput("");
+      setSelectedImages([]);
+      setImagePreviews([]);
+    } catch (error) {
+      console.error("Send message error:", error);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden h-full">
-      {/* Message Area */}
-      <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#F8FAFC]">
+    // กำหนด h-full และ max-h-full เพื่อให้อยู่ในขอบเขต Parent
+    <div className="flex-1 flex flex-col h-full max-h-full min-h-0 overflow-hidden">
+      {/* Message Area: flex-1 + overflow-y-auto จะช่วยให้ Scroll เฉพาะกล่องนี้ */}
+      <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-[#F8FAFC] min-h-0">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-slate-400">
             ไม่มีประวัติการสนทนาสำหรับออเดอร์นี้
@@ -177,6 +251,7 @@ export default function ChatBox({
           messages.map((msg, index) => {
             const isMe = msg.sender === role;
             const messageText = msg.text || msg.message || "";
+            const msgImages = msg.images || [];
             const displayTime =
               msg.time ||
               (msg.createdAt
@@ -204,7 +279,35 @@ export default function ChatBox({
                       : "bg-white text-slate-800 border border-slate-200 rounded-bl-none"
                   }`}
                 >
-                  {messageText}
+                  {/* แสดงรูปภาพ */}
+                  {msgImages.length > 0 && (
+                    <div
+                      className={`grid gap-1.5 mb-2 ${
+                        msgImages.length === 1
+                          ? "grid-cols-1"
+                          : msgImages.length === 2
+                          ? "grid-cols-2"
+                          : "grid-cols-3"
+                      }`}
+                    >
+                      {msgImages.map((imgUrl, imgIdx) => (
+                        <a
+                          key={imgIdx}
+                          href={imgUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <img
+                            src={imgUrl}
+                            alt="Chat attachment"
+                            className="w-full h-24 object-cover rounded-lg border border-slate-200 hover:opacity-90 transition cursor-pointer"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  {messageText && <div>{messageText}</div>}
                 </div>
 
                 <div className="flex items-center gap-1 mt-1 px-1 text-[10px] text-slate-400">
@@ -219,17 +322,68 @@ export default function ChatBox({
             );
           })
         )}
+        {/* Element อ้างอิงจุดล่างสุดของแชต */}
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
+      {/* Previews ก่อนกดส่ง */}
+      {imagePreviews.length > 0 && (
+        <div className="p-2 bg-slate-50 border-t border-t border-slate-100 flex items-center gap-2 overflow-x-auto shrink-0">
+          {imagePreviews.map((preview, idx) => (
+            <div key={idx} className="relative w-14 h-14 flex-shrink-0">
+              <img
+                src={preview}
+                alt="preview"
+                className="w-full h-full object-cover rounded-lg border border-slate-200"
+              />
+              <button
+                type="button"
+                onClick={() => removeImage(idx)}
+                className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow hover:bg-red-600"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          <span className="text-xs text-slate-400 ml-2">
+            ({imagePreviews.length}/10)
+          </span>
+        </div>
+      )}
+
+      {/* Input Area (shrink-0 ป้องกันไม่ให้โดนบีบขนาด) */}
       <form
         onSubmit={handleSend}
-        className="p-3 bg-white border-t border-slate-100 flex gap-2"
+        className="p-3 bg-white border-t border-slate-100 flex items-center gap-2 shrink-0"
       >
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleImageSelect}
+          multiple
+          accept="image/*"
+          className="hidden"
+          disabled={isLocked || isUploading}
+        />
+
+        <button
+          type="button"
+          disabled={isLocked || isUploading || selectedImages.length >= 10}
+          onClick={() => fileInputRef.current?.click()}
+          className={`p-2.5 rounded-xl border transition ${
+            isLocked
+              ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed"
+              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+          }`}
+          title="แนบรูปภาพ (สูงสุด 10 รูป)"
+        >
+          <Paperclip size={18} />
+        </button>
+
         <input
           type="text"
           value={input}
-          disabled={isLocked}
+          disabled={isLocked || isUploading}
           onChange={(e) => setInput(e.target.value)}
           placeholder={
             isLocked
@@ -245,14 +399,20 @@ export default function ChatBox({
 
         <button
           type="submit"
-          disabled={isLocked}
+          disabled={
+            isLocked ||
+            isUploading ||
+            (!input.trim() && selectedImages.length === 0)
+          }
           className={`px-6 py-2.5 rounded-xl text-sm font-medium transition ${
-            isLocked
+            isLocked ||
+            isUploading ||
+            (!input.trim() && selectedImages.length === 0)
               ? "bg-slate-300 text-slate-500 cursor-not-allowed"
               : "bg-[#001B3A] text-white hover:bg-slate-800"
           }`}
         >
-          ส่ง
+          {isUploading ? "กำลังส่ง..." : "ส่ง"}
         </button>
       </form>
     </div>
