@@ -18,7 +18,7 @@ export const getShops = async (req: Request, res: Response) => {
     const userLat = user_lat ? parseFloat(user_lat as string) : 13.7298;
     const userLng = user_lng ? parseFloat(user_lng as string) : 100.7782;
 
-    // 🌟 ดึงข้อมูลร้านค้า โดยดึง is_open และ is_verify เพิ่มเข้ามา
+    // 🌟 ดึงข้อมูลร้านค้า พร้อมตาราง service_type และ service_detail (detail)
     let query = supabase
       .from('print_shop')
       .select(`
@@ -33,13 +33,15 @@ export const getShops = async (req: Request, res: Response) => {
         address:address_id (
           latitude,
           longitude
+        ),
+        service_type (
+          type,
+          service_detail (
+            detail
+          )
         )
       `)
-      .eq('is_verify', true); // 👈 Fix 1: กรองเอาเฉพาะร้านที่ Admin อนุมัติแล้วเท่านั้น (แก้ปัญหาร้าน PENDING แสดง)
-
-    if (search) {
-      query = query.ilike('shop_name', `%${search}%`);
-    }
+      .eq('is_verify', true); // กรองเฉพาะร้านที่ผ่านการอนุมัติ
 
     if (is_top_rated === 'true') {
       query = query.gte('rating', 4.0);
@@ -56,10 +58,9 @@ export const getShops = async (req: Request, res: Response) => {
     const currentTime = now.toTimeString().slice(0, 8);
 
     let formattedShops = (shops || []).map((shop: any) => {
-      // 🌟 Fix 2: ถ้าร้านกดปิด Manual (is_open === false) ให้ถือว่าปิดทันที
       let isOpenNow = shop.is_open !== false;
 
-      // ถ้าเปิด Manual ไว้ ให้เช็คเวลาทำการเพิ่มเติม
+      // ตรวจสอบเวลาทำการ
       if (isOpenNow && shop.open_time && shop.close_time) {
         if (shop.open_time <= shop.close_time) {
           isOpenNow = currentTime >= shop.open_time && currentTime <= shop.close_time;
@@ -68,6 +69,7 @@ export const getShops = async (req: Request, res: Response) => {
         }
       }
 
+      // คำนวณระยะทาง
       let distance: number | null = null;
       if (shop.address?.latitude && shop.address?.longitude) {
         const R = 6371;
@@ -83,6 +85,20 @@ export const getShops = async (req: Request, res: Response) => {
         distance = Number((R * c).toFixed(1));
       }
 
+      // 🌟 1. ดึงประเภทบริการหลัก เช่น ["เอกสาร", "แผ่นสติกเกอร์", "โปสเตอร์"]
+      const serviceTypes: string[] = Array.isArray(shop.service_type)
+        ? shop.service_type.map((st: any) => st?.type).filter(Boolean)
+        : [];
+
+      // 🌟 2. ดึงสเปกย่อยทั้งหมดของร้าน เช่น ["A4", "พิมพ์สี", "สันกาว", "เนื้อ PP"]
+      const serviceDetails: string[] = Array.isArray(shop.service_type)
+        ? shop.service_type.flatMap((st: any) =>
+            Array.isArray(st?.service_detail)
+              ? st.service_detail.map((sd: any) => sd?.detail).filter(Boolean)
+              : []
+          )
+        : [];
+
       return {
         id: shop.id,
         name: shop.shop_name,
@@ -93,10 +109,27 @@ export const getShops = async (req: Request, res: Response) => {
         review_count: 0,
         open_time: shop.open_time,
         close_time: shop.close_time,
-        is_open: isOpenNow, // คืนค่าสถานะจริง
-        distance: distance
+        is_open: isOpenNow,
+        distance: distance,
+        service_types: serviceTypes,
+        service_details: serviceDetails,
       };
     });
+
+    // 🌟 กรองด้วยช่องค้นหา: ค้นหาได้ทั้ง "ชื่อร้าน", "ประเภทงานพิมพ์", และ "สเปกย่อยใน detail"
+    if (search && typeof search === 'string') {
+      const keyword = search.trim().toLowerCase();
+      formattedShops = formattedShops.filter((s: any) => {
+        const matchName = s.shop_name?.toLowerCase().includes(keyword);
+        const matchService = s.service_types?.some((t: string) =>
+          t.toLowerCase().includes(keyword)
+        );
+        const matchDetail = s.service_details?.some((d: string) =>
+          d.toLowerCase().includes(keyword)
+        );
+        return matchName || matchService || matchDetail;
+      });
+    }
 
     if (is_open === 'true') {
       formattedShops = formattedShops.filter((s) => s.is_open === true);
@@ -160,30 +193,67 @@ export const getShopServices = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "ไม่พบร้านค้านี้ในระบบ" });
     }
 
+    // ดึง service_type พร้อม service_detail ที่ผูกกัน
     const { data: serviceTypes, error: stError } = await supabase
       .from("service_type")
-      .select("id, type")
+      .select(`
+        id, 
+        type,
+        service_detail (
+          id,
+          category,
+          group_type,
+          detail,
+          price
+        )
+      `)
       .eq("shop_id", shopId);
 
     if (stError) throw stError;
-
-    const formattedServices = (serviceTypes || []).map((st: any) => {
-      return {
-        id: st.id,
-        type_name: st.type,
-        options: [],
-      };
-    });
 
     return res.status(200).json({
       success: true,
       data: {
         shop,
-        service_types: formattedServices,
+        service_types: serviceTypes || [],
       },
     });
   } catch (error: any) {
     console.error("Get shop services error:", error.message);
     return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 4. ดึงข้อมูลร้านค้าทั้งหมด (ฟังก์ชันสำรอง)
+// ==========================================
+export const getCustomerShops = async (req: Request, res: Response) => {
+  try {
+    const { data: shops, error } = await supabase
+      .from("print_shop")
+      .select(`
+        *,
+        service_type (
+          type
+        )
+      `);
+
+    if (error) throw error;
+
+    const formattedShops = (shops || []).map((shop: any) => {
+      const types = Array.isArray(shop.service_type)
+        ? shop.service_type.map((st: any) => st?.type).filter(Boolean)
+        : [];
+
+      return {
+        ...shop,
+        service_types: types,
+      };
+    });
+
+    return res.status(200).json({ success: true, data: formattedShops });
+  } catch (err: any) {
+    console.error("Get shops error:", err.message);
+    return res.status(500).json({ success: false, message: err.message });
   }
 };

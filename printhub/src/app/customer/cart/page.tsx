@@ -1,295 +1,321 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
-  ShoppingCart, 
+  ArrowLeft, 
   Store, 
+  Trash2, 
   ChevronRight, 
   ChevronDown, 
-  ChevronUp, 
-  Trash2, 
-  ArrowLeft, 
-  Loader2,
-  MapPin,
-  Clock,
-  Star
+  ShoppingBag, 
+  Loader2 
 } from "lucide-react";
-import Navbar from "../../../component/customer/NavBar";
+import NavBar from "../../../component/customer/NavBar";
 
-export default function CartPage() {
+interface CartGroupedShop {
+  shop_id: string;
+  shop_name: string;
+  is_open?: boolean;
+  open_time?: string;
+  close_time?: string;
+  items: any[];
+  total_price: number;
+}
+
+export default function CustomerCartOverviewPage() {
   const router = useRouter();
-  const [cartData, setCartData] = useState<any>(null);
+  const [groupedCarts, setGroupedCarts] = useState<CartGroupedShop[]>([]);
   const [loading, setLoading] = useState(true);
+  const [customerId, setCustomerId] = useState<string>("");
 
-  // ควบคุมการเปิด-ปิด Dropdown รายการสินค้าในตะกร้า
-  const [isItemsOpen, setIsItemsOpen] = useState(false);
+  // State เก็บ shop_id ที่เปิดดูรายการอยู่
+  const [expandedShopIds, setExpandedShopIds] = useState<Set<string>>(new Set());
 
-  // ดึงข้อมูลตะกร้าสินค้าของลูกค้า
-  const fetchCart = async () => {
-    const customerId =
-      typeof window !== "undefined"
-        ? localStorage.getItem("customer_id") || localStorage.getItem("id")
-        : null;
+  const toggleExpand = (shopId: string) => {
+    setExpandedShopIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(shopId)) {
+        next.delete(shopId);
+      } else {
+        next.add(shopId);
+      }
+      return next;
+    });
+  };
 
-    if (!customerId) {
-      setLoading(false);
-      return;
-    }
-
+  const loadAllCarts = async (cid: string) => {
     try {
       setLoading(true);
-      const res = await fetch(
-        `http://localhost:5000/api/customer/cart?customer_id=${customerId}`
-      );
+      const res = await fetch(`http://localhost:5000/api/customer/cart?customer_id=${cid}`);
       const json = await res.json();
+
       if (json.success && json.data) {
-        setCartData(json.data);
+        const rawItems = Array.isArray(json.data)
+          ? json.data
+          : json.data.cart_items ||
+            json.data.cart_item ||
+            json.data.items ||
+            [];
+
+        const shopInfoFromCart = json.data.print_shop || json.data.shop || {};
+        const fallbackShopId = json.data.shop_id || shopInfoFromCart.id || "";
+
+        const groups: Record<string, CartGroupedShop> = {};
+
+        rawItems.forEach((item: any) => {
+          const shopData = item.print_shop || item.shop || shopInfoFromCart;
+          const sId = item.shop_id || fallbackShopId || "unknown";
+          const sName = shopData.shop_name || item.shop_name || "ร้านค้างานพิมพ์";
+          
+          const isOpen = Boolean(
+            shopData.is_open === true ||
+            shopData.is_open === 1 ||
+            String(shopData.is_open).toLowerCase() === "true" ||
+            String(shopData.status).toUpperCase() === "OPEN"
+          );
+
+          const itemPrice = Number(item.subtotal || item.unit_price * item.quantity || 0);
+
+          if (!groups[sId]) {
+            groups[sId] = {
+              shop_id: sId,
+              shop_name: sName,
+              is_open: isOpen,
+              open_time: shopData.open_time,
+              close_time: shopData.close_time,
+              items: [],
+              total_price: 0,
+            };
+          }
+
+          groups[sId].items.push(item);
+          groups[sId].total_price += itemPrice;
+        });
+
+        const groupList = Object.values(groups);
+        for (const grp of groupList) {
+          if (grp.shop_id && grp.shop_id !== "unknown" && grp.shop_name === "ร้านค้างานพิมพ์") {
+            try {
+              const shopRes = await fetch(`http://localhost:5000/api/customer/shops/${grp.shop_id}/services`);
+              const shopJson = await shopRes.json();
+              if (shopJson.success && shopJson.data?.shop) {
+                const s = shopJson.data.shop;
+                grp.shop_name = s.shop_name || grp.shop_name;
+                grp.is_open = Boolean(
+                  s.is_open === true ||
+                  s.is_open === 1 ||
+                  String(s.is_open).toLowerCase() === "true" ||
+                  String(s.status).toUpperCase() === "OPEN"
+                );
+                grp.open_time = s.open_time;
+                grp.close_time = s.close_time;
+              }
+            } catch (e) {
+              console.error("Fetch shop detail fallback error:", e);
+            }
+          }
+        }
+
+        setGroupedCarts([...groupList]);
       } else {
-        setCartData(null);
+        setGroupedCarts([]);
       }
     } catch (err) {
-      console.error("Fetch cart error:", err);
+      console.error("Load cart error:", err);
+      setGroupedCarts([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCart();
-  }, []);
+    const cid = localStorage.getItem("customer_id") || localStorage.getItem("id");
+    if (cid && !cid.startsWith("customer_")) {
+      setCustomerId(cid);
+      loadAllCarts(cid);
+    } else {
+      router.push("/auth");
+    }
+  }, [router]);
 
-  // ล้างตะกร้าสินค้าทั้งหมด
-  const handleClearCart = async () => {
-    const customerId =
-      localStorage.getItem("customer_id") || localStorage.getItem("id");
-    if (!confirm("คุณต้องการลบรายการทั้งหมดในตะกร้าหรือไม่?")) return;
+  const handleClearShopCart = async (shopId: string) => {
+    if (!confirm("ต้องการล้างรายการสินค้าของร้านนี้ใช่หรือไม่?")) return;
 
     try {
-      await fetch("http://localhost:5000/api/customer/cart/clear", {
+      await fetch("http://localhost:5000/api/customer/cart", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_id: customerId }),
+        body: JSON.stringify({ customer_id: customerId, shop_id: shopId }),
       });
-      setCartData(null);
+      loadAllCarts(customerId);
     } catch (err) {
-      console.error("Clear cart error:", err);
+      console.error("Clear shop cart error:", err);
     }
   };
 
-  const items = cartData?.cart_item || cartData?.cart_items || [];
-  const shop = cartData?.print_shop;
-  const shopId = cartData?.shop_id || shop?.id;
-
-  // คำนวณยอดเงินรวม
-  const totalPrice = items.reduce(
-    (acc: number, item: any) =>
-      acc + Number(item.subtotal || item.unit_price * item.quantity || 0),
-    0
-  );
-
-  // จัดรูปแบบเวลาเปิด-ปิด
-  const businessHours =
-    shop?.open_time && shop?.close_time
-      ? `${shop.open_time.slice(0, 5)} - ${shop.close_time.slice(0, 5)} น.`
-      : "ไม่ระบุเวลาทำการ";
-
-  // จัดรูปแบบระยะทาง
-  const formattedDistance =
-    shop?.distance !== undefined && shop?.distance !== null
-      ? `${Number(shop.distance).toFixed(1)} กม.`
-      : "ไม่ระบุระยะทาง";
+  const totalItemsCount = groupedCarts.reduce((sum, g) => sum + g.items.length, 0);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
-      <Navbar />
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-slate-800 antialiased pb-12">
+      <NavBar cartCount={totalItemsCount} />
 
-      <main className="max-w-3xl w-full mx-auto p-4 sm:p-6 space-y-6 flex-1">
-        {/* ส่วนหัวหน้าเว็บ */}
+      <main className="max-w-4xl w-full mx-auto px-4 py-6 space-y-4 flex-1">
+        {/* Header แถบด้านบน: ปุ่มลูกศรย้อนกลับสไตล์กรอบโค้งมน พร้อมข้อความและจำนวนตะกร้า */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => router.push("/customer")}
-              className="p-2 bg-white rounded-xl border border-slate-200 text-slate-600 hover:text-slate-900 transition cursor-pointer"
+              className="w-12 h-12 bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:shadow hover:bg-slate-50 flex items-center justify-center transition-all cursor-pointer text-slate-700 hover:text-slate-900 group"
+              title="ย้อนกลับ"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-0.5" />
             </button>
-            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <ShoppingCart className="text-blue-600 w-6 h-6" />
-              <span>ตะกร้าสินค้าของฉัน</span>
-            </h1>
+            <h1 className="text-xl font-bold text-slate-900">ตะกร้าสินค้าของคุณ</h1>
           </div>
 
-          {items.length > 0 && (
-            <button
-              type="button"
-              onClick={handleClearCart}
-              className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 font-semibold px-3 py-1.5 rounded-lg hover:bg-rose-50 transition cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>ล้างตะกร้า</span>
-            </button>
-          )}
+          <span className="text-xs text-slate-500 font-medium bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-xs">
+            มีทั้งหมด {groupedCarts.length} ตะกร้าร้านค้า
+          </span>
         </div>
 
-        {/* สถานะการโหลด หรือ แสดงการ์ด */}
         {loading ? (
-          <div className="py-24 flex flex-col items-center justify-center text-slate-400 gap-2">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-            <p className="text-xs">กำลังตรวจสอบรายการในตะกร้า...</p>
+          <div className="py-20 flex flex-col items-center justify-center text-xs text-slate-400 gap-2">
+            <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+            <span>กำลังโหลดข้อมูลตะกร้า...</span>
           </div>
-        ) : items.length > 0 && shopId ? (
-          <div className="space-y-4">
-            {/* 🌟 การ์ดร้านค้าแนวนอน */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden transition-all hover:border-blue-400">
-              <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-4">
-                
-                {/* 1. รูปภาพร้านค้า + Badge สถานะเปิด/ปิด */}
-                <div className="relative w-full sm:w-36 h-28 sm:h-28 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-100">
-                  {shop?.profile_image || shop?.image_url ? (
-                    <img
-                      src={shop.profile_image || shop.image_url}
-                      alt={shop?.shop_name || "รูปร้านค้า"}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = "none";
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-3xl bg-blue-50/70">
-                      🖨️
-                    </div>
-                  )}
-
-                  <span
-                    className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-md ${
-                      shop?.is_open
-                        ? "bg-emerald-500/90 text-white"
-                        : "bg-slate-700/80 text-white"
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        shop?.is_open ? "bg-white animate-pulse" : "bg-slate-400"
-                      }`}
-                    />
-                    {shop?.is_open ? "เปิดอยู่" : "ปิดทำการ"}
-                  </span>
-                </div>
-
-                {/* 2. รายละเอียดร้านค้า (ชื่อ, เรตติ้ง, ระยะทาง, เวลาเปิดปิด) */}
-                <div className="flex-1 min-w-0 w-full space-y-1.5 text-left">
-                  <h2 className="text-base font-bold text-slate-900 truncate">
-                    {shop?.shop_name || "ร้านรับพิมพ์งาน"}
-                  </h2>
-
-                  {/* คะแนนรีวิว */}
-                  <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                    <div className="flex items-center gap-0.5 text-amber-500 font-bold">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-500" />
-                      <span>
-                        {shop?.rating ? Number(shop.rating).toFixed(1) : "0.0"}
-                      </span>
-                    </div>
-                    {shop?.review_count !== undefined && (
-                      <span className="text-[11px] text-slate-400">
-                        ({shop.review_count})
-                      </span>
-                    )}
-                  </div>
-
-                  {/* ระยะทาง และ เวลาเปิด-ปิด */}
-                  <div className="pt-1 flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-500">
-                    <div className="flex items-center gap-1 text-blue-600 font-semibold truncate">
-                      <MapPin className="w-3.5 h-3.5 shrink-0" />
-                      <span>{formattedDistance}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-slate-500 truncate">
-                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="text-[11px] truncate">{businessHours}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. ปุ่มกดลิงก์ไปหน้าร้าน */}
-                <div className="shrink-0 w-full sm:w-auto">
-                  <Link
-                    href={`/customer/shop/${shopId}`}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
-                  >
-                    <span>ไปที่หน้าร้าน</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              </div>
-
-              {/* 4. แถบ Dropdown ยุบ/ขยายเพื่อดูรายการสินค้า */}
-              <div className="border-t border-slate-100 px-5 py-2.5 bg-slate-50/70 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setIsItemsOpen(!isItemsOpen)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition cursor-pointer"
-                >
-                  <span>{isItemsOpen ? "ซ่อนรายการสินค้า" : "ดูรายการสินค้าในร้านนี้"}</span>
-                  {isItemsOpen ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                </button>
-                <span className="text-[11px] text-slate-500 font-medium">
-                  {items.length} รายการ • รวม ฿{totalPrice.toFixed(2)}
-                </span>
-              </div>
-
-              {/* รายการสินค้าที่คลี่ออกมา */}
-              {isItemsOpen && (
-                <div className="divide-y divide-slate-100 px-5 py-1 bg-white border-t border-slate-100">
-                  {items.map((item: any, idx: number) => (
-                    <div key={idx} className="py-3 flex justify-between items-start gap-4">
-                      <div className="space-y-0.5 min-w-0">
-                        <h4 className="text-sm font-bold text-slate-800 truncate">
-                          {item.category || "งานพิมพ์"} ({item.selected_size || "ขนาดทั่วไป"})
-                        </h4>
-                        <p className="text-xs text-slate-500">
-                          {[item.color_type, item.paper_type, item.finishing_option]
-                            .filter(Boolean)
-                            .join(" • ")}
-                        </p>
-                        <p className="text-xs font-semibold text-blue-600">
-                          จำนวน {item.quantity} ชุด
-                        </p>
-                      </div>
-                      <span className="font-extrabold text-sm text-slate-900 shrink-0">
-                        ฿{Number(item.subtotal || item.unit_price * item.quantity).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+        ) : groupedCarts.length === 0 ? (
+          <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-xs space-y-3">
+            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+              <ShoppingBag className="w-8 h-8" />
             </div>
+            <p className="text-base font-bold text-slate-800">ไม่มีสินค้าในตะกร้า</p>
+            <p className="text-xs text-slate-400">คุณยังไม่ได้เพิ่มบริการงานพิมพ์ใด ๆ ลงในตะกร้า</p>
+            <button
+              type="button"
+              onClick={() => router.push("/customer")}
+              className="mt-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer"
+            >
+              เลือกดูร้านค้า
+            </button>
           </div>
         ) : (
-          /* กรณีไม่มีสินค้าในตะกร้า */
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center space-y-4 shadow-xs">
-            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto text-2xl">
-              🛒
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-slate-800">ไม่มีรายการในตะกร้า</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                คุณยังไม่ได้เลือกร้านค้าหรืองานพิมพ์ใส่ตะกร้าไว้ เริ่มต้นค้นหาร้านและบริการที่ต้องการได้ทันที
-              </p>
-            </div>
-            <Link
-              href="/customer"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-sm"
-            >
-              ไปเลือกร้านค้า
-            </Link>
+          <div className="space-y-4">
+            {groupedCarts.map((group) => {
+              const isExpanded = expandedShopIds.has(group.shop_id);
+
+              return (
+                <div
+                  key={group.shop_id}
+                  className="bg-white rounded-3xl border border-slate-200 shadow-xs p-5 space-y-4 transition"
+                >
+                  {/* หัวการ์ดร้านค้า + ปุ่มคลิกเพื่อพับ/คลี่ (Accordion Header) */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
+                    <div 
+                      onClick={() => toggleExpand(group.shop_id)}
+                      className="flex items-center gap-2 flex-wrap cursor-pointer group select-none flex-1"
+                    >
+                      <Store className="w-5 h-5 text-blue-600 shrink-0" />
+                      <h2 className="font-bold text-sm text-slate-900 group-hover:text-blue-600 transition">
+                        {group.shop_name}
+                      </h2>
+
+                      {/* ป้ายเปิด/ปิด */}
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+                          group.is_open
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-rose-50 text-rose-600 border border-rose-200"
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            group.is_open ? "bg-emerald-500" : "bg-rose-500"
+                          }`}
+                        />
+                        {group.is_open ? "เปิดให้บริการ" : "ปิดทำการ"}
+                      </span>
+
+                      {/* เวลาเปิดทำการ */}
+                      {group.open_time && group.close_time && (
+                        <span className="text-[11px] text-slate-400">
+                          ({group.open_time.slice(0, 5)} - {group.close_time.slice(0, 5)} น.)
+                        </span>
+                      )}
+
+                      {/* ปุ่มกด Dropdown บอกจำนวนรายการ */}
+                      <span className="text-[11px] bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1 transition">
+                        {group.items.length} รายการ
+                        <ChevronDown 
+                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                            isExpanded ? "rotate-180 text-blue-600" : "text-slate-400"
+                          }`} 
+                        />
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleClearShopCart(group.shop_id)}
+                      className="text-xs text-rose-500 hover:text-rose-600 hover:underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> ลบร้านนี้
+                    </button>
+                  </div>
+
+                  {/* รายการสินค้า: แสดงเมื่อคลี่ออก */}
+                  {isExpanded && (
+                    <div className="space-y-2 pt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                      {group.items.map((item, idx) => (
+                        <div
+                          key={item.id || idx}
+                          className="flex items-center justify-between text-xs py-2 px-3 rounded-xl bg-slate-50 border border-slate-100"
+                        >
+                          <div>
+                            <span className="font-bold text-slate-800">{item.category}</span>
+                            <span className="text-[11px] text-slate-400 ml-1.5">
+                              ({[item.selected_size, item.color_type].filter(Boolean).join(" • ")})
+                            </span>
+                            <span className="text-slate-500 block text-[11px] mt-0.5">
+                              จำนวน {item.quantity} ชุด
+                            </span>
+                          </div>
+                          <span className="font-bold text-slate-900">
+                            ฿{Number(item.subtotal || item.unit_price * item.quantity).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ส่วนล่าง: ยอดรวม + ปุ่มไปที่ร้าน */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <div>
+                      <span className="text-[11px] text-slate-400 block">ยอดรวมร้านนี้</span>
+                      <span className="text-base font-extrabold text-blue-600">
+                        ฿{group.total_price.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        router.push(`/customer/shop/${group.shop_id}?openCart=true`);
+                      }}
+                      className={`flex items-center gap-1.5 px-4 py-2 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-md ${
+                        group.is_open
+                          ? "bg-blue-600 hover:bg-blue-700 shadow-blue-500/20"
+                          : "bg-slate-700 hover:bg-slate-800 shadow-slate-500/20"
+                      }`}
+                    >
+                      <span>{group.is_open ? "ไปที่ร้านนี้เพื่อสั่งซื้อ" : "ดูร้านค้า"}</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </main>

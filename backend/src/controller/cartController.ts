@@ -26,21 +26,23 @@ export const getCart = async (req: Request, res: Response) => {
         print_shop (
           id,
           shop_name,
-          profile_image,
-          rating,
-          open_time,
-          close_time,
           is_open,
-          address:address_id (
-            latitude,
-            longitude,
-            detail,
-            subdistrict,
-            district,
-            province
-          )
+          open_time,
+          close_time
         ),
-        cart_item (*)
+        cart_item (
+          id,
+          category,
+          selected_size,
+          color_type,
+          paper_type,
+          finishing_option,
+          quantity,
+          unit_price,
+          subtotal,
+          file_url,
+          page_count
+        )
       `)
       .eq("customer_id", customerId)
       .maybeSingle();
@@ -216,6 +218,31 @@ export const clearCart = async (req: Request, res: Response) => {
     return res.status(200).json({ success: true, message: "Cart cleared" });
   } catch (error: any) {
     console.error("Clear cart error:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 4. ลบสินค้าชิ้นเดียวออกจากตะกร้า
+// ==========================================
+export const removeCartItem = async (req: Request, res: Response) => {
+  try {
+    const { itemId } = req.params;
+
+    if (!itemId) {
+      return res.status(400).json({ success: false, message: "Item ID is required" });
+    }
+
+    const { error } = await supabase
+      .from("cart_item")
+      .delete()
+      .eq("id", itemId);
+
+    if (error) throw error;
+
+    return res.status(200).json({ success: true, message: "ลบรายการสำเร็จ" });
+  } catch (error: any) {
+    console.error("Remove cart item error:", error.message);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

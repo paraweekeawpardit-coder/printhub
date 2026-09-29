@@ -56,7 +56,7 @@ export default function PaymentPage() {
           {
             fileName: 'REQ_UPDATE_PRINTHUB.pdf',
             paperSize: 'A4',
-            colorType: 'ขาว-ดำ 80 แกรม',
+            colorType: 'ขาว-ดำ',
             printSide: 'ไม่มี',
             pagesPerSet: 1,
             pricePerPage: 13.50,

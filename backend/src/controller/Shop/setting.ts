@@ -383,7 +383,9 @@ export const updateBankAccount = async (
 
       if (error) return res.status(400).json({ error: error.message });
     } else {
-      // เพิ่มบัญชีใหม่ (รองรับ shop_id ที่เป็น string/UUID)
+      // เพิ่มบัญชีใหม่
+      // NOTE: shop_id เป็น uuid (string) ไม่ใช่ number ห้าม Number(shop_id)
+      // เพราะจะได้ NaN แล้ว insert พัง
       const { error } = await supabase
         .from("bank_account")
         .insert({ shop_id, bank_name, account_name, account_number });
