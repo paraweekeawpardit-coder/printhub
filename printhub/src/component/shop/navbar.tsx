@@ -2,17 +2,30 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Printer, Home, ClipboardList, MessageCircle, Settings } from "lucide-react";
+import {
+  Printer,
+  Home,
+  ClipboardList,
+  MessageCircle,
+  Settings,
+  LogOut,
+} from "lucide-react";
 
 export default function ShopNavbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [shopId, setShopId] = useState<string | null>(null);
+  const [shopName, setShopName] = useState<string>("");
 
   useEffect(() => {
     const storedShopId = localStorage.getItem("shop_id");
+    const storedShopName = localStorage.getItem("shop_name");
+
     if (storedShopId) {
       setShopId(storedShopId);
+    }
+    if (storedShopName) {
+      setShopName(storedShopName);
     }
   }, []);
 
@@ -30,10 +43,20 @@ export default function ShopNavbar() {
     router.push(`/shop/${path}/${shopId}`);
   };
 
-  return (
-    <nav className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur shadow-sm">
-      <div className="mx-auto max-w-6xl h-16 flex items-center justify-between gap-2 px-4">
 
+  const handleLogout = () => {
+      localStorage.removeItem("shop_id");
+      localStorage.removeItem("shop_name");
+      localStorage.removeItem("token");
+      localStorage.clear();
+
+
+      router.push("/auth");
+  };
+
+  return (
+    <nav className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur shadow-xs">
+      <div className="mx-auto max-w-6xl h-16 flex items-center justify-between gap-2 px-4">
         {/* Logo / Home */}
         <button
           onClick={() => router.push("/shop")}
@@ -42,12 +65,13 @@ export default function ShopNavbar() {
           <div className="w-10 h-10 rounded-full bg-[#0F2942] flex items-center justify-center">
             <Printer size={18} className="text-white" />
           </div>
-          <span className="hidden sm:block text-[#0F2942] font-bold text-xl tracking-tight">PrintHub</span>
+          <span className="hidden sm:block text-[#0F2942] font-bold text-xl tracking-tight">
+            PrintHub
+          </span>
         </button>
 
         {/* Navigation Menu */}
         <div className="flex items-center gap-1 text-sm font-medium">
-
           {/* หน้าหลัก */}
           <button
             onClick={() => router.push("/shop")}
@@ -59,7 +83,9 @@ export default function ShopNavbar() {
             }`}
           >
             <Home size={15} />
-            <span className={isHomeActive ? "inline" : "hidden md:inline"}>หน้าหลัก</span>
+            <span className={isHomeActive ? "inline" : "hidden md:inline"}>
+              หน้าหลัก
+            </span>
           </button>
 
           {/* รายการคำสั่งพิมพ์ */}
@@ -73,7 +99,9 @@ export default function ShopNavbar() {
             }`}
           >
             <ClipboardList size={15} />
-            <span className={isOrderActive ? "inline" : "hidden md:inline"}>รายการคำสั่งพิมพ์</span>
+            <span className={isOrderActive ? "inline" : "hidden md:inline"}>
+              รายการคำสั่งพิมพ์
+            </span>
           </button>
 
           {/* แชท */}
@@ -87,25 +115,49 @@ export default function ShopNavbar() {
             }`}
           >
             <MessageCircle size={15} />
-            <span className={isChatActive ? "inline" : "hidden md:inline"}>แชท</span>
+            <span className={isChatActive ? "inline" : "hidden md:inline"}>
+              แชท
+            </span>
           </button>
-
         </div>
 
-        {/* Setting / Profile */}
-        <button
-          onClick={() => goTo("setting")}
-          className="flex items-center gap-2.5 pr-1 cursor-pointer focus:outline-none"
-        >
-          <span className="hidden lg:block text-sm font-medium text-slate-600">Shop</span>
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative">
-            S
-            <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-md">
-              <Settings size={14} className={isSettingActive ? "text-[#0F2942]" : "text-slate-500"} />
+        {/* Setting & Logout Section */}
+        <div className="flex items-center gap-2">
+          {/* Setting / Profile Button */}
+          <button
+            onClick={() => goTo("setting")}
+            title="ตั้งค่าร้านค้า"
+            className="flex items-center gap-2.5 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none"
+          >
+            <span className="hidden lg:block text-sm font-semibold text-slate-700 pl-2">
+              {shopName || "ร้านค้า"}
+            </span>
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative shrink-0">
+              {shopName?.charAt(0) || "S"}
+              <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-xs">
+                <Settings
+                  size={12}
+                  className={
+                    isSettingActive ? "text-[#0F2942]" : "text-slate-500"
+                  }
+                />
+              </div>
             </div>
-          </div>
-        </button>
+          </button>
 
+          {/* เส้นคั่นแบ่งสัดส่วน */}
+          <div className="h-5 w-[1px] bg-slate-200 my-auto" />
+
+          {/* ปุ่มออกจากระบบ (Logout Button) */}
+          <button
+            onClick={handleLogout}
+            title="ออกจากระบบ"
+            className="flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 transition-colors cursor-pointer focus:outline-none"
+          >
+            <LogOut size={15} />
+            <span className="hidden sm:inline">ออกจากระบบ</span>
+          </button>
+        </div>
       </div>
     </nav>
   );

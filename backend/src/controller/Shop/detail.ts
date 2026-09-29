@@ -21,15 +21,6 @@ export const getOrder = async (
     // ==========================================
     // Main order + standard reverse relations
     // ==========================================
-    // NOTE: current_status / payment / review are intentionally
-    // NOT embedded here. print_order has direct FK columns to
-    // those tables (current_status_id, payment_id, review_id),
-    // but if the FK constraint is missing (or ambiguous with a
-    // reverse FK like payment.order_id), PostgREST's embed fails
-    // and this whole query errors out -> every order looks
-    // "not found". Fetching those by id separately below sidesteps
-    // that entirely.
-
     const { data: order, error } = await supabase
       .from("print_order")
       .select(
@@ -79,7 +70,8 @@ export const getOrder = async (
           filename,
           file_url,
           file_size_mb,
-          page_count
+          page_count,
+          item_id
         )
         `
       )
@@ -96,7 +88,6 @@ export const getOrder = async (
     // ==========================================
     // Status / Payment / Review (fetched by id, no embed)
     // ==========================================
-
     const [
       { data: statusRow, error: statusError },
       { data: paymentRow, error: paymentError },
@@ -136,7 +127,6 @@ export const getOrder = async (
     // ==========================================
     // Customer
     // ==========================================
-
     const formattedCustomer = Array.isArray(order.customer)
       ? order.customer[0]
       : order.customer;
@@ -148,10 +138,6 @@ export const getOrder = async (
     // ==========================================
     // Items (sub-orders from cart checkout)
     // ==========================================
-    // NOTE: field names (category/describe) match order-detail-card.tsx
-    // and the list endpoint (getOrdersByStatus) so both views use the
-    // same OrderItemDetail shape.
-
     const items = (order.print_order_item || []).map((item: any) => ({
       id: item.id,
       category: item.category || "รายการพิมพ์",
@@ -161,6 +147,18 @@ export const getOrder = async (
       unit_price: Number(item.unit_price || 0),
       subtotal: Number(item.subtotal || 0),
       page_count: item.page_count ?? null,
+    }));
+
+    // ==========================================
+    // Files (mapped with item_id)
+    // ==========================================
+    const files = (order.print_file || []).map((f: any) => ({
+      id: f.id,
+      filename: f.filename,
+      file_url: f.file_url,
+      file_size_mb: f.file_size_mb,
+      page_count: f.page_count,
+      item_id: f.item_id || null,
     }));
 
     return res.status(200).json({
@@ -185,7 +183,7 @@ export const getOrder = async (
         },
 
         items,
-        files: order.print_file || [],
+        files,
         payment: paymentRow || null,
         review: reviewRow || null,
       },
