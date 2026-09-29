@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Printer, Home, ShoppingCart, ClipboardList, LogOut } from "lucide-react";
+import NotificationBell from "@/src/component/NotificationBell";
 
 interface NavBarProps {
   onOpenCart?: () => void;
@@ -12,15 +13,45 @@ interface NavBarProps {
 
 export default function NavBar({ onOpenCart, cartCount = 0 }: NavBarProps) {
   const router = useRouter();
+  const [customerId, setCustomerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 1. ลองดึงจาก localStorage ตรงๆ
+    const directCustomerId =
+      localStorage.getItem("customer_id") ||
+      localStorage.getItem("user_id") ||
+      localStorage.getItem("userId");
+
+    if (directCustomerId) {
+      setCustomerId(directCustomerId);
+      return;
+    }
+
+    // 2. แกะจาก object 'user' หรือ 'customer'
+    const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        // เช็กคีย์ทุกแบบที่เป็นไปได้
+        const actualId =
+          user.customer_id ||
+          user.id ||
+          user.user_id ||
+          user.customer?.id ||
+          user.customer?.customer_id;
+
+        setCustomerId(actualId || null);
+      } catch (e) {
+        console.error("Error parsing user data:", e);
+      }
+    }
+  }, []);
 
   // ฟังก์ชันสำหรับการออกจากระบบ
   const handleLogout = () => {
-    // 1. ล้างข้อมูล Session / Token ทั้งหมดที่เก็บไว้ใน Browser
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     sessionStorage.clear();
-
-    // 2. เปลี่ยนเส้นทางกลับไปที่หน้า Landing Page ( / )
     router.push("/");
   };
 
@@ -59,8 +90,11 @@ export default function NavBar({ onOpenCart, cartCount = 0 }: NavBarProps) {
           </li>
         </ul>
 
-        {/* ฝั่งขวา: ปุ่มตะกร้าสินค้า + ไอคอนโปรไฟล์ + ปุ่มออกจากระบบ */}
+        {/* ฝั่งขวา: การแจ้งเตือน + ปุ่มตะกร้าสินค้า + ไอคอนโปรไฟล์ + ปุ่มออกจากระบบ */}
         <div className="flex items-center gap-3">
+          {/* กระดิ่งแจ้งเตือนสำหรับลูกค้า */}
+          {customerId && <NotificationBell userId={customerId} role="customer" />}
+
           {/* ปุ่มตะกร้าสินค้า */}
           {onOpenCart && (
             <button

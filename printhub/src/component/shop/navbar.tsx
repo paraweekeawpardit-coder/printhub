@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Printer, Home, ClipboardList, MessageCircle, Settings } from "lucide-react";
+import NotificationBell from "@/src/component/NotificationBell";
 
 export default function ShopNavbar() {
   const pathname = usePathname();
@@ -29,7 +30,6 @@ export default function ShopNavbar() {
       return;
     }
 
-    // 🟢 แยกการนำทางระหว่าง Order และ Chat อย่างชัดเจน
     if (path === "chat") {
       router.push(`/shop/order/${activeShopId}/chat`);
       return;
@@ -92,18 +92,23 @@ export default function ShopNavbar() {
           </button>
         </div>
 
-        <button
-          onClick={() => goTo("setting")}
-          className="flex items-center gap-2.5 pr-1 cursor-pointer focus:outline-none"
-        >
-          <span className="hidden lg:block text-sm font-medium text-slate-600">Shop</span>
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative">
-            S
-            <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-md">
-              <Settings size={14} className={isSettingActive ? "text-[#0F2942]" : "text-slate-500"} />
+        {/* โซนเมนูขวาบน: เพิ่มNotificationBell ข้างๆ โปรไฟล์ */}
+        <div className="flex items-center gap-2">
+          {shopId && <NotificationBell userId={shopId} role="shop" />}
+
+          <button
+            onClick={() => goTo("setting")}
+            className="flex items-center gap-2.5 pr-1 cursor-pointer focus:outline-none"
+          >
+            <span className="hidden lg:block text-sm font-medium text-slate-600">Shop</span>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative">
+              S
+              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-md">
+                <Settings size={14} className={isSettingActive ? "text-[#0F2942]" : "text-slate-500"} />
+              </div>
             </div>
-          </div>
-        </button>
+          </button>
+        </div>
 
       </div>
     </nav>

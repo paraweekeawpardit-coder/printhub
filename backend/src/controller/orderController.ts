@@ -139,6 +139,17 @@ export const createOrder = async (req: Request, res: Response) => {
     await supabase.from("cart_item").delete().eq("cart_id", cart.id);
     await supabase.from("cart").delete().eq("id", cart.id);
 
+    // 🟢 [เพิ่มใหม่] แจ้งเตือนส่งหา "ร้านค้า" เท่านั้น เมื่อมีออเดอร์ใหม่เข้ามา
+    await supabase.from("notifications").insert([
+      {
+        shop_id: cart.shop_id,
+        order_id: newOrder.id,
+        title: "มีคำสั่งซื้อใหม่!",
+        message: `คุณมีออเดอร์ใหม่ #${newOrder.id.slice(0, 8)} รอการตอบรับ`,
+        is_read: false,
+      },
+    ]);
+
     return res.status(201).json({
       success: true,
       message: "สร้างคำสั่งซื้อสำเร็จ",
@@ -211,6 +222,31 @@ export const updateWorkStatus = async (req: Request, res: Response) => {
       .eq("id", orderId);
 
     if (orderError) throw orderError;
+
+    // 🟢 [เพิ่มใหม่] ดึง customer_id และ ชื่อสถานะ เพื่อส่งแจ้งเตือนหา "ลูกค้า"
+    const { data: orderData } = await supabase
+      .from("print_order")
+      .select("customer_id")
+      .eq("id", orderId)
+      .single();
+
+    const { data: statusData } = await supabase
+      .from("status")
+      .select("state")
+      .eq("id", status_id)
+      .single();
+
+    if (orderData?.customer_id) {
+      await supabase.from("notifications").insert([
+        {
+          customer_id: orderData.customer_id,
+          order_id: orderId,
+          title: "อัปเดตสถานะออเดอร์",
+          message: `ออเดอร์ #${orderId.slice(0, 8)} เปลี่ยนสถานะเป็น "${statusData?.state || 'อัปเดตแล้ว'}"`,
+          is_read: false,
+        },
+      ]);
+    }
 
     return res.status(200).json({ success: true, message: "อัปเดตสถานะเรียบร้อยแล้ว" });
   } catch (error: any) {
