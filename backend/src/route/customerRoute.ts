@@ -31,8 +31,7 @@ import {
 } from '../controller/reviewController.js';
 
 import { 
-  getCustomerDashboard,
-  getApprovedBankAccount
+  getCustomerDashboard
 } from '../controller/customerController.js';
 
 const router = express.Router();
@@ -43,9 +42,6 @@ const router = express.Router();
 router.get('/shops', getShops);
 router.get('/service-types', getAllServiceTypes);
 router.get('/shops/:shopId/services', getShopServices);
-
-// 🌟 บัญชีธนาคารร้านค้า (ดึงเฉพาะที่อนุมัติแล้วสำหรับโอนเงิน)
-router.get('/shops/:shopId/bank-account', getApprovedBankAccount);
 
 // ==========================================
 // 2. ตะกร้าสินค้า (Cart)
