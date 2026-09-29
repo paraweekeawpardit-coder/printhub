@@ -158,102 +158,6 @@ export const getShops = async (req: Request, res: Response) => {
       };
     });
 
-    // 🌟 1. กรองตามประเภทหลัก (categoryParam)
-    if (categoryParam && categoryParam !== 'ทั้งหมด') {
-      formattedShops = formattedShops.filter((s: any) =>
-        s.service_types?.some((t: string) => t.toLowerCase() === categoryParam.toLowerCase())
-      );
-    }
-
-    // แปลงสเปกย่อยที่เลือกเป็น Array
-    let selectedFinishingList: string[] = [];
-    if (finishingParam) {
-      if (Array.isArray(finishingParam)) {
-        selectedFinishingList = finishingParam as string[];
-      } else if (typeof finishingParam === 'string' && finishingParam.length > 0) {
-        selectedFinishingList = decodeURIComponent(finishingParam).split(',');
-      }
-      selectedFinishingList = selectedFinishingList.map((f) => f.trim().toLowerCase()).filter(Boolean);
-    }
-
-    // 🌟 2. กรองตามสเปกย่อย (finishingParam)
-    if (selectedFinishingList.length > 0) {
-      formattedShops = formattedShops.filter((s: any) => {
-        let targetDetails: string[] = [];
-        if (categoryParam && categoryParam !== 'ทั้งหมด' && s.details_by_category[categoryParam]) {
-          targetDetails = s.details_by_category[categoryParam].map((d: string) => d.toLowerCase());
-        } else {
-          targetDetails = s.service_details?.map((d: string) => d.toLowerCase()) || [];
-        }
-
-        // ต้องมีสเปกย่อยตรงอย่างน้อย 1 ข้อที่เลือก
-        return selectedFinishingList.some((item) => targetDetails.includes(item));
-      });
-    }
-
-    // 🌟 3. Combination Price Filter (คำนวณราคารวมสเปกที่ต้องจับคู่ + เทียบงบประมาณ)
-    if (filterMinPrice !== null || filterMaxPrice !== null) {
-      formattedShops = formattedShops.filter((s: any) => {
-        // ดึงรายการไอเทมในหมวดหมู่ที่เลือก (หากไม่ได้เลือกหมวดหมู่ให้รวมทุกหมวด)
-        let relevantItems: Array<{ group: string; detail: string; price: number }> = [];
-
-        if (categoryParam && categoryParam !== 'ทั้งหมด' && s.items_by_category[categoryParam]) {
-          relevantItems = s.items_by_category[categoryParam];
-        } else {
-          relevantItems = Object.values(s.items_by_category).flat() as Array<{
-            group: string;
-            detail: string;
-            price: number;
-          }>;
-        }
-
-        // กรองเอาเฉพาะสเปกที่เลือก (ถ้าผู้ใช้ระบุสเปกย่อยเข้ามา)
-        let filteredItems = relevantItems;
-        if (selectedFinishingList.length > 0) {
-          filteredItems = relevantItems.filter((item) =>
-            selectedFinishingList.includes(item.detail.toLowerCase())
-          );
-        }
-
-        if (filteredItems.length === 0) return false;
-
-        // จัดกลุ่มสเปกย่อยตาม group_type
-        const groupedByGroup: Record<string, number[]> = {};
-        filteredItems.forEach((item) => {
-          const groupName = item.group || 'default';
-          if (!groupedByGroup[groupName]) {
-            groupedByGroup[groupName] = [];
-          }
-          groupedByGroup[groupName].push(item.price);
-        });
-
-        // ฟังก์ชันสร้าง Combination ของราคารวมจากแต่ละกลุ่ม
-        const groupPricesArray = Object.values(groupedByGroup);
-        const getCombinations = (arrays: number[][]): number[] => {
-          if (arrays.length === 0) return [];
-          return arrays.reduce((acc, curr) => {
-            const res: number[] = [];
-            acc.forEach((a) => {
-              curr.forEach((b) => {
-                res.push(a + b);
-              });
-            });
-            return res;
-          }, [0]);
-        };
-
-        const priceCombinations = getCombinations(groupPricesArray);
-
-        // เช็คว่ามี Combination ราคารวมใดที่อยู่ในช่วงงบประมาณหรือไม่
-        return priceCombinations.some((totalPrice) => {
-          const matchMin = filterMinPrice !== null ? totalPrice >= filterMinPrice : true;
-          const matchMax = filterMaxPrice !== null ? totalPrice <= filterMaxPrice : true;
-          return matchMin && matchMax;
-        });
-      });
-    }
-
-    // 🌟 4. ค้นหาด้วย Keyword
     if (search && typeof search === 'string') {
       const keyword = search.trim().toLowerCase();
       formattedShops = formattedShops.filter((s: any) => {
@@ -330,7 +234,6 @@ export const getShopServices = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "ไม่พบร้านค้านี้ในระบบ" });
     }
 
-    // ดึง service_type พร้อม service_detail ที่ผูกกัน
     const { data: serviceTypes, error: stError } = await supabase
       .from("service_type")
       .select(`
@@ -393,4 +296,75 @@ export const getCustomerShops = async (req: Request, res: Response) => {
     console.error("Get shops error:", err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
+};
+
+// ==========================================
+// 5. [เพิ่มใหม่] ยื่นเรื่องขอเปลี่ยน/เพิ่มบัญชีธนาคาร (ฝั่งร้านค้า - Status: Pending)
+// ==========================================
+export const requestBankAccountUpdate = async (req: Request, res: Response) => {
+  try {
+    const { shop_id, bank_name, account_number, account_name } = req.body;
+
+    if (!shop_id || !bank_name || !account_number || !account_name) {
+      return res.status(400).json({ success: false, message: "กรุณากรอกข้อมูลบัญชีธนาคารให้ครบถ้วน" });
+    }
+
+    // บันทึกข้อมูลบัญชีธนาคารใหม่ลงตารางโดยกำหนด status เป็น 'pending'
+    const { data, error } = await supabase
+      .from("bank_account")
+      .insert([
+        {
+          shop_id,
+          bank_name,
+          account_number,
+          account_name,
+          status: "pending", // 🌟 ตั้งค่าให้รอ Admin ตรวจสอบ
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.status(201).json({
+      success: true,
+      message: "ส่งคำขอเปลี่ยนบัญชีธนาคารเรียบร้อยแล้ว กรอดำเนินการอนุมัติจาก Admin",
+      data,
+    });
+  } catch (error: any) {
+    console.error("Request bank account error:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 6. [เพิ่มใหม่] ดึงข้อมูลบัญชีธนาคารที่อนุมัติแล้ว (สำหรับลูกค้าชำระเงิน)
+// ==========================================
+export const getApprovedBankAccount = async (req: Request, res: Response) => {
+  try {
+    const { shopId } = req.params;
+
+    if (!shopId) {
+      return res.status(400).json({ success: false, message: "กรุณาระบุ shopId" });
+    }
+
+    // 🌟 ดึงเฉพาะบัญชีที่อนุมัติแล้ว (approved) เพื่อความปลอดภัย
+    const { data: bankInfo, error } = await supabase
+      .from("bank_account")
+      .select("*")
+      .eq("shop_id", shopId)
+      .eq("status", "approved")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    return res.status(200).json({
+      success: true,
+      data: bankInfo || null,
+    });
+  } catch (error: any) {
+    console.error("Get approved bank account error:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+  
 };

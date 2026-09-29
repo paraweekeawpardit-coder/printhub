@@ -134,11 +134,8 @@ import { Request, Response } from "express";
 import multer from "multer"; // <-- 1. เพิ่ม import multer
 import supabase from "../config/supabase.js";
 
-// ตั้งค่า Multer Memory Storage สำหรับรับไฟล์สลิป
-export const upload = multer({ storage: multer.memoryStorage() });
-
 // ==========================================
-// 1. ฟังก์ชันเดิม: getCustomerDashboard
+// 1. DASHBOARD ฝั่งลูกค้า
 // ==========================================
 export const getCustomerDashboard = async (req: Request, res: Response) => {
   try {
