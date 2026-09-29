@@ -10,11 +10,11 @@ import {
   ChevronDown, 
   Clock, 
   Printer, 
-  Package,
+  Package, 
   AlertTriangle,
   X,
   Check,
-  ArrowLeft
+  CreditCard
 } from 'lucide-react';
 import NavBar from '../../../component/customer/NavBar';
 
@@ -36,6 +36,7 @@ interface Order {
   receive_date: string;
   appointment_time?: string;
   total_price: number;
+  total_amount?: number;
   description: string;
   shop_id?: string;
   print_shop?: {
@@ -55,6 +56,7 @@ interface Order {
 // รายการสถานะตามค่า state ในฐานข้อมูล
 const FILTER_TABS = [
   'ทั้งหมด',
+  'รอการชำระเงิน',
   'รอการดำเนินงาน',
   'กำลังพิมพ์',
   'พิมพ์เสร็จสิ้น',
@@ -182,8 +184,11 @@ export default function CustomerOrdersPage() {
     return result;
   }, [orders, selectedStatus]);
 
+  // 🌟 จุดแก้ที่ 1: เพิ่มสีสำหรับป้าย "รอการชำระเงิน"
   const getStatusBadgeStyle = (state: string) => {
     switch (state) {
+      case 'รอการชำระเงิน':
+        return 'bg-amber-50 text-amber-800 border-amber-300';
       case 'รอการดำเนินงาน':
       case 'รอดำเนินการ':
       case 'Pending':
@@ -243,6 +248,17 @@ export default function CustomerOrdersPage() {
     }
   };
 
+  // ฟังก์ชันตรวจว่าออเดอร์นี้สั่งมาเกิน 10 นาทีหรือยัง
+const isOrderExpired = (orderDateStr: string) => {
+  if (!orderDateStr) return false;
+  const orderTime = new Date(orderDateStr).getTime();
+  const now = Date.now();
+  const TEN_MINUTES_MS = 10 * 60 * 1000;
+  return now - orderTime > TEN_MINUTES_MS;
+};
+
+
+
   return (
     <div className="min-h-screen bg-[#F9FAFB] font-sans pb-12 relative">
       <NavBar 
@@ -269,7 +285,6 @@ export default function CustomerOrdersPage() {
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
           {FILTER_TABS.map((tab) => {
             const isActive = selectedStatus === tab;
-            // นับจำนวนออเดอร์ในแต่ละแท็บ
             const count = tab === 'ทั้งหมด' 
               ? orders.length 
               : orders.filter((o) => getOrderState(o) === tab).length;
@@ -342,10 +357,19 @@ export default function CustomerOrdersPage() {
           </div>
         ) : (
           filteredAndSortedOrders.map((order) => {
-            const currentStatus = getOrderState(order);
-            const items =
-              order.print_order_item || order.order_items || order.items || [];
+            let currentStatus = getOrderState(order);
+            
+            // 🌟 ถ้าสถานะเป็น "รอการชำระเงิน" แต่เวลาเกิน 10 นาทีแล้ว ให้ตัดเป็น "ยกเลิกการพิมพ์" ทันที
+            const expired = isOrderExpired(order.order_date);
+            if (currentStatus === 'รอการชำระเงิน' && expired) {
+              currentStatus = 'ยกเลิกการพิมพ์';
+            }
+
+            const items = order.print_order_item || order.order_items || order.items || [];
             const isExpanded = !!expandedOrders[order.id];
+
+            // ปุ่มจ่ายเงินจะแสดงได้ก็ต่อเมื่อ "รอการชำระเงิน" และ "ยังไม่หมดเวลา (< 10 นาที)" เท่านั้น
+            const isPendingPayment = currentStatus === 'รอการชำระเงิน' && !expired;
 
             const isDone =
               currentStatus === 'พิมพ์เสร็จสิ้น' ||
@@ -357,6 +381,8 @@ export default function CustomerOrdersPage() {
               currentStatus === 'กำลังพิมพ์' ||
               currentStatus === 'In Progress' ||
               isDone;
+
+            const orderPrice = order.total_amount || order.total_price || 0;
 
             return (
               <div
@@ -460,7 +486,21 @@ export default function CustomerOrdersPage() {
                   </span>
 
                   <div className="flex items-center gap-2.5 self-end sm:self-auto flex-wrap">
-                    {/* 1. ปุ่มขอคืนเงิน (แสดงเมื่อพิมพ์เสร็จสิ้น หรือ รายการเสร็จสิ้น) */}
+                    {/* 🌟 แสดงปุ่มชำระเงินเฉพาะเมื่อ "รอการชำระเงิน" และ "ยังไม่เกิน 10 นาที" เท่านั้น */}
+                    {isPendingPayment && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          router.push(`/customer/order/payment/${order.id}?totalPrice=${orderPrice}`);
+                        }}
+                        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>ชำระเงิน</span>
+                      </button>
+                    )}
+
+                    {/* ปุ่มขอคืนเงิน (แสดงเมื่อพิมพ์เสร็จสิ้น หรือ รายการเสร็จสิ้น) */}
                     {isDone && (
                       <button
                         type="button"
@@ -475,7 +515,7 @@ export default function CustomerOrdersPage() {
                       </button>
                     )}
 
-                    {/* 2. ปุ่มให้คะแนนร้านค้า (สีครีมขอบเหลืองทอง) */}
+                    {/* ปุ่มให้คะแนนร้านค้า (สีครีมขอบเหลืองทอง) */}
                     {isDone && (
                       <button
                         type="button"
@@ -492,11 +532,11 @@ export default function CustomerOrdersPage() {
                     <div className="flex items-center gap-1 px-1">
                       <span className="text-slate-500">ยอดรวมทั้งสิ้น:</span>
                       <span className="text-base font-extrabold text-blue-600">
-                        ฿{Number(order.total_price).toFixed(2)}
+                        ฿{Number(orderPrice).toFixed(2)}
                       </span>
                     </div>
 
-                    {/* 3. ปุ่มแชตกับร้านค้า (สีฟ้า/น้ำเงินสด) */}
+                    {/* ปุ่มแชตกับร้านค้า */}
                     {canChat && (
                       <Link
                         href={`/customer/order/${order.id}/chat`}
