@@ -1,46 +1,30 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
-  X, 
-  Check, 
-  RotateCcw, 
-  SlidersHorizontal, 
-  Info,
-  FileText, 
-  Smile, 
-  Flag, 
-  Contact, 
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  FileText,
+  Sticker,
+  Flag,
+  CreditCard,
   Image as ImageIcon,
-  MapPin,
-  Star
+  SlidersHorizontal,
+  X,
+  Check,
+  RotateCcw,
+  Info,
 } from "lucide-react";
 
-interface FilterPillsBarProps {
-  selectedCategory: string;
-  isNearest: boolean;
-  onToggleNearest: () => void;
-  isOpenOnly: boolean;
-  onToggleOpenOnly: () => void;
-  isTopRated: boolean;
-  onToggleTopRated: () => void;
-  minPrice?: number | string;
-  maxPrice?: number | string;
-  onApplyPrice: (min?: number, max?: number) => void;
-  selectedFinishing: string[];
-  onSelectFinishing: (finishing: string[]) => void;
-  onSelectCategory?: (category: string) => void;
-  onResetAll: () => void;
-}
-
+// ประเภทงานพิมพ์หลัก
 const CATEGORIES = [
-  { name: "เอกสาร", icon: FileText, subtitle: "ชีท, รายงาน, หนังสือ" },
-  { name: "แผ่นสติกเกอร์", icon: Smile, subtitle: "ไดคัท, สติกเกอร์สินค้า" },
-  { name: "ป้ายไวนิล", icon: Flag, subtitle: "ป้ายหน้าร้าน, แบนเนอร์" },
-  { name: "นามบัตร", icon: Contact, subtitle: "บัตรสมาชิก, การ์ดแนะนำตัว" },
-  { name: "โปสเตอร์", icon: ImageIcon, subtitle: "ภาพพิมพ์, ใบปิดประชาสัมพันธ์" },
+  { name: "เอกสาร", subtitle: "ชีท, รายงาน, หนังสือ", icon: FileText },
+  { name: "แผ่นสติกเกอร์", subtitle: "ไดคัท, สติกเกอร์สินค้า", icon: Sticker },
+  { name: "ป้ายไวนิล", subtitle: "ป้ายหน้าร้าน, แบนเนอร์", icon: Flag },
+  { name: "นามบัตร", subtitle: "บัตรสมาชิก, การ์ดแนะนำตัว", icon: CreditCard },
+  { name: "โปสเตอร์", subtitle: "ภาพพิมพ์, ใบปิดประชาสัมพันธ์", icon: ImageIcon },
 ];
 
+// รายการตัวเลือกสเปกย่อย
 const GROUPED_OPTIONS: Record<string, { group: string; items: string[] }[]> = {
   เอกสาร: [
     { group: "ขนาด", items: ["A3", "A4", "A5", "A6"] },
@@ -48,197 +32,206 @@ const GROUPED_OPTIONS: Record<string, { group: string; items: string[] }[]> = {
     { group: "การเข้าเล่มและตกแต่ง", items: ["เย็บมุม", "สันกาว", "กระดูกงู", "สันเกลียว"] },
   ],
   แผ่นสติกเกอร์: [
-    { group: "วัสดุ", items: ["สติกเกอร์พีพี", "สติกเกอร์กระดาษ", "สติกเกอร์โฮโลแกรม", "สติกเกอร์พีพีใส"] },
-    { group: "ขนาด", items: ["3x3 ซม.", "5x5 ซม.", "7x7 ซม.", "10x10 ซม."] },
+    { group: "ประเภทสติกเกอร์", items: ["สติกเกอร์กระดาษ", "สติกเกอร์ PVC กันน้ำ", "สติกเกอร์ใส", "สติกเกอร์คราฟท์"] },
+    { group: "รูปแบบตัด", items: ["ไดคัท 100%", "คิสคัท (Kiss-cut)", "แผ่นใหญ่"] },
   ],
   ป้ายไวนิล: [
-    { group: "ขนาด", items: ["60x160 ซม.", "160x60 ซม."] },
-    { group: "การเข้าเล่มและตกแต่ง", items: ["พับขอบ", "เจาะตาไก่"] },
+    { group: "ความหนา", items: ["360 แกรม", "440 แกรม", "510 แกรม"] },
+    { group: "การพับขอบ/เจาะรู", items: ["ตอกตาไก่", "พับขอบอย่างเดียว", "ร้อยท่อบน-ล่าง"] },
   ],
   นามบัตร: [
-    { group: "ขนาด", items: ["9x5.5 ซม.", "9x5 ซม.", "8.5x5.5 ซม."] },
-    { group: "การพิมพ์", items: ["หน้าเดียว", "หน้า-หลัง"] },
-    { group: "วัสดุ", items: [
-      "อาร์ตการ์ดมัน 300 แกรม", "อาร์ตการ์ดมัน 350 แกรม", "อาร์ตการ์ดมัน 400 แกรม",
-      "อาร์ตการ์ดด้าน 300 แกรม", "อาร์ตการ์ดด้าน 350 แกรม", "อาร์ตการ์ดด้าน 400 แกรม"
-    ] },
-    { group: "การเข้าเล่มและตกแต่ง", items: [
-      "เคลือบมัน (หน้าเดียว)", "เคลือบมัน (สองด้าน)",
-      "เคลือบด้าน (หน้าเดียว)", "เคลือบด้าน (สองด้าน)"
-    ] },
+    { group: "กระดาษ", items: ["อาร์ตการ์ด 260g", "อาร์ตการ์ด 300g", "กระดาษคราฟท์", "กระดาษพิเศษ"] },
+    { group: "การเคลือบ", items: ["ไม่เคลือบ", "เคลือบเงา", "เคลือบด้าน", "Soft Touch"] },
   ],
   โปสเตอร์: [
-    { group: "ขนาด", items: ["A3", "A4", "A5", "A6"] },
-    { group: "ระบบสี", items: ["ขาว-ดำ", "สี"] },
-    { group: "วัสดุ", items: [
-      "อาร์ตการ์ดมัน 300 แกรม", "อาร์ตการ์ดมัน 350 แกรม", "อาร์ตการ์ดมัน 400 แกรม",
-      "อาร์ตการ์ดด้าน 300 แกรม", "อาร์ตการ์ดด้าน 350 แกรม", "อาร์ตการ์ดด้าน 400 แกรม"
-    ] },
+    { group: "ขนาด", items: ["A3", "A2", "A1", "A0"] },
+    { group: "วัสดุ", items: ["กระดาษอาร์ต 160g", "Photo Paper", "PP Paper"] },
   ],
 };
 
-export default function FilterPillsBar({
-  selectedCategory,
-  isNearest,
-  onToggleNearest,
-  isOpenOnly,
-  onToggleOpenOnly,
-  isTopRated,
-  onToggleTopRated,
-  minPrice,
-  maxPrice,
-  onApplyPrice,
-  selectedFinishing,
-  onSelectFinishing,
-  onSelectCategory,
-  onResetAll,
-}: FilterPillsBarProps) {
-  const [isFinishingModalOpen, setIsFinishingModalOpen] = useState(false);
-  const [tempMinPrice, setTempMinPrice] = useState<number | string | undefined>(minPrice);
-  const [tempMaxPrice, setTempMaxPrice] = useState<number | string | undefined>(maxPrice);
+export default function FilterPillsBar() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
+  // State หลัก
+  const [selectedCategory, setSelectedCategory] = useState<string>("เอกสาร");
+  const [selectedFinishing, setSelectedFinishing] = useState<string[]>([]);
+  const [minPrice, setMinPrice] = useState<string>("");
+  const [maxPrice, setMaxPrice] = useState<string>("");
+
+  // State สำหรับ Pop-up Modal
+  const [isFinishingModalOpen, setIsFinishingModalOpen] = useState(false);
   const [modalCategory, setModalCategory] = useState<string>("เอกสาร");
   const [tempFinishing, setTempFinishing] = useState<string[]>([]);
-  const [priceError, setPriceError] = useState("");
+  const [tempMinPrice, setTempMinPrice] = useState<string>("");
+  const [tempMaxPrice, setTempMaxPrice] = useState<string>("");
+  const [priceError, setPriceError] = useState<string>("");
 
-  const selectedOptionsList = Array.isArray(selectedFinishing) ? selectedFinishing : [];
+  // Sync จาก URL SearchParams เมื่อโหลดหน้า
+  useEffect(() => {
+    const catParam = searchParams.get("category");
+    const finishingParam = searchParams.get("finishing_service");
+    const minP = searchParams.get("min_price");
+    const maxP = searchParams.get("max_price");
 
-  const hasPriceFilter = Boolean(
-    (minPrice !== undefined && minPrice !== "" && minPrice !== null) ||
-    (maxPrice !== undefined && maxPrice !== "" && maxPrice !== null)
-  );
-  const filterCount = selectedOptionsList.length + (hasPriceFilter ? 1 : 0);
-  const hasActiveSpecs = filterCount > 0;
+    if (catParam) {
+      setSelectedCategory(catParam);
+      setModalCategory(catParam);
+    }
+    if (finishingParam) {
+      setSelectedFinishing(finishingParam.split(",").filter(Boolean));
+    } else {
+      setSelectedFinishing([]);
+    }
+    setMinPrice(minP || "");
+    setMaxPrice(maxP || "");
+  }, [searchParams]);
 
+  // ฟังก์ชันอัปเดต URL Parameters
+  const updateQueryParams = (newCategory: string, newFinishing: string[], minP?: string, maxP?: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    
+    if (newCategory) params.set("category", newCategory);
+    else params.delete("category");
+
+    if (newFinishing.length > 0) params.set("finishing_service", newFinishing.join(","));
+    else params.delete("finishing_service");
+
+    if (minP && parseFloat(minP) > 0) params.set("min_price", minP);
+    else params.delete("min_price");
+
+    if (maxP && parseFloat(maxP) > 0) params.set("max_price", maxP);
+    else params.delete("max_price");
+
+    router.push(`?${params.toString()}`);
+  };
+
+  // เปิด Modal
   const handleOpenModal = () => {
-    setModalCategory(selectedCategory && selectedCategory !== "ทั้งหมด" ? selectedCategory : "เอกสาร");
-    setTempFinishing(selectedFinishing || []);
+    setModalCategory(selectedCategory);
+    setTempFinishing([...selectedFinishing]);
     setTempMinPrice(minPrice);
     setTempMaxPrice(maxPrice);
     setPriceError("");
     setIsFinishingModalOpen(true);
   };
 
-  const handleCategoryChange = (newCat: string) => {
-    if (modalCategory !== newCat) {
-      setModalCategory(newCat);
-      setTempFinishing([]);
-    }
+  // เปลี่ยน Category ใน Modal
+  const handleCategoryChange = (catName: string) => {
+    setModalCategory(catName);
+    setTempFinishing([]);
   };
 
+  // เลือก/ยกเลิก สเปกย่อย
   const toggleOption = (item: string) => {
-    if (tempFinishing.includes(item)) {
-      setTempFinishing(tempFinishing.filter((x) => x !== item));
-    } else {
-      setTempFinishing([...tempFinishing, item]);
-    }
+    setTempFinishing((prev) =>
+      prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item]
+    );
   };
 
-  // 🌟 Logic ตรวจสอบความถูกต้องของราคาก่อนตกลง
+  // ยืนยันการเลือกใน Modal
   const handleConfirmModal = () => {
-    const min = tempMinPrice !== "" && tempMinPrice !== undefined && tempMinPrice !== null ? Number(tempMinPrice) : undefined;
-    const max = tempMaxPrice !== "" && tempMaxPrice !== undefined && tempMaxPrice !== null ? Number(tempMaxPrice) : undefined;
+    const minVal = tempMinPrice ? parseFloat(tempMinPrice) : null;
+    const maxVal = tempMaxPrice ? parseFloat(tempMaxPrice) : null;
 
-    // 1. ตรวจสอบหากกรอกราคา <= 0
-    if ((min !== undefined && min <= 0) || (max !== undefined && max <= 0)) {
-      setPriceError("กรุณาระบุงบประมาณราคาที่มากกว่า 0 บาท");
+    if (minVal !== null && minVal <= 0) {
+      setPriceError("ราคาต่ำสุดต้องมากกว่า 0 บาท");
       return;
     }
-
-    // 2. ตรวจสอบกรณีราคาต่ำสุดมากกว่าราคาสูงสุด
-    if (min !== undefined && max !== undefined && min > max) {
+    if (maxVal !== null && maxVal <= 0) {
+      setPriceError("ราคาสูงสุดต้องมากกว่า 0 บาท");
+      return;
+    }
+    if (minVal !== null && maxVal !== null && minVal > maxVal) {
       setPriceError("ราคาต่ำสุดต้องไม่มากกว่าราคาสูงสุด");
       return;
     }
 
     setPriceError("");
+    setSelectedCategory(modalCategory);
+    setSelectedFinishing(tempFinishing);
+    setMinPrice(tempMinPrice);
+    setMaxPrice(tempMaxPrice);
 
-    if (onSelectCategory) onSelectCategory(modalCategory);
-    onSelectFinishing(tempFinishing);
-    onApplyPrice(min, max);
+    updateQueryParams(modalCategory, tempFinishing, tempMinPrice, tempMaxPrice);
     setIsFinishingModalOpen(false);
   };
 
+  // ล้างตัวกรองทั้งหมด
+  const handleClearAll = () => {
+    setSelectedCategory("เอกสาร");
+    setSelectedFinishing([]);
+    setMinPrice("");
+    setMaxPrice("");
+    router.push("?");
+  };
+
   return (
-    <>
-      {/* แถบตัวกรอง Pills Bar ด้านนอก */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1.5 text-xs font-medium relative z-30">
-        <button
-          type="button"
-          onClick={onToggleNearest}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
-            isNearest
-              ? "bg-blue-50 text-blue-600 border-blue-500 shadow-2xs font-semibold"
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <MapPin className="w-3.5 h-3.5 text-blue-600" />
-          <span>ระยะทางใกล้ที่สุด</span>
-        </button>
+    <div className="w-full bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4 overflow-x-auto">
+        {/* แถบสรุปตัวเลือกหลักที่เลือกไว้ */}
+        <div className="flex items-center gap-2 flex-nowrap">
+          <button
+            type="button"
+            onClick={handleOpenModal}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition cursor-pointer border border-blue-200/60 shrink-0"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span>กรองสเปกงานพิมพ์</span>
+            {(selectedFinishing.length > 0 || minPrice || maxPrice) && (
+              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-extrabold ml-0.5">
+                {selectedFinishing.length + (minPrice || maxPrice ? 1 : 0)}
+              </span>
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={onToggleOpenOnly}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
-            isOpenOnly
-              ? "bg-emerald-50 text-emerald-700 border-emerald-500 shadow-2xs font-semibold"
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <span className={`w-2 h-2 rounded-full ${isOpenOnly ? "bg-emerald-500" : "bg-slate-300"}`} />
-          <span>เปิดให้บริการ</span>
-        </button>
+          <div className="h-5 w-[1px] bg-slate-200 mx-1 shrink-0" />
 
-        <button
-          type="button"
-          onClick={onToggleTopRated}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
-            isTopRated
-              ? "bg-amber-50 text-amber-600 border-amber-500 shadow-2xs font-semibold"
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-          <span>คะแนนสูงสุด</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={handleOpenModal}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer ${
-            hasActiveSpecs
-              ? "bg-blue-50 text-blue-600 border-blue-500 shadow-2xs font-semibold"
-              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-          }`}
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span>
-            {hasActiveSpecs ? `ตัวกรองสเปก (${filterCount})` : "สเปกงานพิมพ์และช่วงราคา"}
+          {/* แสดง Tag หมวดหมู่ */}
+          <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-medium shrink-0">
+            ประเภท: <strong className="text-slate-900">{selectedCategory}</strong>
           </span>
-          {hasActiveSpecs && <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
-        </button>
 
-        <button
-          type="button"
-          onClick={onResetAll}
-          className="px-3.5 py-1.5 rounded-full border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold shrink-0 transition-all shadow-2xs cursor-pointer ml-auto flex items-center gap-1.5"
-        >
-          <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
-          <span>ล้างตัวกรอง</span>
-        </button>
+          {/* แสดง Tag สเปกที่เลือก */}
+          {selectedFinishing.map((item) => (
+            <span
+              key={item}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100 shrink-0"
+            >
+              {item}
+            </span>
+          ))}
+
+          {/* แสดง Tag ช่วงราคา */}
+          {(minPrice || maxPrice) && (
+            <span className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-100 shrink-0">
+              ฿{minPrice || "0"} - ฿{maxPrice || "ไม่จำกัด"}
+            </span>
+          )}
+
+          {/* ปุ่มล้างตัวกรองทั้งหมด */}
+          {(selectedFinishing.length > 0 || minPrice || maxPrice) && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="text-xs text-rose-500 hover:text-rose-600 hover:underline font-medium ml-2 cursor-pointer shrink-0"
+            >
+              ล้างทั้งหมด
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* MODAL POP-UP */}
+      {/* POP-UP MODAL */}
       {isFinishingModalOpen && (
-        <div 
-          /* 🌟 กดพื้นที่ฉากหลังสีดำตรงไหนก็ปิด Pop-up ได้ทันที */
+        <div
+          /* กดพื้นที่ฉากหลังตรงไหนก็ปิดได้ทันที */
           onClick={() => setIsFinishingModalOpen(false)}
-          /* 🌟 เพิ่ม z-[100] และปรับ pt-24 pb-6 เพื่อดัน Pop-up ลงมาพ้น Navbar ด้านบน */
+          /* เพิ่ม z-[100] และ pt-24 ดันลงมาจาก Navbar ด้านบน */
           className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 pt-24 sm:pt-28 pb-6 bg-slate-900/60 backdrop-blur-xs cursor-pointer"
         >
-          <div 
-            /* Prevent Propagation เพื่อไม่ให้กดข้างใน Pop-up แล้วหลุดปิด */
-            onClick={(e) => e.stopPropagation()} 
+          <div
+            onClick={(e) => e.stopPropagation()}
             className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[80vh] relative animate-in fade-in zoom-in-95 duration-150 cursor-default"
           >
             {/* Header Pop-up */}
@@ -465,6 +458,6 @@ export default function FilterPillsBar({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
