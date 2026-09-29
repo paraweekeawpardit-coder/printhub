@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
-import { supabase } from "@/src/config/supabase";
+import { supabase } from "@/config/supabase";
 import ChatBox from "../../../../../component/ChatBox";
 
 export default function CustomerOrderChatPage() {

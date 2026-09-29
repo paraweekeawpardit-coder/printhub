@@ -1,3 +1,6 @@
+"use client";
+
+import { useRouter } from "next/navigation";
 import { MessageCircle, ArrowUpRight, FileText } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions from "./order-action";
@@ -5,11 +8,6 @@ import OrderActions from "./order-action";
 // ==========================================
 // Types
 // ==========================================
-// NOTE: cart lets a customer add several items (with different
-// files/specs) into one checkout, so one order can now contain
-// several "sub-order" items. `items` replaces the old flat
-// qty/type/detail/file_name/file_url fields.
-
 export type OrderItemDetail = {
   id: string;
   category: string;
@@ -86,8 +84,18 @@ export default function OrderDetailCard({
   onClick,
   onUpdateStatus,
 }: Props) {
+  const router = useRouter();
   const s = STATUS_CONFIG[order.status] ?? FALLBACK;
   const items = order.items ?? [];
+
+  // ฟังก์ชันนำทางไปหน้าแชทของออเดอร์นี้
+  const handleGoToChat = (e: React.MouseEvent) => {
+    e.stopPropagation(); // ป้องกันไม่ให้ทะลุไปโดน onClick หลักของการ์ด
+    const shopId = localStorage.getItem("shop_id") || "";
+    if (shopId && order.order_id) {
+      router.push(`/shop/order/${shopId}/chat?order_id=${order.order_id}`);
+    }
+  };
 
   return (
     <div
@@ -187,16 +195,16 @@ export default function OrderDetailCard({
           </div>
         </div>
 
-        {/* Chat Link */}
-        <a
-          href="#"
-          onClick={(e) => e.stopPropagation()}
-          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
+        {/* Chat Link (แก้ไขปุ่มตรงนี้แล้ว) */}
+        <button
+          type="button"
+          onClick={handleGoToChat}
+          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
         >
           <MessageCircle size={14} />
           <span>แชทกับลูกค้า</span>
           <ArrowUpRight size={12} className="opacity-60" />
-        </a>
+        </button>
       </div>
 
       {/* Footer: Total Amount & Actions */}

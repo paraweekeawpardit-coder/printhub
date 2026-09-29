@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/src/config/supabase";
+import { supabase } from "@/config/supabase"; // ปรับ path ตามไฟล์ supabase ของคุณ
 
 export interface NotificationItem {
   id: string;
@@ -21,13 +21,17 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
   const [loading, setLoading] = useState(true);
 
   const fetchNotifications = async () => {
-    if (!userId) return;
-    setLoading(true);
+    if (!userId || userId === "undefined" || userId === "null") {
+      setNotifications([]);
+      setUnreadCount(0);
+      setLoading(false);
+      return;
+    }
 
     try {
+      setLoading(true);
       let query = supabase.from("notifications").select("*");
 
-      // กรองตามบทบาทผู้ใช้
       if (role === "customer") {
         query = query.eq("customer_id", userId);
       } else {
@@ -70,7 +74,6 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
 
     const columnCheck = role === "customer" ? "customer_id" : "shop_id";
 
-    // Subscription ฟังเหตุการณ์สร้างการแจ้งเตือนใหม่แบบ Realtime
     const channel = supabase
       .channel(`noti_\({role}_\){userId}`)
       .on(

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { supabase } from "@/src/config/supabase";
+import { supabase } from "@/config/supabase";
 import { Paperclip, X } from "lucide-react";
 
 interface Message {
