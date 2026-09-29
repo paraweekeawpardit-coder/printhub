@@ -109,37 +109,6 @@ export default function ShopMainPage() {
     let uploadedUrls: string[] = [];
 
     // 🌟 รองรับกรณีเลือกหลายไฟล์ (files: File[]) หรือไฟล์เดี่ยว (file: File)
-    const rawFiles: File[] = Array.isArray(itemPayload.files)
-      ? itemPayload.files
-      : itemPayload.file instanceof File
-      ? [itemPayload.file]
-      : [];
-
-    if (rawFiles.length > 0) {
-      for (const file of rawFiles) {
-        try {
-          const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
-          const filePath = `${customerId}/${Date.now()}_${cleanFileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from("print_files")
-            .upload(filePath, file, { cacheControl: "3600", upsert: false });
-
-          if (!uploadError) {
-            const { data: publicData } = supabase.storage
-              .from("print_files")
-              .getPublicUrl(filePath);
-            uploadedUrls.push(publicData.publicUrl);
-          } else {
-            console.error("Upload error:", uploadError.message);
-          }
-        } catch (uploadErr) {
-          console.error("Storage upload exception:", uploadErr);
-        }
-      }
-    }
-
-    // รวม URL หากมีหลายไฟล์ (คั่นด้วยลูกน้ำแบบไม่มีช่องว่าง) หรือใช้ URL เดิมถ้าไม่ได้แนบไฟล์ใหม่
     const finalFileUrl = uploadedUrls.length > 0 
       ? uploadedUrls.join(",") 
       : (itemPayload.file_url || null);
@@ -147,6 +116,9 @@ export default function ShopMainPage() {
     const qty = Number(itemPayload.quantity) || 1;
     const unitPrice = Number(itemPayload.unit_price) || 0;
     const computedSubtotal = itemPayload.subtotal ? Number(itemPayload.subtotal) : unitPrice * qty;
+
+    // 🟢 1. ดึงจำนวนหน้ารวมที่แท้จริง
+    const extractedPages = Number(itemPayload.page_count || itemPayload.total_pages || itemPayload.pages_per_set) || 1;
 
     const payload = {
       customer_id: customerId,
@@ -159,8 +131,8 @@ export default function ShopMainPage() {
       finishing_option: itemPayload.finishing_option,
       quantity: qty,
       unit_price: unitPrice,
-      total_pages: Number(itemPayload.total_pages) || 1,
-      page_count: Number(itemPayload.total_pages) || 1,
+      total_pages: extractedPages,  // 👈 ใช้ extractedPages
+      page_count: extractedPages,   // 👈 ใช้ extractedPages
       side_type: itemPayload.finishing_option?.includes("หน้า-หลัง") ? "DOUBLE" : "SINGLE",
     };
 
@@ -174,7 +146,9 @@ export default function ShopMainPage() {
       quantity: payload.quantity,
       unit_price: payload.unit_price,
       subtotal: computedSubtotal,
-    };
+      total_pages: extractedPages, // 🟢 2. เพิ่มบรรทัดนี้ลงใน tempItem
+      page_count: extractedPages,  // 🟢 3. เพิ่มบรรทัดนี้ลงใน tempItem
+    } as CartItem;
 
     setCartItems((prev) => [...prev, tempItem]);
     setSelectedService(null);
@@ -243,14 +217,18 @@ export default function ShopMainPage() {
       return;
     }
 
-    const formattedItems = cartItems.map((item) => {
+    const formattedItems = cartItems.map((item: any) => {
       const itemSubtotal = Number(item.subtotal) || Number(item.unit_price * item.quantity) || 0;
+      
+      // 🟢 ดึงจำนวนหน้าที่ถูกต้องจากไอเทมในตะกร้า
+      const itemPages = Number(item.page_count || item.total_pages || item.pagesPerSet) || 1;
+
       return {
         fileName: item.category || "งานพิมพ์เอกสาร",
         paperSize: item.paper_type || item.selected_size || "A4",
         colorType: item.color_type || "สี/ขาวดำ",
         printSide: item.finishing_option || "ไม่มี",
-        pagesPerSet: item.total_pages || 1,
+        pagesPerSet: itemPages, // 👈 ส่งจำนวนหน้าที่ถูกต้องไปแทนเลข 1
         pricePerPage: item.unit_price || 0,
         quantity: item.quantity || 1,
         totalPrice: itemSubtotal,

@@ -1,5 +1,5 @@
 import express from 'express';
-import multer from "multer";
+import multer from 'multer'; // 
 import { createClient } from "@supabase/supabase-js";
 import { 
   getShops, 
@@ -19,18 +19,19 @@ import {
   getCustomerOrders, 
   updateWorkStatus,
   cancelOrder, 
-  confirmReceivedOrder
+  confirmReceivedOrder,
+  uploadPaymentSlip, // 
+  upload as slipUpload
 } from '../controller/orderController.js';
 
 import { 
   getReviewOrderDetail, 
   submitOrderReview, 
-  submitOrderReport 
+  submitOrderReport,
 } from '../controller/reviewController.js';
 
 import { 
-  getCustomerDashboard,
-  getApprovedBankAccount
+  getCustomerDashboard
 } from '../controller/customerController.js';
 
 const router = express.Router();
@@ -41,9 +42,6 @@ const router = express.Router();
 router.get('/shops', getShops);
 router.get('/service-types', getAllServiceTypes);
 router.get('/shops/:shopId/services', getShopServices);
-
-// 🌟 บัญชีธนาคารร้านค้า (ดึงเฉพาะที่อนุมัติแล้วสำหรับโอนเงิน)
-router.get('/shops/:shopId/bank-account', getApprovedBankAccount);
 
 // ==========================================
 // 2. ตะกร้าสินค้า (Cart)
@@ -60,6 +58,9 @@ router.post('/order', createOrder);
 router.get('/orders', getCustomerOrders);
 router.patch('/order/:orderId/status', updateWorkStatus);
 
+// Route สำหรับอัปโหลดสลิปชำระเงิน
+router.post('/payment/upload-slip', slipUpload.single('slip'), uploadPaymentSlip);
+
 // ==========================================
 // 4. รีวิวและรายงานปัญหา (Review & Report)
 // ==========================================
@@ -74,7 +75,7 @@ router.get("/dashboard", getCustomerDashboard);
 router.put("/order/:id/cancel", cancelOrder);
 router.put("/order/:id/confirm-received", confirmReceivedOrder);
 
-
+// ตั้งค่า Multer สำหรับอัปโหลดไฟล์งาน
 const upload = multer({ storage: multer.memoryStorage() });
 
 // สร้าง Supabase client ฝั่ง Backend

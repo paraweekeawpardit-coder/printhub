@@ -1,3 +1,5 @@
+"use client";
+
 import { MessageCircle, ExternalLink, FileText } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
@@ -30,7 +32,7 @@ type Props = {
   onClick?: () => void;
   onUpdateStatus?: (orderId: string, newStatus: OrderStatus) => void;
   onChatClick?: (orderId: string) => void;
-  disabled?: boolean; // 🟢 เพิ่ม disabled ใน Props
+  disabled?: boolean;
 };
 
 const STATUS_CONFIG: Record<
@@ -86,11 +88,28 @@ export default function OrderDetailCard({
   onClick,
   onUpdateStatus,
   onChatClick,
-  disabled = false, // 🟢 รับค่า disabled (default = false)
+  disabled = false,
 }: Props) {
   const router = useRouter();
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
+
+  const handleGoToChat = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (disabled) return;
+
+    if (onChatClick) {
+      onChatClick(order.order_id);
+      return;
+    }
+
+    const shopId = localStorage.getItem("shop_id") || "";
+    if (shopId && order.order_id) {
+      router.push(`/shop/order/${shopId}/chat?order_id=${order.order_id}`);
+    } else {
+      console.warn("ไม่พบ shop_id ใน localStorage หรือ order_id");
+    }
+  };
 
   return (
     <div
@@ -195,15 +214,11 @@ export default function OrderDetailCard({
         <button
           type="button"
           disabled={disabled}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (disabled) return;
-            onChatClick?.(order.order_id);
-          }}
+          onClick={handleGoToChat}
           className={`mt-3 inline-flex items-center gap-1.5 text-xs font-semibold ${
             disabled
               ? "text-slate-400 cursor-not-allowed"
-              : "text-slate-600 hover:text-blue-600 transition-colors"
+              : "text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
           }`}
         >
           <MessageCircle size={14} />

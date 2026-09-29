@@ -10,6 +10,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
+import NotificationBell from "@/component/NotificationBell"; // 👈 1. Import NotificationBell
 
 export default function ShopNavbar() {
   const pathname = usePathname();
@@ -42,8 +43,7 @@ export default function ShopNavbar() {
     }
 
     if (path === "chat") {
-      // ส่งไปที่ Route ของร้านค้าพร้อม Query Parameter ?from=navbar
-      router.push(`/shop/order/${shopId}/chat?from=navbar`); 
+      router.push(`/shop/order/${shopId}/chat?from=navbar`);
       return;
     }
 
@@ -55,15 +55,13 @@ export default function ShopNavbar() {
     router.push(`/shop/${path}/${shopId}`);
   };
 
-
   const handleLogout = () => {
-      localStorage.removeItem("shop_id");
-      localStorage.removeItem("shop_name");
-      localStorage.removeItem("token");
-      localStorage.clear();
+    localStorage.removeItem("shop_id");
+    localStorage.removeItem("shop_name");
+    localStorage.removeItem("token");
+    localStorage.clear();
 
-
-      router.push("/auth");
+    router.push("/auth");
   };
 
   return (
@@ -133,8 +131,11 @@ export default function ShopNavbar() {
           </button>
         </div>
 
-        {/* Setting & Logout Section */}
+        {/* Setting, Notification & Logout Section */}
         <div className="flex items-center gap-2">
+          {/* 👈 2. ใช้ NotificationBell แทนปุ่มเดิม */}
+          {shopId && <NotificationBell userId={shopId} role="shop" />}
+
           {/* Setting / Profile Button */}
           <button
             onClick={() => goTo("setting")}

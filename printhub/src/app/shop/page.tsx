@@ -276,7 +276,7 @@ export default function ShopPage() {
             <DashboardCard
               title="รายได้ทั้งหมด"
               value={income}
-              subtitle={`${todayOrdersCount} คำสั่งพิมพ์วันนี้`}
+              subtitle={`${todayOrdersCount} คำสั่งพิมพ์`}
               icon={DollarSign}
             />
           </div>

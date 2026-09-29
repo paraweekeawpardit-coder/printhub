@@ -80,10 +80,12 @@ export default function OrderDetailPage() {
       const token =
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-      const headers = {
+      const headers: Record<string, string> = {
         shop_id: String(shopId),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
 
       await axios.patch(
         `http://localhost:5000/shop/orders/${orderId}/status`,
@@ -100,7 +102,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  // ฟังก์ชันช่วยดาวน์โหลดไฟล์โดยตรง ไม่เปิดหน้าใหม่
   const handleDownloadFile = async (
     fileUrl: string,
     filename: string,
@@ -122,7 +123,6 @@ export default function OrderDetailPage() {
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error("Download failed:", err);
-      // Fallback ลิงก์ตรงหาก fetch ติด CORS
       const link = document.createElement("a");
       link.href = fileUrl;
       link.download = filename;
@@ -169,12 +169,16 @@ export default function OrderDetailPage() {
     );
   }
 
+  // รวม Logic ประกาศตัวแปรสลิปไว้จุดเดียว (ป้องกันชื่อซ้ำ)
   const slipUrl =
     order.slip_url ||
     order.payment_slip ||
     order.slipUrl ||
     order.slip_image ||
+    order.slip ||
     null;
+
+  const allFiles = order.files || [];
 
   const isConfirmed =
     order.status_state !== "รอการดำเนินงาน" &&
@@ -186,8 +190,6 @@ export default function OrderDetailPage() {
     พิมพ์เสร็จสิ้น: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
     ยกเลิกการพิมพ์: "bg-red-50 text-red-700 ring-1 ring-red-200",
   };
-
-  const allFiles = order.files || [];
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">
@@ -292,7 +294,6 @@ export default function OrderDetailPage() {
               {/* แสดงแต่ละ Sub-Order */}
               <div className="space-y-6">
                 {order.items?.map((item: any, index: number) => {
-                  // กรองไฟล์เฉพาะของ item นี้ (ถ้าไม่มี item_id จะพิจารณาไฟล์ตามลำดับหรือ item.file_url)
                   const itemFiles = allFiles.filter(
                     (f: any) =>
                       f.item_id === item.id ||
@@ -496,11 +497,9 @@ export default function OrderDetailPage() {
               <div className="mt-5 pt-4 border-t border-gray-100">
                 <button
                   disabled={!isConfirmed}
-                  onClick={() =>
-                    router.push(
-                      `/shop/order/${order.id}/chat?order_id=${order.id}`
-                    )
-                  }
+                  onClick={() => {
+                    router.push(`/shop/order/${shopId}/chat?order_id=${order.id}`);
+                  }}
                   className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors ${
                     isConfirmed
                       ? "bg-[#12356b] text-white hover:bg-[#0e2b57]"
@@ -508,9 +507,7 @@ export default function OrderDetailPage() {
                   }`}
                 >
                   <MessageSquare size={15} />
-                  {isConfirmed
-                    ? "แชทติดต่อลูกค้า"
-                    : "แชท (ยืนยันออเดอร์ก่อน)"}
+                  {isConfirmed ? "แชทติดต่อลูกค้า" : "แชท (ยืนยันออเดอร์ก่อน)"}
                 </button>
               </div>
             </div>
@@ -541,7 +538,7 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            {/* Payment Slip Section (เพิ่มส่วนสลิปโอนเงินตรงนี้) */}
+            {/* Payment Slip Section */}
             <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3">
               <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <ImageIcon size={17} className="text-blue-600" />
