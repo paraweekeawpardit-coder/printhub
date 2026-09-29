@@ -16,7 +16,7 @@ import Authroute from "./route/Auth.js";
 import ShopRoute from "./route/Shop.js";
 import adminRoutes from "./route/Admin.js";
 import customerRoute from "./route/customerRoute.js";
-// import notificationRoute from "./route/notificationRoute.js";
+import notificationRoute from "./route/notificationRoute.js";
 
 dotenv.config();
 
@@ -81,7 +81,7 @@ app.use("/api/customer", customerRoute);
 app.use("/customer", customerRoute);
 
 // Notifications
-// app.use("/api", notificationRoute);
+app.use("/api/notifications", notificationRoute);
 
 // ==========================================
 // 4. Socket.io & MongoDB Real-time Chat

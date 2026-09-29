@@ -2,6 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Printer, Home, ShoppingCart, ClipboardList, LogOut } from "lucide-react";
+import NotificationBell from "@/src/component/NotificationBell";
 import { usePathname, useRouter } from "next/navigation";
 import { 
   Printer, 
@@ -24,6 +27,45 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
   const pathname = usePathname();
   const router = useRouter();
   const [customerId, setCustomerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 1. ลองดึงจาก localStorage ตรงๆ
+    const directCustomerId =
+      localStorage.getItem("customer_id") ||
+      localStorage.getItem("user_id") ||
+      localStorage.getItem("userId");
+
+    if (directCustomerId) {
+      setCustomerId(directCustomerId);
+      return;
+    }
+
+    // 2. แกะจาก object 'user' หรือ 'customer'
+    const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        // เช็กคีย์ทุกแบบที่เป็นไปได้
+        const actualId =
+          user.customer_id ||
+          user.id ||
+          user.user_id ||
+          user.customer?.id ||
+          user.customer?.customer_id;
+
+        setCustomerId(actualId || null);
+      } catch (e) {
+        console.error("Error parsing user data:", e);
+      }
+    }
+  }, []);
+
+  // ฟังก์ชันสำหรับการออกจากระบบ
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    sessionStorage.clear();
+    router.push("/");
 
   useEffect(() => {
     const id = localStorage.getItem("customer_id") || localStorage.getItem("id");
