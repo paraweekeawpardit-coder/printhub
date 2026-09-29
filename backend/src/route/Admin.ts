@@ -2,8 +2,9 @@ import { Router } from "express";
 import { getPlatformStats } from "../controller/Admin/dashboardController.js";
 import { 
   getPendingShops, 
-  getAllShops, // 👈 1. เพิ่มการ Import getAllShops
+  getAllShops,
   verifyShop,
+  toggleSuspendShop,
   getPendingBankAccounts,
   approveOrRejectBankAccount 
 } from "../controller/Admin/shopController.js";
@@ -17,20 +18,26 @@ import {
   getNotifications,
   adminLogout
 } from "../controller/Admin/profileController.js";
+import { getAllCustomers } from "../controller/customerController.js"; 
 
 const router = Router();
 
+// Auth
 router.post("/login", adminLogin);
 
 // Dashboard
 router.get("/dashboard-stats", getPlatformStats);
 
+// Customers
+router.get("/customers", getAllCustomers);
+
 // Shops
 router.get("/shops/pending", getPendingShops);
-router.get("/shops/all", getAllShops); // 👈 2. เพิ่ม Route นี้เพื่อแก้ 404
+router.get("/shops/all", getAllShops);
 router.patch("/shops/verify", verifyShop);
+router.patch("/shops/suspend", toggleSuspendShop);
 
-// Bank Account Approvals
+// Bank Accounts
 router.get("/bank-accounts/pending", getPendingBankAccounts);
 router.patch("/bank-accounts/verify", approveOrRejectBankAccount);
 

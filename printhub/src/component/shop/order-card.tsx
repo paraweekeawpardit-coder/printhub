@@ -26,6 +26,7 @@ type Props = {
   order: Order;
   onClick?: () => void;
   onUpdateStatus?: (orderId: string, newStatus: string) => void;
+  disabled?: boolean; // เพิ่ม prop disabled เพื่อรองรับการบล็อกการทำงานกรณีร้านถูกระงับ
 };
 
 const API_BASE = "http://localhost:5000";
@@ -67,7 +68,12 @@ const FALLBACK_STYLE = {
   dot: "bg-slate-400",
 };
 
-export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
+export default function OrderCard({
+  order,
+  onClick,
+  onUpdateStatus,
+  disabled = false,
+}: Props) {
   const initialStatus =
     order.latest_status || order.current_status?.state || STATUS.PENDING;
 
@@ -85,7 +91,7 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
   }, [order]);
 
   async function updateState(newStatus: string) {
-    if (updating) return;
+    if (updating || disabled) return;
 
     setPendingAction(newStatus);
     setErrorMsg(null);
@@ -116,10 +122,19 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
 
   const style = STATUS_STYLE[currentState] ?? FALLBACK_STYLE;
 
+  const handleCardClick = () => {
+    if (disabled) return;
+    onClick?.();
+  };
+
   return (
     <div
-      onClick={onClick}
-      className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer flex flex-col justify-between"
+      onClick={handleCardClick}
+      className={`bg-white border border-slate-200 rounded-2xl p-6 transition-all flex flex-col justify-between ${
+        disabled
+          ? "opacity-60 cursor-not-allowed"
+          : "hover:border-slate-300 hover:shadow-sm cursor-pointer"
+      }`}
     >
       <div>
         {/* Header: Order ID + สถานะ */}
@@ -179,7 +194,7 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
             <button
               type="button"
               onClick={() => updateState(STATUS.CANCELLED)}
-              disabled={updating}
+              disabled={updating || disabled}
               className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-rose-200 bg-white text-rose-600 text-sm font-medium hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {pendingAction === STATUS.CANCELLED ? (
@@ -192,7 +207,7 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
             <button
               type="button"
               onClick={() => updateState(STATUS.PRINTING)}
-              disabled={updating}
+              disabled={updating || disabled}
               className="flex items-center justify-center gap-1.5 h-10 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {pendingAction === STATUS.PRINTING ? (
@@ -209,7 +224,7 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
           <button
             type="button"
             onClick={() => updateState(STATUS.DONE)}
-            disabled={updating}
+            disabled={updating || disabled}
             className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pendingAction === STATUS.DONE ? (

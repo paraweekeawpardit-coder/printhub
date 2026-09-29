@@ -1,16 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import axios from "axios";
-import { Store, Printer, Landmark, Loader2 } from "lucide-react";
+import { Store, Printer, Landmark, Loader2, Lock } from "lucide-react";
 
 import ShopNavbar from "../../../../component/shop/navbar";
 import ShopProfileTab from "../../../../component/shop/ShopProfileTab";
-import ShopServicesTab, { ServiceTypeGroup } from "../../../../component/shop/ShopServiceTab";
+import ShopServicesTab, {
+  ServiceTypeGroup,
+} from "../../../../component/shop/ShopServiceTab";
 import ShopBankTab from "../../../../component/shop/ShopBankTab";
 
-const API_BASE = "http://localhost:5000/api/shop";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/shop";
 
 type AddressData = {
   detail: string;
@@ -21,18 +24,22 @@ type AddressData = {
 };
 
 export default function ShopSettingsPage() {
+  const params = useParams();
   const searchParams = useSearchParams();
-  // 🔹 รับ UUID string โดยตรง ไม่แปลงเป็น parseInt
-  const shopId = searchParams.get("shopId");
+
+  // ดึง shopId และ Casting เป็น string
+  const rawShopId = params?.shop_id || searchParams.get("shopId");
+  const shopId = Array.isArray(rawShopId) ? rawShopId[0] : rawShopId || "";
 
   const [tab, setTab] = useState<string>("profile");
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
 
-  // Verification & Open Status
+  // Verification, Open Status & Suspension Status
   const [isVerified, setIsVerified] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState<boolean>(true);
   const [togglingOpen, setTogglingOpen] = useState<boolean>(false);
+  const [isSuspended, setIsSuspended] = useState<boolean>(false);
 
   // Mode States
   const [isEditingProfile, setIsEditingProfile] = useState<boolean>(false);
@@ -65,10 +72,12 @@ export default function ShopSettingsPage() {
   const [bankName, setBankName] = useState<string>("");
   const [accountName, setAccountName] = useState<string>("");
   const [accountNumber, setAccountNumber] = useState<string>("");
+  const [isBankPending, setIsBankPending] = useState<boolean>(false);
+  const [bankPendingCreatedAt, setBankPendingCreatedAt] = useState<string>("");
 
   const fetchShopSettings = useCallback(async () => {
     if (!shopId) {
-      console.warn("ไม่พบ shopId ใน URL Parameters (เช่น ?shopId=cd04a0a0-...)");
+      console.warn("ไม่พบ shopId ใน URL Parameters หรือ Path");
       setLoading(false);
       return;
     }
@@ -76,68 +85,127 @@ export default function ShopSettingsPage() {
     try {
       setLoading(true);
 
-      const [profileRes, bankRes, servicesRes, verifyRes] = await Promise.all([
-        axios.get(`${API_BASE}/profile/${shopId}`),
-        axios.get(`${API_BASE}/bank-account/${shopId}`),
-        axios.get(`${API_BASE}/services/${shopId}`),
-        axios.get(`${API_BASE}/verify-status/${shopId}`),
-      ]);
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const headers = {
+        shop_id: shopId,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
 
-      const shop = profileRes.data?.data;
-      const bankAccount = bankRes.data?.data;
-      const shopServices = servicesRes.data?.data;
-      const verifyStatus = verifyRes.data?.data;
+      const [profileRes, bankRes, servicesRes, verifyRes] =
+        await Promise.allSettled([
+          axios.get(`${API_BASE}/profile/${shopId}`, { headers }),
+          axios.get(`${API_BASE}/bank-account/${shopId}`, { headers }),
+          axios.get(`${API_BASE}/services/${shopId}`, { headers }),
+          axios.get(`${API_BASE}/verify-status/${shopId}`, { headers }),
+        ]);
 
-      // Profile Data
+      // ดึงข้อมูลจาก Axios Response
+      const profileResData =
+        profileRes.status === "fulfilled" ? profileRes.value.data : null;
+      const bankResData =
+        bankRes.status === "fulfilled" ? bankRes.value.data : null;
+      const servicesResData =
+        servicesRes.status === "fulfilled" ? servicesRes.value.data : null;
+      const verifyResData =
+        verifyRes.status === "fulfilled" ? verifyRes.value.data : null;
+
+      // Extract ข้อมูล
+      const shop = profileResData?.data ?? profileResData;
+      const bankAccount = bankResData?.data ?? bankResData;
+      const shopServices = servicesResData?.data ?? servicesResData;
+      const verifyStatus = verifyResData?.data ?? verifyResData;
+
+      // 1. Profile Data & Suspended Check
       if (shop) {
-        setShopName(shop.shop_name ?? "");
-        setOwnerName(shop.owner_name ?? "");
-        setPhone(shop.phone ?? "");
-        setEmail(shop.email ?? "");
-        setOpenTime(shop.open_time ?? "09:00");
-        setCloseTime(shop.close_time ?? "18:00");
-        setIsOpen(shop.is_open ?? true);
-
-        if (shop.address) {
-          setAddressId(shop.address.id ?? null);
-          setAddress({
-            detail: shop.address.detail ?? "",
-            subdistrict: shop.address.subdistrict ?? "",
-            district: shop.address.district ?? "",
-            province: shop.address.province ?? "",
-            postcode: shop.address.postcode ?? "",
-          });
+        if (shop.status === "suspended") {
+          setIsSuspended(true);
+        } else {
+          setIsSuspended(false);
         }
 
-        setHasProfileData(Boolean(shop.shop_name));
+        setShopName(shop.shop_name ?? shop.name ?? "");
+        setOwnerName(shop.owner_name ?? shop.ownerName ?? "");
+        setPhone(shop.phone ?? "");
+        setEmail(shop.email ?? "");
+        setOpenTime(shop.open_time ?? shop.openTime ?? "09:00");
+        setCloseTime(shop.close_time ?? shop.closeTime ?? "18:00");
+        setIsOpen(shop.is_open ?? true);
+
+        // ดึงที่อยู่
+        const addrObj = shop.address || shop.address_detail;
+        if (addrObj) {
+          if (typeof addrObj === "object") {
+            setAddressId(addrObj.id ?? addrObj._id ?? null);
+            setAddress({
+              detail: addrObj.detail || addrObj.house_number || addrObj.address || "",
+              subdistrict: addrObj.subdistrict || addrObj.sub_district || addrObj.tambon || "",
+              district: addrObj.district || addrObj.amphoe || "",
+              province: addrObj.province || addrObj.changwat || "",
+              postcode: addrObj.postcode || addrObj.postal_code || addrObj.zipcode || "",
+            });
+          } else if (typeof addrObj === "string") {
+            setAddress((prev) => ({ ...prev, detail: addrObj }));
+          }
+        }
+
+        setHasProfileData(Boolean(shop.shop_name || shop.name));
       }
 
-      // Verification Status
-      setIsVerified(Boolean(verifyStatus?.is_verify));
+      // 2. ตรวจสอบการยืนยันตัวตน
+      const verified = Boolean(
+        verifyStatus?.is_verify ?? shop?.is_verify ?? false
+      );
+      setIsVerified(verified);
 
-      // Services Data
-      if (shopServices) {
-        const normalizedServices: ServiceTypeGroup[] = shopServices.map((group: any) => ({
-          id: group.id,
-          type: group.type ?? "",
-          items: (group.service_detail ?? []).map((d: any) => ({
-            id: d.id,
-            detail: d.detail ?? "",
-            group_type: d.group_type ?? "", // 🔹 แก้ไขจาก group_name เป็น group_type
-            price: d.price != null ? String(d.price) : "",
-          })),
-        }));
+      // 3. Services Data
+      if (Array.isArray(shopServices)) {
+        const normalizedServices: ServiceTypeGroup[] = shopServices.map(
+          (group: any) => ({
+            id: group.id,
+            type: group.type ?? "",
+            items: (group.service_detail ?? []).map((d: any) => ({
+              id: d.id,
+              detail: d.detail ?? "",
+              group_type: d.group_type ?? "",
+              price: d.price != null ? String(d.price) : "",
+            })),
+          })
+        );
         setServices(normalizedServices);
+      } else {
+        setServices([]);
       }
 
-      // Bank Account Data
-      if (bankAccount) {
+      // 4. Bank Account Data
+      if (
+        bankAccount &&
+        typeof bankAccount === "object" &&
+        (bankAccount.bank_name || bankAccount.account_number)
+      ) {
         setBankAccountId(bankAccount.id ?? null);
         setBankName(bankAccount.bank_name ?? "");
         setAccountName(bankAccount.account_name ?? "");
         setAccountNumber(bankAccount.account_number ?? "");
-        setHasBankData(Boolean(bankAccount.bank_name || bankAccount.account_number));
+        const pendingStatus = Boolean(bankAccount.is_pending);
+        setIsBankPending(pendingStatus);
+
+        setBankPendingCreatedAt(
+          bankAccount.created_at || bankAccount.updated_at || ""
+        );
+
+        setHasBankData(true);
+
+        if (pendingStatus) {
+          setIsEditingBank(false);
+        }
       } else {
+        setBankAccountId(null);
+        setBankName("");
+        setAccountName("");
+        setAccountNumber("");
+        setIsBankPending(false);
+        setBankPendingCreatedAt("");
         setHasBankData(false);
       }
     } catch (err) {
@@ -153,6 +221,11 @@ export default function ShopSettingsPage() {
 
   const handleToggleOpen = async () => {
     if (!shopId) return;
+    if (isSuspended) {
+      console.warn("[Action Blocked] Shop is suspended. Cannot toggle open status.");
+      return;
+    }
+
     const nextStatus = !isOpen;
     try {
       setTogglingOpen(true);
@@ -160,7 +233,8 @@ export default function ShopSettingsPage() {
         is_open: nextStatus,
       });
       setIsOpen(nextStatus);
-    } catch (err) {
+    } catch (err: any) {
+      alert(err.response?.data?.error || "ไม่สามารถเปลี่ยนสถานะเปิด/ปิดร้านได้");
       console.error("Toggle shop open status error:", err);
     } finally {
       setTogglingOpen(false);
@@ -169,8 +243,24 @@ export default function ShopSettingsPage() {
 
   const handleSaveProfile = async () => {
     if (!shopId) return;
+    if (isSuspended) {
+      console.warn("[Action Blocked] Shop is suspended. Cannot update profile.");
+      return;
+    }
+
     try {
       setSaving(true);
+
+      const fullAddrString = [
+        address.detail,
+        address.subdistrict,
+        address.district,
+        address.province,
+        address.postcode,
+      ]
+        .filter(Boolean)
+        .join(" ");
+
       await axios.put(`${API_BASE}/profile/${shopId}`, {
         shop_name: shopName,
         owner_name: ownerName,
@@ -181,11 +271,15 @@ export default function ShopSettingsPage() {
           id: addressId,
           ...address,
         },
+        address_detail: fullAddrString,
+        full_address: fullAddrString,
       });
+
       setHasProfileData(true);
       setIsEditingProfile(false);
       await fetchShopSettings();
-    } catch (err) {
+    } catch (err: any) {
+      alert(err.response?.data?.error || "ไม่สามารถบันทึกข้อมูลร้านได้");
       console.error("Save profile error:", err);
     } finally {
       setSaving(false);
@@ -194,14 +288,19 @@ export default function ShopSettingsPage() {
 
   const handleSaveServices = async () => {
     if (!shopId) return;
+    if (isSuspended) {
+      console.warn("[Action Blocked] Shop is suspended. Cannot update services.");
+      return;
+    }
+
     try {
       setSaving(true);
-      
+
       const payloadServices = services.map((s) => ({
         type: s.type,
         service_detail: s.items.map((item) => ({
           detail: item.detail,
-          group_type: item.group_type, // 🔹 แก้ไขจาก group_name เป็น group_type
+          group_type: item.group_type,
           price: item.price,
         })),
       }));
@@ -217,7 +316,8 @@ export default function ShopSettingsPage() {
       );
 
       await fetchShopSettings();
-    } catch (err) {
+    } catch (err: any) {
+      alert(err.response?.data?.error || "ไม่สามารถบันทึกข้อมูลบริการได้");
       console.error("Save services error:", err);
     } finally {
       setSaving(false);
@@ -226,28 +326,55 @@ export default function ShopSettingsPage() {
 
   const handleSaveBank = async () => {
     if (!shopId) return;
+    if (isSuspended) {
+      console.warn("[Action Blocked] Shop is suspended. Cannot update bank account.");
+      return;
+    }
+
     try {
       setSaving(true);
+
       await axios.put(`${API_BASE}/bank-account/${shopId}`, {
         id: bankAccountId,
         bank_name: bankName,
         account_name: accountName,
         account_number: accountNumber,
+        status: "pending",
       });
-      setHasBankData(true);
+
       setIsEditingBank(false);
       await fetchShopSettings();
-    } catch (err) {
-      console.error("Save bank error:", err);
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        "ไม่สามารถบันทึกข้อมูลบัญชีธนาคารได้";
+      alert(errorMsg);
+      console.error("Save bank error:", errorMsg);
     } finally {
       setSaving(false);
     }
   };
 
   const tabs = [
-    { key: "profile", label: "ข้อมูลร้าน", icon: <Store size={16} />, locked: !isVerified },
-    { key: "services", label: "บริการพิมพ์", icon: <Printer size={16} />, locked: !isVerified },
-    { key: "bank", label: "บัญชีธนาคาร", icon: <Landmark size={16} />, locked: !isVerified },
+    {
+      key: "profile",
+      label: "ข้อมูลร้าน",
+      icon: <Store size={16} />,
+      locked: !isVerified,
+    },
+    {
+      key: "services",
+      label: "บริการพิมพ์",
+      icon: <Printer size={16} />,
+      locked: !isVerified,
+    },
+    {
+      key: "bank",
+      label: "บัญชีธนาคาร",
+      icon: <Landmark size={16} />,
+      locked: !isVerified,
+    },
   ];
 
   return (
@@ -261,6 +388,16 @@ export default function ShopSettingsPage() {
             จัดการข้อมูลทั่วไป บริการพิมพ์ และบัญชีธนาคารสำหรับการรับเงิน
           </p>
         </div>
+
+        {/* แถบแจ้งเตือนเมื่อร้านถูกระงับ */}
+        {isSuspended && (
+          <div className="mb-8 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-amber-900 shadow-sm">
+            <Lock className="h-5 w-5 shrink-0 text-amber-600" />
+            <p className="text-sm font-medium">
+              บัญชีถูกระงับการใช้งาน ระบบปิดการแก้ไขข้อมูลร้านค้า เวลาเปิด-ปิด บริการพิมพ์ และบัญชีธนาคารชั่วคราว
+            </p>
+          </div>
+        )}
 
         <div className="mb-8 border-b border-slate-200">
           <div className="flex gap-8">
@@ -293,40 +430,61 @@ export default function ShopSettingsPage() {
           <div className="max-w-3xl">
             {tab === "profile" && (
               <ShopProfileTab
-                isVerified={isVerified}
+                isVerified={isVerified && !isSuspended}
                 isOpen={isOpen}
                 onToggleOpen={handleToggleOpen}
-                togglingOpen={togglingOpen}
-                shopName={shopName} setShopName={setShopName}
-                ownerName={ownerName} setOwnerName={setOwnerName}
-                phone={phone} setPhone={setPhone}
+                togglingOpen={togglingOpen || isSuspended}
+                shopName={shopName}
+                setShopName={setShopName}
+                ownerName={ownerName}
+                setOwnerName={setOwnerName}
+                phone={phone}
+                setPhone={setPhone}
                 email={email}
-                openTime={openTime} setOpenTime={setOpenTime}
-                closeTime={closeTime} setCloseTime={setCloseTime}
-                address={address} setAddress={setAddress}
-                onSave={handleSaveProfile} saving={saving}
+                openTime={openTime}
+                setOpenTime={setOpenTime}
+                closeTime={closeTime}
+                setCloseTime={setCloseTime}
+                address={address}
+                setAddress={setAddress}
+                onSave={handleSaveProfile}
+                saving={saving}
                 hasData={hasProfileData}
-                isEditing={isEditingProfile}
-                onToggleEdit={() => setIsEditingProfile((prev) => !prev)}
+                isEditing={isEditingProfile && !isSuspended}
+                onToggleEdit={() => {
+                  if (isSuspended) return;
+                  setIsEditingProfile((prev) => !prev);
+                }}
               />
             )}
             {tab === "services" && (
               <ShopServicesTab
-                isVerified={isVerified}
-                services={services} setServices={setServices}
-                onSave={handleSaveServices} saving={saving}
+                isVerified={isVerified && !isSuspended}
+                services={services}
+                setServices={setServices}
+                onSave={handleSaveServices}
+                saving={saving}
               />
             )}
             {tab === "bank" && (
               <ShopBankTab
-                isVerified={isVerified}
-                bankName={bankName} setBankName={setBankName}
-                accountName={accountName} setAccountName={setAccountName}
-                accountNumber={accountNumber} setAccountNumber={setAccountNumber}
-                onSave={handleSaveBank} saving={saving}
+                isVerified={isVerified && !isSuspended}
+                bankName={bankName}
+                setBankName={setBankName}
+                accountName={accountName}
+                setAccountName={setAccountName}
+                accountNumber={accountNumber}
+                setAccountNumber={setAccountNumber}
+                onSave={handleSaveBank}
+                saving={saving}
                 hasData={hasBankData}
-                isEditing={isEditingBank}
-                onToggleEdit={() => setIsEditingBank((prev) => !prev)}
+                isEditing={isEditingBank && !isSuspended}
+                isPending={isBankPending}
+                pendingCreatedAt={bankPendingCreatedAt}
+                onToggleEdit={() => {
+                  if (isBankPending || isSuspended) return;
+                  setIsEditingBank((prev) => !prev);
+                }}
               />
             )}
           </div>

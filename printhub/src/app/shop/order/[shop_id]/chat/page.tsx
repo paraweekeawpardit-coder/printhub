@@ -2,9 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
-import { ArrowLeft, MessageSquare } from "lucide-react";
+import { ArrowLeft, MessageSquare, Lock } from "lucide-react";
+import axios from "axios";
 import ChatBox from "@/component/ChatBox";
 import { supabase } from "@/config/supabase";
+
+const API_BASE = "http://localhost:5000";
 
 interface OrderChat {
   id: string;
@@ -27,7 +30,6 @@ const getStatusBadgeStyle = (statusName: string = "") => {
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
 
     case "รายการเสร็จสิ้น":
-      // 🟢 ปรับเป็นสีเทา (Slate) ตามที่ขอครับ
       return "bg-slate-100 text-slate-600 border-slate-300";
 
     case "ยกเลิกการพิมพ์":
@@ -45,9 +47,12 @@ export default function ShopChatPage() {
   const params = useParams();
 
   const isFromNavbar = searchParams.get("from") === "navbar";
+  
+  // ดึง shop_id จาก URL Parameters
+  const rawShopId = (params?.shop_id as string) || searchParams.get("shopId") || "";
+
   const rawOrderId =
     searchParams.get("order_id") ||
-    (params?.shop_id as string) ||
     (params?.order_id as string) ||
     "";
 
@@ -56,6 +61,29 @@ export default function ShopChatPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [statusName, setStatusName] = useState<string>("กำลังโหลดสถานะ...");
   const [isChatDisabled, setIsChatDisabled] = useState<boolean>(false);
+  
+  // State ตรวจสอบการถูกระงับใช้งานร้านค้า
+  const [isSuspended, setIsSuspended] = useState<boolean>(false);
+
+  // 0. ตรวจสอบสถานะการถูกระงับของร้านค้า (Suspended Check)
+  useEffect(() => {
+    const checkShopSuspended = async () => {
+      if (!rawShopId) return;
+      try {
+        const response = await axios.get(`${API_BASE}/api/shop/profile/${rawShopId}`);
+        const shopData = response.data?.data ?? response.data;
+        if (shopData?.status === "suspended") {
+          setIsSuspended(true);
+        } else {
+          setIsSuspended(false);
+        }
+      } catch (err) {
+        console.error("Check shop suspended status error:", err);
+      }
+    };
+
+    checkShopSuspended();
+  }, [rawShopId]);
 
   // 1. ดึงรายการออเดอร์ทั้งหมดจาก Supabase
   useEffect(() => {
@@ -179,6 +207,14 @@ export default function ShopChatPage() {
         <div className="w-16"></div>
       </header>
 
+      {/* แถบแจ้งเตือนเมื่อร้านถูกระงับการใช้งาน */}
+      {isSuspended && (
+        <div className="bg-amber-500 text-white px-6 py-2.5 flex items-center justify-center gap-2 text-xs md:text-sm font-medium shadow-inner shrink-0">
+          <Lock size={16} />
+          <span>บัญชีถูกระงับการใช้งาน ระบบปิดการส่งข้อความแชตชั่วคราว</span>
+        </div>
+      )}
+
       {/* Main Container */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex gap-4 min-h-0 overflow-hidden">
         
@@ -259,7 +295,7 @@ export default function ShopChatPage() {
                 <ChatBox
                   orderId={selectedOrderId}
                   role="shop"
-                  isChatDisabled={isChatDisabled}
+                  isChatDisabled={isChatDisabled || isSuspended}
                 />
               </div>
             </>
