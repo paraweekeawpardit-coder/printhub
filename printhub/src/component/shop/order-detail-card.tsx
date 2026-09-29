@@ -1,6 +1,7 @@
 import { MessageCircle, ExternalLink, FileText } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
+import { useRouter } from "next/navigation";
 
 export type OrderItemDetail = {
   id: string;
@@ -85,6 +86,7 @@ export default function OrderDetailCard({
   onUpdateStatus,
   onChatClick,
 }: Props) {
+  const router = useRouter();
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
 
