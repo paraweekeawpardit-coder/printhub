@@ -120,11 +120,11 @@ export const getNumOrderUnAccept = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
-    // ดึง ID ของสถานะที่ถือว่ารอดำเนินการ
+    // 1. ดึง ID ของสถานะ "รอการดำเนินงาน" (ใส่คำว่า "รอการดำเนินการ" สำรองไว้เผื่อใช้ใน db)
     const { data: statuses, error: statusError } = await supabase
       .from("status")
       .select("id")
-      .in("state", ["รอการดำเนินการ", "กำลังพิมพ์"]);
+      .in("state", ["รอการดำเนินงาน", "รอการดำเนินการ"]);
 
     if (statusError || !statuses || statuses.length === 0) {
       return res.status(200).json({ numWork: 0 });
@@ -132,7 +132,7 @@ export const getNumOrderUnAccept = async (
 
     const statusIds = statuses.map((s) => s.id);
 
-    // นับจำนวนออเดอร์ที่อยู่ในสถานะดังกล่าว
+    // 2. นับจำนวนออเดอร์ทั้งหมดที่อยู่ในสถานะรอการดำเนินงาน (ไม่จำกัดวัน)
     const { count, error } = await supabase
       .from("print_order")
       .select("id", { count: "exact", head: true })
@@ -149,7 +149,6 @@ export const getNumOrderUnAccept = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
-
 // ==========================================
 // Get Top Orders
 // ==========================================
