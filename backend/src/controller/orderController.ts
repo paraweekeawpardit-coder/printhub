@@ -94,7 +94,7 @@ export const createOrder = async (req: Request, res: Response) => {
           description: description || null,
           receive_date: receive_date || null,
           appointment_time: appointment_time || null,
-          current_status_id: "8c416cf8-140c-4563-a912-6a4a6c0a4d9f",
+          current_status_id: statusRow?.id || "8c416cf8-140c-4563-a912-6a4a6c0a4d9f", // 👈 ใส่ fallback รหัสนี้ไว้ได้เลย
           subtotal_price: pricing.subtotal_price,
           small_order_fee: pricing.small_order_fee,
           platform_fee: pricing.platform_fee,
@@ -107,21 +107,23 @@ export const createOrder = async (req: Request, res: Response) => {
 
     if (orderError) throw orderError;
 
+    // 2. ปรับให้ insert เฉพาะคอลัมน์ที่มีอยู่จริงในตาราง print_order_item
     const orderItems = cart.cart_item.map((item: any) => ({
       order_id: newOrder.id,
       file_url: item.file_url,
       category: item.category,
-      selected_size: item.selected_size,
-      custom_width_cm: item.custom_width_cm,
-      custom_height_cm: item.custom_height_cm,
-      color_type: item.color_type,
-      paper_type: item.paper_type,
-      finishing_option: item.finishing_option,
       quantity: item.quantity,
       unit_price: item.unit_price,
       subtotal: item.subtotal || item.quantity * item.unit_price,
       page_count: item.page_count || 1,
-      side_type: item.side_type || "SINGLE",
+      // เก็บพวกรายละเอียดขนาด, สี, กระดาษ รวมไว้ใน describe เพื่อไม่ให้ข้อมูลหาย
+      describe: [
+        item.selected_size,
+        item.color_type,
+        item.paper_type,
+        item.finishing_option,
+        item.side_type
+      ].filter(Boolean).join(" | ") || null,
     }));
 
     const { error: itemsError } = await supabase.from("print_order_item").insert(orderItems);
@@ -217,3 +219,128 @@ export const updateWorkStatus = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// ==========================================
+// 4. กดยกเลิกคำสั่งซื้อ (FR-2.10)
+// ==========================================
+export const cancelOrder = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // 1. ดึงสถานะปัจจุบันของออเดอร์
+    const { data: order, error: findError } = await supabase
+      .from("print_order")
+      .select(`
+        id,
+        current_status:current_status_id (
+          id,
+          state
+        )
+      `)
+      .eq("id", id)
+      .single();
+
+    if (findError || !order) {
+      return res.status(404).json({ success: false, message: "ไม่พบคำสั่งซื้อ" });
+    }
+
+    const currentState = (order.current_status as any)?.state;
+    if (currentState === "กำลังพิมพ์") {
+      return res.status(400).json({
+        success: false,
+        message: "ไม่สามารถยกเลิกได้ เนื่องจากร้านค้าเริ่มพิมพ์แล้ว",
+      });
+    }
+
+    // 2. ดึง ID ของสถานะ 'ยกเลิกการพิมพ์' จากตาราง status
+    const { data: cancelStatus, error: statusError } = await supabase
+      .from("status")
+      .select("id")
+      .eq("state", "ยกเลิกการพิมพ์")
+      .single();
+
+    if (statusError || !cancelStatus) {
+      return res.status(500).json({
+        success: false,
+        message: "ไม่พบสถานะ 'ยกเลิกการพิมพ์' ในตาราง status",
+      });
+    }
+
+    // 3. อัปเดตคอลัมน์ current_status_id ใน print_order
+    const { error: updateError } = await supabase
+      .from("print_order")
+      .update({ current_status_id: cancelStatus.id })
+      .eq("id", id);
+
+    if (updateError) throw updateError;
+
+    // 4. บันทึกลง work_status (ครอบ try/catch แยก ป้องกัน Trigger เก่าที่เรียก status_type ขัดจังหวะ)
+    try {
+      await supabase.from("work_status").insert({
+        order_id: id,
+        status_id: cancelStatus.id,
+      });
+    } catch (wsErr) {
+      console.warn("work_status trigger warning (ignored):", wsErr);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ยกเลิกคำสั่งซื้อเรียบร้อยแล้ว",
+    });
+  } catch (error: any) {
+    console.error("Cancel order error:", error.message || error);
+    return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+  }
+};
+
+// ==========================================
+// 5. กดยืนยันการรับงาน (FR-4.4)
+// ==========================================
+export const confirmReceivedOrder = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // 1. ค้นหาสถานะ 'รับงานแล้ว' หรือ 'รายการเสร็จสิ้น' จากตาราง status
+    const { data: doneStatus, error: statusError } = await supabase
+      .from("status")
+      .select("id")
+      .or("state.eq.รับงานแล้ว,state.eq.รายการเสร็จสิ้น")
+      .limit(1)
+      .single();
+
+    if (statusError || !doneStatus) {
+      return res.status(500).json({
+        success: false,
+        message: "ไม่พบสถานะ 'รับงานแล้ว' หรือ 'รายการเสร็จสิ้น' ในตาราง status",
+      });
+    }
+
+    // 2. อัปเดต current_status_id ใน print_order
+    const { error: updateError } = await supabase
+      .from("print_order")
+      .update({ current_status_id: doneStatus.id })
+      .eq("id", id);
+
+    if (updateError) throw updateError;
+
+    // 3. บันทึกลง work_status
+    try {
+      await supabase.from("work_status").insert({
+        order_id: id,
+        status_id: doneStatus.id,
+      });
+    } catch (wsErr) {
+      console.warn("work_status trigger warning (ignored):", wsErr);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ยืนยันการรับงานเรียบร้อยแล้ว",
+    });
+  } catch (error: any) {
+    console.error("Confirm received error:", error.message || error);
+    return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+  }
+};
+

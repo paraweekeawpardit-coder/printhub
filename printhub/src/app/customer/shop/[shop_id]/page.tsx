@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, useMemo } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2, ShoppingBag } from "lucide-react";
 
 import NavBar from "../../../../component/customer/NavBar";
@@ -9,9 +9,11 @@ import ShopHeaderCard from "../../../../component/customer/shop/ShopHeaderCard";
 import ServiceMenuGrid, { ServiceType } from "../../../../component/customer/shop/ServiceMenuGrid";
 import ServiceOptionModal from "../../../../component/customer/shop/ServiceOptionModal";
 import ShopCartDrawer, { CartItem } from "../../../../component/customer/shop/ShopCartDrawer";
+import { checkIsShopOpen } from "../../../../component/customer/ShopCard";
 
 export default function ShopMainPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const shopId = (params?.shop_id || params?.id) as string;
 
@@ -20,9 +22,8 @@ export default function ShopMainPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedService, setSelectedService] = useState<ServiceType | null>(null);
-  const [isCartOpen, setIsCartOpen] = useState(false); // State สำหรับควบคุมเปิด-ปิด Cart Drawer
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // 1. ดึง Customer ID จริงจากการล็อกอิน
   const [customerId, setCustomerId] = useState<string>("");
 
   useEffect(() => {
@@ -36,31 +37,31 @@ export default function ShopMainPage() {
     }
   }, [router]);
 
-  // ตรวจสอบสถานะเปิดร้านอย่างละเอียด รองรับทั้ง boolean, string และ number
-  const isShopOpen = Boolean(
-    shop?.is_open === true ||
-    shop?.is_open === 1 ||
-    String(shop?.is_open).toLowerCase() === "true" ||
-    String(shop?.status).toUpperCase() === "OPEN"
-  );
+  useEffect(() => {
+    if (searchParams.get("openCart") === "true") {
+      setIsCartOpen(true);
+    }
+  }, [searchParams]);
 
-  // 2. ดึงข้อมูลบริการและตะกร้าจากเซิร์ฟเวอร์
+  const isShopOpen = useMemo(() => {
+    if (!shop) return false;
+    return checkIsShopOpen(shop);
+  }, [shop]);
+
   const loadData = async (cid: string) => {
     if (!shopId || !cid) return;
     try {
       setLoading(true);
 
-      // โหลดข้อมูลร้านค้าและบริการ
       const resServices = await fetch(
         `http://localhost:5000/api/customer/shops/${shopId}/services`
       );
       const jsonServices = await resServices.json();
-      if (jsonServices.success) {
+      if (jsonServices.success && jsonServices.data) {
         setShop(jsonServices.data.shop);
         setServices(jsonServices.data.service_types || []);
       }
 
-      // ดึงข้อมูลตะกร้า
       const resCart = await fetch(
         `http://localhost:5000/api/customer/cart?customer_id=${cid}`
       );
@@ -103,7 +104,6 @@ export default function ShopMainPage() {
     }
   }, [shopId, customerId]);
 
-  // 3. จัดการเพิ่มสินค้าลงตะกร้า
   const handleAddToCart = async (itemPayload: any) => {
     const qty = Number(itemPayload.quantity) || 1;
     const unitPrice = Number(itemPayload.unit_price) || 0;
@@ -141,34 +141,31 @@ export default function ShopMainPage() {
     setSelectedService(null);
 
     try {
-      const res = await fetch("http://localhost:5000/api/customer/cart/add", {
+      const res = await fetch("http://localhost:5000/api/customer/cart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       if (res.status === 409) {
-        if (
-          confirm(
-            "คุณมีสินค้าของร้านอื่นอยู่ในตะกร้า ต้องการล้างตะกร้าเพื่อเริ่มสั่งร้านนี้หรือไม่?"
-          )
-        ) {
-          await fetch("http://localhost:5000/api/customer/cart/clear", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ customer_id: customerId }),
-          });
-          await fetch("http://localhost:5000/api/customer/cart/add", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          setCartItems([tempItem]);
-        } else {
-          setCartItems((prev) => prev.filter((i) => i.id !== tempItem.id));
-          return;
-        }
+        // 1. ล้างตะกร้าเดิมทันที
+        await fetch("http://localhost:5000/api/customer/cart", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customer_id: customerId }),
+        });
+
+        // 2. เพิ่มสินค้าจากร้านใหม่เข้าไป
+        await fetch("http://localhost:5000/api/customer/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        // 3. อัปเดต UI State ให้เหลือแค่สินค้าชิ้นใหม่
+        setCartItems([tempItem]);
       }
+
 
       const resCart = await fetch(
         `http://localhost:5000/api/customer/cart?customer_id=${customerId}`
@@ -190,7 +187,7 @@ export default function ShopMainPage() {
   };
 
   const handleClearCart = async () => {
-    await fetch("http://localhost:5000/api/customer/cart/clear", {
+    await fetch("http://localhost:5000/api/customer/cart", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ customer_id: customerId }),
@@ -198,7 +195,6 @@ export default function ShopMainPage() {
     setCartItems([]);
   };
 
-  // 4. บันทึกคำสั่งซื้อ และนำทางไปยังหน้าชำระเงิน
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   const handleProceedToPayment = async (appointmentData: any) => {
@@ -240,7 +236,7 @@ export default function ShopMainPage() {
     try {
       setIsSubmittingOrder(true);
 
-      const res = await fetch("http://localhost:5000/api/customer/orders", {
+      const res = await fetch("http://localhost:5000/api/customer/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -276,6 +272,24 @@ export default function ShopMainPage() {
     }
   };
 
+  const handleRemoveCartItem = async (itemId: string) => {
+    setCartItems((prev) => prev.filter((item) => item.id !== itemId));
+    try {
+      await fetch(`http://localhost:5000/api/customer/cart/item/${itemId}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.error("Delete cart item error:", err);
+      if (customerId) loadData(customerId);
+    }
+  };
+
+  const updatedShop = shop ? { ...shop, is_open: isShopOpen } : null;
+  const totalCartPrice = cartItems.reduce(
+    (sum, item) => sum + (Number(item.subtotal) || Number(item.unit_price * item.quantity) || 0),
+    0
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col bg-slate-50">
@@ -287,91 +301,67 @@ export default function ShopMainPage() {
     );
   }
 
-  // สร้างวัตถุ shop ที่ปรับปรุงค่า is_open แล้ว
-  const updatedShop = shop ? { ...shop, is_open: isShopOpen } : null;
-
-  // คำนวณราคารวมในตะกร้าทั้งหมด
-  const cartTotalPrice = cartItems.reduce(
-    (acc, item) => acc + (Number(item.subtotal) || Number(item.unit_price) * item.quantity || 0),
-    0
-  );
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-28 relative">
-      {/* ส่ง cartCount และฟังก์ชันสั่งเปิดตะกร้าไปยัง NavBar */}
       <NavBar 
         cartCount={cartItems.length}
         onOpenCart={() => setIsCartOpen(true)}
       />
 
-      <div className="bg-white border-b border-slate-200 py-2.5 px-4 sticky top-0 z-30 shadow-2xs">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
+      {/* บล็อกหลัก: ปุ่มย้อนกลับขนาดใหญ่ลอยอยู่ด้านซ้ายนอกการ์ด ไม่ดันเนื้อหาข้างใน */}
+      <div className="max-w-5xl mx-auto px-4 pt-6 relative">
+        <button
+          type="button"
+          onClick={() => router.push("/customer")}
+          title="กลับสู่หน้าหลัก"
+          className="hidden xl:flex absolute -left-14 top-6 w-12 h-12 rounded-2xl bg-white border border-slate-200/90 shadow-sm hover:shadow-md hover:bg-slate-50 items-center justify-center text-slate-700 hover:text-blue-600 transition-all cursor-pointer group"
+        >
+          <ArrowLeft className="w-6 h-6 group-hover:-translate-x-0.5 transition-transform" />
+        </button>
+
+        {/* ปุ่มย้อนกลับสำหรับจอมือถือ/แท็บเล็ต */}
+        <div className="xl:hidden pb-3">
           <button
             type="button"
             onClick={() => router.push("/customer")}
-            className="flex items-center gap-1.5 p-1.5 hover:bg-slate-100 rounded-xl transition cursor-pointer text-slate-600 hover:text-slate-900 text-xs font-semibold"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>กลับสู่หน้ารวมร้านค้า</span>
+            <span>กลับสู่หน้าหลัก</span>
           </button>
-
-          <span
-            className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 ${
-              isShopOpen
-                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                : "bg-rose-50 text-rose-600 border border-rose-200"
-            }`}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isShopOpen ? "bg-emerald-500" : "bg-rose-500"
-              }`}
-            />
-            {isShopOpen ? "เปิดให้บริการ" : "ปิดทำการ"}
-          </span>
         </div>
+
+        <main className="space-y-6">
+          <ShopHeaderCard shop={updatedShop} />
+          <ServiceMenuGrid
+            services={services}
+            onSelectService={(srv) => setSelectedService(srv)}
+          />
+        </main>
       </div>
 
-      <main className="max-w-3xl mx-auto p-4 space-y-4">
-        <ShopHeaderCard shop={updatedShop} />
-        <ServiceMenuGrid
-          services={services}
-          onSelectService={(srv) => setSelectedService(srv)}
-        />
-      </main>
-
-      {/* 🌟 แถบแจ้งเตือนตะกร้าลอยด้านล่าง (Floating Cart Bar) */}
       {cartItems.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 z-40">
-          <div className="bg-white p-3 rounded-2xl shadow-xl border border-slate-100 flex items-center justify-between">
-            {/* คลิกส่วนซ้ายเพื่อเปิดตะกร้า */}
-            <div
-              onClick={() => setIsCartOpen(true)}
-              className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition"
-            >
-              <div className="relative bg-blue-50 p-2.5 rounded-xl text-blue-600 flex items-center justify-center">
-                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold shadow-xs">
-                  {cartItems.length}
-                </span>
-                <ShoppingBag className="w-5 h-5 text-blue-600" />
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 sm:px-6 shadow-lg">
+          <div className="max-w-3xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
+                {cartItems.length}
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-medium">
-                  {cartItems.length} รายการที่เลือกไว้
-                </p>
-                <p className="text-base font-extrabold text-slate-900">
-                  ฿{cartTotalPrice.toFixed(2)}
-                </p>
+                <span className="text-xs text-slate-500 block">{cartItems.length} รายการที่เลือกไว้</span>
+                <span className="text-base font-extrabold text-blue-600">
+                  ฿{totalCartPrice.toFixed(2)}
+                </span>
               </div>
             </div>
 
-            {/* ปุ่มกดเปิด Pop-up ตะกร้าสินค้าตามรูปที่ 1 และ 2 */}
             <button
               type="button"
               onClick={() => setIsCartOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-md shadow-blue-500/20 transition cursor-pointer"
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-blue-500/20 flex items-center gap-1.5 cursor-pointer"
             >
-              ดูตะกร้า / กำหนดวันรับงาน
+              <ShoppingBag className="w-4 h-4" />
+              <span>ดูตะกร้า / กำหนดวันรับงาน</span>
             </button>
           </div>
         </div>
@@ -391,6 +381,7 @@ export default function ShopMainPage() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         onClearCart={handleClearCart}
+        onRemoveItem={handleRemoveCartItem}
         onProceedToPayment={handleProceedToPayment}
         isSubmitting={isSubmittingOrder}
       />

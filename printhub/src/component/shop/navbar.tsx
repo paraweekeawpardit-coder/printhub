@@ -17,36 +17,24 @@ export default function ShopNavbar() {
   }, []);
 
   const isHomeActive = pathname === "/shop";
-  const isOrderActive = pathname.startsWith("/shop/order") && !pathname.includes("/chat");
-  const isChatActive = pathname.includes("/chat");
+  const isOrderActive = pathname.startsWith("/shop/order");
+  const isChatActive = pathname.startsWith("/shop/chat");
   const isSettingActive = pathname.startsWith("/shop/setting");
 
   const goTo = (path: string) => {
-    const activeShopId = shopId || localStorage.getItem("shop_id");
-
-    if (!activeShopId) {
+    if (!shopId) {
+      console.warn("shopId not found in localStorage");
       alert("ไม่พบข้อมูลร้านค้า กรุณาล็อกอินใหม่อีกครั้ง");
       return;
     }
-
-    // 🟢 แยกการนำทางระหว่าง Order และ Chat อย่างชัดเจน
-    if (path === "chat") {
-      router.push(`/shop/order/${activeShopId}/chat`);
-      return;
-    }
-
-    if (path === "order") {
-      router.push(`/shop/order/${activeShopId}`);
-      return;
-    }
-
-    router.push(`/shop/${path}/${activeShopId}`);
+    router.push(`/shop/${path}/${shopId}`);
   };
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur shadow-sm">
       <div className="mx-auto max-w-6xl h-16 flex items-center justify-between gap-2 px-4">
 
+        {/* Logo / Home */}
         <button
           onClick={() => router.push("/shop")}
           className="flex items-center gap-2 pl-1 cursor-pointer text-left focus:outline-none"
@@ -57,41 +45,54 @@ export default function ShopNavbar() {
           <span className="hidden sm:block text-[#0F2942] font-bold text-xl tracking-tight">PrintHub</span>
         </button>
 
+        {/* Navigation Menu */}
         <div className="flex items-center gap-1 text-sm font-medium">
+
+          {/* หน้าหลัก */}
           <button
             onClick={() => router.push("/shop")}
             title="หน้าหลัก"
             className={`flex items-center gap-2 h-10 px-3 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
-              isHomeActive ? "bg-[#0F2942] text-white" : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
+              isHomeActive
+                ? "bg-[#0F2942] text-white"
+                : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
             }`}
           >
             <Home size={15} />
             <span className={isHomeActive ? "inline" : "hidden md:inline"}>หน้าหลัก</span>
           </button>
 
+          {/* รายการคำสั่งพิมพ์ */}
           <button
             onClick={() => goTo("order")}
             title="รายการคำสั่งพิมพ์"
             className={`flex items-center gap-2 h-10 px-3 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
-              isOrderActive ? "bg-[#0F2942] text-white" : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
+              isOrderActive
+                ? "bg-[#0F2942] text-white"
+                : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
             }`}
           >
             <ClipboardList size={15} />
             <span className={isOrderActive ? "inline" : "hidden md:inline"}>รายการคำสั่งพิมพ์</span>
           </button>
 
+          {/* แชท */}
           <button
             onClick={() => goTo("chat")}
             title="แชท"
             className={`flex items-center gap-2 h-10 px-3 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
-              isChatActive ? "bg-[#0F2942] text-white" : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
+              isChatActive
+                ? "bg-[#0F2942] text-white"
+                : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
             }`}
           >
             <MessageCircle size={15} />
             <span className={isChatActive ? "inline" : "hidden md:inline"}>แชท</span>
           </button>
+
         </div>
 
+        {/* Setting / Profile */}
         <button
           onClick={() => goTo("setting")}
           className="flex items-center gap-2.5 pr-1 cursor-pointer focus:outline-none"

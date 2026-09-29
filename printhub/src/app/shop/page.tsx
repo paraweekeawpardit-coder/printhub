@@ -5,21 +5,12 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { Clock, DollarSign, Star } from "lucide-react";
 
-import DashboardCard from "@/src/component/shop/dashboard-card";
-import OrderCard from "@/src/component/shop/order-card";
-import ShopNavbar from "@/src/component/shop/navbar";
-import FinancialTable, { Transaction } from "@/src/component/shop/financial-table";
-import OrderBreakdownModal from "@/src/component/shop/order-breakdown-modal";
-import ReviewComplaintModal from "@/src/component/shop/review-complaint-modal";
-
-// 1. อัปเดต Type ให้ตรงกับข้อมูลที่ Backend (home.ts) ส่งกลับมา
-type FileItem = {
-  id: string;
-  category: string;
-  filename: string;
-  url: string;
-  page_count?: number;
-};
+import DashboardCard from "@/component/shop/dashboard-card";
+import OrderCard from "@/component/shop/order-card";
+import ShopNavbar from "@/component/shop/navbar";
+import FinancialTable, { Transaction } from "@/component/shop/financial-table";
+import OrderBreakdownModal from "@/component/shop/order-breakdown-modal";
+import ReviewComplaintModal from "@/component/shop/review-complaint-modal";
 
 type Order = {
   id: string;
@@ -50,10 +41,8 @@ export default function ShopPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [shopId, setShopId] = useState<string>("");
 
-  // Control View สำหรับสลับรายละเอียดของทั้ง 3 Cards
   const [activeView, setActiveView] = useState<"orders" | "financial" | "reviews" | null>(null);
 
-  // Financial Data State
   const [financialData, setFinancialData] = useState<{
     totalGross: number;
     totalFee: number;
@@ -66,7 +55,6 @@ export default function ShopPage() {
     transactions: [],
   });
 
-  // Order Breakdown State
   const [breakdownData, setBreakdownData] = useState<{
     total: number;
     counts: Record<string, number>;
@@ -77,7 +65,6 @@ export default function ShopPage() {
     orders: [],
   });
 
-  // Review & Complaint State
   const [reviewData, setReviewData] = useState<{
     reviews: any[];
     complaints: any[];
@@ -90,15 +77,12 @@ export default function ShopPage() {
   const isFetchingRef = useRef(false);
 
   useEffect(() => {
-    const id = localStorage.getItem("shop_id");
+    const id = localStorage.getItem("shop_id") || localStorage.getItem("id");
     if (id) {
       setShopId(id);
-    } else {
-      console.error("shop_id not found in localStorage");
     }
   }, []);
 
-  // 2. ฟังก์ชันดึงข้อมูล Dashboard
   const fetchDashboardData = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!shopId) return;
@@ -109,8 +93,13 @@ export default function ShopPage() {
       try {
         if (!opts?.silent) setLoading(true);
 
-        const headers = { shop_id: shopId };
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const headers = {
+          shop_id: shopId,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
 
+        // 💡 ตรวจสอบ Path ว่ามี /api หรือไม่ตาม Backend ที่ตั้งไว้
         const [
           numRes,
           scoreRes,
@@ -120,32 +109,26 @@ export default function ShopPage() {
           breakdownRes,
           reviewRes,
         ] = await Promise.all([
-          axios.get("http://localhost:5000/shop/numWork", { headers }),
-          axios.get("http://localhost:5000/shop/getScore", { headers }),
-          axios.get("http://localhost:5000/shop/getIncome", { headers }),
-          axios.get("http://localhost:5000/shop/getTopOrder", { headers }),
-          axios.get("http://localhost:5000/shop/getFinancialOverview", { headers }),
-          axios.get("http://localhost:5000/shop/getOrderStatusBreakdown", { headers }),
-          axios.get("http://localhost:5000/shop/getComplaintsAndReviews", { headers }),
+          axios.get("http://localhost:5000/shop/numWork", { headers }).catch(() => ({ data: { numWork: 0 } })),
+          axios.get("http://localhost:5000/shop/getScore", { headers }).catch(() => ({ data: { score: 0, totalReviews: 0 } })),
+          axios.get("http://localhost:5000/shop/getIncome", { headers }).catch(() => ({ data: { income: 0, orderCount: 0 } })),
+          axios.get("http://localhost:5000/shop/getTopOrder", { headers }).catch(() => ({ data: [] })),
+          axios.get("http://localhost:5000/shop/getFinancialOverview", { headers }).catch(() => ({ data: null })),
+          axios.get("http://localhost:5000/shop/getOrderStatusBreakdown", { headers }).catch(() => ({ data: null })),
+          axios.get("http://localhost:5000/shop/getComplaintsAndReviews", { headers }).catch(() => ({ data: null })),
         ]);
 
         setNum(`${numRes.data.numWork ?? 0} รายการ`);
-        setScore(`${scoreRes.data.score ?? 0.0} / 5.0`);
-        setIncome(`${incomeRes.data.income ?? 0} บาท`);
+        setScore(`${Number(scoreRes.data.score ?? 0).toFixed(1)} / 5.0`);
+        setIncome(`${Number(incomeRes.data.income ?? 0).toLocaleString()} บาท`);
 
         setTodayOrdersCount(incomeRes.data.orderCount ?? 0);
         setTotalReviewsCount(scoreRes.data.totalReviews ?? 0);
 
         setOrders(ordersRes.data ?? []);
-        setFinancialData(
-          financeRes.data ?? { totalGross: 0, totalFee: 0, totalNet: 0, transactions: [] }
-        );
-        setBreakdownData(
-          breakdownRes.data ?? { total: 0, counts: {}, orders: [] }
-        );
-        setReviewData(
-          reviewRes.data ?? { reviews: [], complaints: [] }
-        );
+        if (financeRes.data) setFinancialData(financeRes.data);
+        if (breakdownRes.data) setBreakdownData(breakdownRes.data);
+        if (reviewRes.data) setReviewData(reviewRes.data);
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
       } finally {
@@ -161,23 +144,6 @@ export default function ShopPage() {
       fetchDashboardData();
     }
   }, [shopId, fetchDashboardData]);
-
-  useEffect(() => {
-    const handleFocus = () => fetchDashboardData({ silent: true });
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        fetchDashboardData({ silent: true });
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [fetchDashboardData]);
 
   const handleOrderClick = (orderId: string) => {
     router.push(`/shop/detail/${orderId}`);
@@ -198,35 +164,50 @@ export default function ShopPage() {
 
         {/* 3 Dashboard Summary Cards */}
         <div className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-3">
-          <DashboardCard
-            title="ออเดอร์รอการดำเนินการ"
-            value={num}
-            subtitle="กำลังเตรียม / รอพิมพ์"
-            icon={Clock}
-            active={activeView === "orders"}
+          <div
+            className={`cursor-pointer rounded-2xl transition-all ${
+              activeView === "orders" ? "ring-2 ring-[#0F2942]" : ""
+            }`}
             onClick={() => setActiveView(activeView === "orders" ? null : "orders")}
-          />
+          >
+            <DashboardCard
+              title="ออเดอร์รอการดำเนินการ"
+              value={num}
+              subtitle="กำลังเตรียม / รอพิมพ์"
+              icon={Clock}
+            />
+          </div>
 
-          <DashboardCard
-            title="รายได้วันนี้"
-            value={income}
-            subtitle={`${todayOrdersCount} คำสั่งพิมพ์วันนี้`}
-            icon={DollarSign}
-            active={activeView === "financial"}
+          <div
+            className={`cursor-pointer rounded-2xl transition-all ${
+              activeView === "financial" ? "ring-2 ring-[#0F2942]" : ""
+            }`}
             onClick={() => setActiveView(activeView === "financial" ? null : "financial")}
-          />
+          >
+            <DashboardCard
+              title="รายได้วันนี้"
+              value={income}
+              subtitle={`${todayOrdersCount} คำสั่งพิมพ์วันนี้`}
+              icon={DollarSign}
+            />
+          </div>
 
-          <DashboardCard
-            title="คะแนนรีวิวเฉลี่ย"
-            value={score}
-            subtitle={`${totalReviewsCount} รีวิวทั้งหมด`}
-            icon={Star}
-            active={activeView === "reviews"}
+          <div
+            className={`cursor-pointer rounded-2xl transition-all ${
+              activeView === "reviews" ? "ring-2 ring-[#0F2942]" : ""
+            }`}
             onClick={() => setActiveView(activeView === "reviews" ? null : "reviews")}
-          />
+          >
+            <DashboardCard
+              title="คะแนนรีวิวเฉลี่ย"
+              value={score}
+              subtitle={`${totalReviewsCount} รีวิวทั้งหมด`}
+              icon={Star}
+            />
+          </div>
         </div>
 
-        {/* Dynamic Detail Section เมื่อกดคลิกแต่ละ Card */}
+        {/* Dynamic Detail Section */}
         {activeView === "orders" && (
           <div className="mb-10">
             <OrderBreakdownModal

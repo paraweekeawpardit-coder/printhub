@@ -23,6 +23,7 @@ interface ShopCartDrawerProps {
   isOpen?: boolean;
   onClose?: () => void;
   onClearCart: () => void;
+  onRemoveItem?: (itemId: string) => void; // 🌟 ฟังก์ชันลบทีละรายการ
   onProceedToPayment: (appointmentData: {
     receive_date: string;
     appointment_time: string;
@@ -38,6 +39,7 @@ export default function ShopCartDrawer({
   isOpen = false,
   onClose,
   onClearCart,
+  onRemoveItem,
   onProceedToPayment,
   isSubmitting = false,
 }: ShopCartDrawerProps) {
@@ -122,7 +124,6 @@ export default function ShopCartDrawer({
       {/* 🌟 1. แถบบาร์ด้านล่างเต็มจอ */}
       <div className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 p-3 shadow-lg z-40">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-          {/* 🖼️ ไอคอนแสดงจำนวน + ราคา (เป็นรูปประกอบเฉยๆ กดไม่ได้) */}
           <div className="flex items-center gap-3">
             <div className="relative p-2.5 bg-blue-50 text-blue-600 rounded-xl">
               <ShoppingBag className="w-5 h-5" />
@@ -138,7 +139,6 @@ export default function ShopCartDrawer({
             </div>
           </div>
 
-          {/* 🔘 ปุ่มเดียวที่กดเพื่อเปิด Drawer */}
           <button
             type="button"
             onClick={handleOpen}
@@ -149,7 +149,7 @@ export default function ShopCartDrawer({
         </div>
       </div>
 
-      {/* 🌟 2. Pop-up Modal */}
+      {/* 🌟 2. Pop-up Modal ตะกร้าสินค้า */}
       {isDrawerOpen && (
         <div 
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs"
@@ -159,10 +159,13 @@ export default function ShopCartDrawer({
             className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Header */}
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-base text-slate-900">ตะกร้าสินค้า ({shop?.shop_name || shop?.name || "ร้านค้า"})</h3>
+                <h3 className="font-bold text-base text-slate-900">
+                  ตะกร้าสินค้า ({shop?.shop_name || shop?.name || "ร้านค้า"})
+                </h3>
               </div>
               <div className="flex items-center gap-2">
                 {cartItems.length > 0 && (
@@ -174,7 +177,7 @@ export default function ShopCartDrawer({
                     }}
                     className="text-xs text-rose-500 hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" /> ล้างตะกร้า
+                    <Trash2 className="w-3.5 h-3.5" /> ล้างตะกร้าทั้งหมด
                   </button>
                 )}
                 <button
@@ -187,39 +190,60 @@ export default function ShopCartDrawer({
               </div>
             </div>
 
+            {/* Body */}
             <div className="p-5 overflow-y-auto space-y-5 flex-1">
               <div className="space-y-2.5">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">รายการบริการ</span>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                  รายการบริการ
+                </span>
                 {cartItems.length === 0 ? (
                   <p className="text-center py-6 text-slate-400 text-xs">ไม่มีสินค้าในตะกร้า</p>
                 ) : (
                   cartItems.map((item, idx) => (
                     <div
                       key={item.id || idx}
-                      className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between text-xs"
+                      className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between text-xs group"
                     >
-                      <div>
+                      <div className="flex-1 pr-2">
                         <span className="font-bold text-slate-800 block">
                           {item.category} ({item.selected_size})
                         </span>
                         <span className="text-[11px] text-slate-400 block">
-                          {item.color_type} • {item.paper_type} • {item.finishing_option}
+                          {[item.color_type, item.paper_type, item.finishing_option]
+                            .filter((val) => val && val.trim() !== "" && val !== "-")
+                            .join(" • ")}
                         </span>
                         {item.file_url && (
                           <span className="text-[10px] text-slate-500 block truncate max-w-[200px]">
                             {item.file_url}
                           </span>
                         )}
-                        <span className="text-blue-600 font-bold mt-0.5 block">จำนวน {item.quantity} ชุด</span>
+                        <span className="text-blue-600 font-bold mt-0.5 block">
+                          จำนวน {item.quantity} ชุด
+                        </span>
                       </div>
-                      <span className="font-extrabold text-slate-900 text-sm">
-                        ฿{Number(item.subtotal || item.quantity * item.unit_price).toFixed(2)}
-                      </span>
+
+                      <div className="flex items-center gap-3">
+                        <span className="font-extrabold text-slate-900 text-sm">
+                          ฿{Number(item.subtotal || item.quantity * item.unit_price).toFixed(2)}
+                        </span>
+
+                        {/* 🌟 ปุ่มลบรายการนี้รายการเดียว */}
+                        <button
+                          type="button"
+                          onClick={() => onRemoveItem && onRemoveItem(item.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          title="ลบรายการนี้"
+                        >
+                          <Trash2 className="w-4 h-4 text-rose-500" />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
               </div>
 
+              {/* นัดหมายวันและเวลา (FR-2.8) */}
               <div className="space-y-3 pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700 block">นัดหมายวันและเวลารับเอกสาร</span>
@@ -283,6 +307,7 @@ export default function ShopCartDrawer({
               </div>
             </div>
 
+            {/* Footer */}
             <div className="p-4 border-t border-slate-100 bg-white space-y-3">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500 font-medium">ยอดรวมทั้งหมด</span>
