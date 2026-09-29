@@ -1,7 +1,9 @@
 /**
  * Page: CustomerDashboardPage
- * หน้าที่: หน้าหลักแดชบอร์ดของลูกค้า ทำหน้าที่เป็น Controller คอยจัดการ State,
- * ดึงข้อมูลสรุปจาก API, จัดการเงื่อนไข Filter และประกอบ Component ย่อยทั้งหมดเข้าด้วยกัน
+ * Path: src/app/customer/dashboard/page.tsx
+ * หน้าที่: หน้าแดชบอร์ดหลักของลูกค้า คอยจัดการ State, โหลดข้อมูลคำสั่งซื้อและสถิติจาก API,
+ * ควบคุมตัวกรองสถานะ, จัดการ Action Modal (ยกเลิก/รับงาน/ข้อร้องเรียน) 
+ * และนำ Component ย่อยต่างๆ มาประกอบเข้าด้วยกัน
  */
 
 "use client";
@@ -11,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { Printer, CheckCircle2, Loader2, Check } from "lucide-react";
 import NavBar from "../../../component/customer/NavBar";
 
-// Import Components ที่แยกออกมา
+// นำเข้า Components ย่อยของ Dashboard
 import DashboardWelcomeBanner from "../../../component/customer/dashboard/DashboardWelcomeBanner";
 import DashboardStatsGrid from "../../../component/customer/dashboard/DashboardStatsGrid";
 import DashboardStatusFilter from "../../../component/customer/dashboard/DashboardStatusFilter";
@@ -41,7 +43,7 @@ export default function CustomerDashboardPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
 
-  // State ควบคุม Accordion Dropdown รายการงานพิมพ์
+  // State สำหรับ Accordion Dropdown
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
   // State สำหรับ Modal ร้องเรียน / ขอคืนเงิน
@@ -51,7 +53,7 @@ export default function CustomerDashboardPage() {
   const [reportImageUrl, setReportImageUrl] = useState("");
   const [submittingReport, setSubmittingReport] = useState(false);
 
-  // State สำหรับ Confirm Action Modal
+  // State สำหรับ Modal กดยืนยัน Action ต่างๆ
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     type: "cancel" | "received";
@@ -67,10 +69,12 @@ export default function CustomerDashboardPage() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // ฟังก์ชันตรวจสอบว่าออเดอร์นี้สั่งมาเกิน 10 นาทีแล้วหรือยัง
   const isOrderExpired = (orderDateStr: string) => {
     if (!orderDateStr) return false;
     const orderTime = new Date(orderDateStr).getTime();
-    return Date.now() - orderTime > 10 * 60 * 1000;
+    const now = Date.now();
+    return now - orderTime > 10 * 60 * 1000;
   };
 
   const fetchDashboardData = useCallback(async (cid: string) => {
@@ -80,10 +84,10 @@ export default function CustomerDashboardPage() {
       const json = await res.json();
 
       if (json.success && json.data) {
-        setCustomerName(json.data.customer.fullName);
-        setStats(json.data.stats);
-        setOrders(json.data.orders);
-        setReports(json.data.reports);
+        setCustomerName(json.data.customer?.fullName || json.data.customer?.name || "");
+        setStats(json.data.stats || { inProgress: 0, ready: 0, completed: 0, reports: 0 });
+        setOrders(json.data.orders || []);
+        setReports(json.data.reports || []);
       }
     } catch (err) {
       console.error("Load dashboard error:", err);
@@ -101,7 +105,7 @@ export default function CustomerDashboardPage() {
     fetchDashboardData(cid);
   }, [router, fetchDashboardData]);
 
-  // คำนวณจำนวนออเดอร์ในแต่ละสถานะ
+  // คำนวณจำนวนออเดอร์ในแต่ละสถานะสำหรับ Badge ตัวเลข
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       ทั้งหมด: orders.length,
@@ -114,7 +118,8 @@ export default function CustomerDashboardPage() {
     };
 
     orders.forEach((o) => {
-      let state = o.current_status?.state || "รอการดำเนินงาน";
+      let state = o.current_status?.state || o.status?.state || (typeof o.status === "string" ? o.status : "รอการดำเนินงาน");
+      
       if (state === "รอการชำระเงิน" && isOrderExpired(o.order_date)) {
         state = "ยกเลิกการพิมพ์";
       }
@@ -132,7 +137,8 @@ export default function CustomerDashboardPage() {
   // กรองรายการคำสั่งซื้อตามแท็บสถานะที่เลือก
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      let state = o.current_status?.state || "รอการดำเนินงาน";
+      let state = o.current_status?.state || o.status?.state || (typeof o.status === "string" ? o.status : "รอการดำเนินงาน");
+      
       if (state === "รอการชำระเงิน" && isOrderExpired(o.order_date)) {
         state = "ยกเลิกการพิมพ์";
       }
@@ -145,7 +151,7 @@ export default function CustomerDashboardPage() {
     });
   }, [orders, selectedStatusFilter]);
 
-  // จัดการ Action กดยืนยันจาก Modal
+  // ดำเนินการ Action เมื่อกดยืนยันใน ConfirmActionModal
   const handleExecuteAction = async () => {
     const cid = localStorage.getItem("customer_id") || localStorage.getItem("id");
     const { type, orderId } = confirmModal;
@@ -182,7 +188,7 @@ export default function CustomerDashboardPage() {
     }
   };
 
-  // จัดการส่งฟอร์มเรื่องร้องเรียน
+  // ส่งข้อมูลร้องเรียน/ขอคืนเงิน
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
     const cid = localStorage.getItem("customer_id") || localStorage.getItem("id");
@@ -235,7 +241,7 @@ export default function CustomerDashboardPage() {
     <div className="min-h-screen bg-[#F9FAFB] text-slate-800 pb-20 relative">
       <NavBar />
 
-      {/* Toast Alert */}
+      {/* Toast Alert มุมขวาบน */}
       {toastMessage && (
         <div className="fixed top-20 right-5 z-50 bg-[#0F2942] text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs animate-in slide-in-from-top-3">
           <Check className="w-4 h-4 text-emerald-400" />
@@ -244,7 +250,7 @@ export default function CustomerDashboardPage() {
       )}
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        {/* 1. แบนเนอร์ต้อนรับ */}
+        {/* 1. Welcome Banner */}
         <DashboardWelcomeBanner customerName={customerName} />
 
         {/* 2. การ์ดสถิติ 4 ช่อง */}
@@ -281,7 +287,7 @@ export default function CustomerDashboardPage() {
           </button>
         </div>
 
-        {/* 4. แถบตัวกรองสถานะ (แสดงเฉพาะแท็บคำสั่งซื้อ) */}
+        {/* 4. แถบตัวกรองสถานะ (แสดงเฉพาะแท็บ orders) */}
         {activeTab === "orders" && (
           <DashboardStatusFilter
             filters={STATUS_FILTERS}
@@ -291,12 +297,14 @@ export default function CustomerDashboardPage() {
           />
         )}
 
-        {/* 5. แสดงผลรายการคำสั่งซื้อ หรือ รายการเรื่องร้องเรียน */}
+        {/* 5. รายการคำสั่งซื้อ หรือ ประวัติการร้องเรียน */}
         {activeTab === "orders" ? (
           filteredOrders.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-3xl border border-slate-200/80 text-slate-400 space-y-2">
               <Printer className="w-10 h-10 mx-auto text-slate-300" />
-              <p className="text-sm font-bold text-slate-700">ไม่พบคำสั่งซื้อในสถานะ &quot;{selectedStatusFilter}&quot;</p>
+              <p className="text-sm font-bold text-slate-700">
+                ไม่พบคำสั่งซื้อในสถานะ &quot;{selectedStatusFilter}&quot;
+              </p>
               <p className="text-xs">ลองเลือกดูสถานะอื่น หรือสั่งพิมพ์งานใหม่</p>
             </div>
           ) : (
@@ -309,20 +317,20 @@ export default function CustomerDashboardPage() {
                   onToggleExpand={() =>
                     setExpandedOrderId(expandedOrderId === order.id ? null : order.id)
                   }
-                  onCancelClick={(ord) =>
+                  onCancelClick={(orderId, orderNo) =>
                     setConfirmModal({
                       isOpen: true,
                       type: "cancel",
-                      orderId: ord.id,
-                      orderNo: `#ORD-${ord.order_no || ord.id.slice(0, 6)}`,
+                      orderId,
+                      orderNo,
                     })
                   }
-                  onConfirmReceivedClick={(ord) =>
+                  onReceivedClick={(orderId, orderNo) =>
                     setConfirmModal({
                       isOpen: true,
                       type: "received",
-                      orderId: ord.id,
-                      orderNo: `#ORD-${ord.order_no || ord.id.slice(0, 6)}`,
+                      orderId,
+                      orderNo,
                     })
                   }
                   onReportClick={(ord) => {
@@ -349,7 +357,7 @@ export default function CustomerDashboardPage() {
         )}
       </main>
 
-      {/* Modal ยืนยันการดำเนินการ (ยกเลิก / รับงาน) */}
+      {/* Confirmation Modal สำหรับ ยกเลิก หรือ ยืนยันรับงาน */}
       <ConfirmActionModal
         isOpen={confirmModal.isOpen}
         type={confirmModal.type}
@@ -358,7 +366,7 @@ export default function CustomerDashboardPage() {
         onConfirm={handleExecuteAction}
       />
 
-      {/* Modal ยื่นเรื่องร้องเรียน / ขอคืนเงิน */}
+      {/* Modal ร้องเรียน / ขอคืนเงิน */}
       <ReportIssueModal
         isOpen={isReportModalOpen}
         description={reportDescription}
