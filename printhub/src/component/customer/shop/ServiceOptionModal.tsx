@@ -34,6 +34,8 @@ interface ServiceOptionModalProps {
     subtotal: number;
     file_url: string;
     total_pages: number;
+    page_count?: number;
+    pages_per_set?: number;
   }) => void;
 }
 
@@ -232,7 +234,7 @@ export default function ServiceOptionModal({
         method: "POST",
         body: formData,
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Upload failed");
@@ -267,7 +269,10 @@ export default function ServiceOptionModal({
         unit_price: priceCalculations.singleSetPrice,
         subtotal: priceCalculations.finalTotalPrice,
         file_url: combinedFileUrls,
-        total_pages: totalPages,
+        
+        page_count: totalPages,       // สำหรับบันทึกในตาราง DB (print_order_item)
+        total_pages: totalPages,      // สำหรับ Cart state
+        pages_per_set: totalPages,    // เผื่อใช้สำหรับคำนวณราคาต่อหน้า
       });
     } catch (err: any) {
       setFileError(err.message || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
@@ -465,52 +470,71 @@ export default function ServiceOptionModal({
             )}
 
             {/* แสดงตัวเลือกย่อยจาก Supabase */}
-            {Array.from(new Set(rawOptions.map((o) => o.group_type))).map((group) => {
-              const groupItems = rawOptions.filter((o) => o.group_type === group);
-              const isOptionalGroup =
-                group.includes("เข้าเล่ม") ||
-                group.includes("ตกแต่ง") ||
-                group.includes("finishing");
+            {(() => {
+              // ดึงกลุ่มทั้งหมด และจัดเรียงให้กลุ่มเข้าเล่ม/ตกแต่งไปอยู่ท้ายสุดเสมอ
+              const groups = Array.from(new Set(rawOptions.map((o) => o.group_type)))
+                .sort((a, b) => {
+                  const lowerA = a.toLowerCase();
+                  const lowerB = b.toLowerCase();
 
-              return (
-                <div key={group} className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700 block">{group}</span>
-                    {isOptionalGroup ? (
-                      <span className="text-[10px] text-slate-400">(ไม่บังคับเลือก)</span>
-                    ) : (
-                      <span className="text-[10px] text-rose-500 font-bold">* จำเป็น</span>
-                    )}
+                  const isFinishingA = lowerA.includes("เข้าเล่ม") || lowerA.includes("ตกแต่ง") || lowerA.includes("finishing");
+                  const isFinishingB = lowerB.includes("เข้าเล่ม") || lowerB.includes("ตกแต่ง") || lowerB.includes("finishing");
+
+                  // ถ้า A เป็นตัวเลือกเข้าเล่ม/ตกแต่ง ให้ไปอยู่ข้างหลัง
+                  if (isFinishingA && !isFinishingB) return 1;
+                  // ถ้า B เป็นตัวเลือกเข้าเล่ม/ตกแต่ง ให้ B ไปอยู่ข้างหลัง
+                  if (!isFinishingA && isFinishingB) return -1;
+
+                  return 0;
+                });
+
+              return groups.map((group) => {
+                const groupItems = rawOptions.filter((o) => o.group_type === group);
+                const isOptionalGroup =
+                  group.includes("เข้าเล่ม") ||
+                  group.includes("ตกแต่ง") ||
+                  group.includes("finishing");
+
+                return (
+                  <div key={group} className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700 block">{group}</span>
+                      {isOptionalGroup ? (
+                        <span className="text-[10px] text-slate-400">(ไม่บังคับเลือก)</span>
+                      ) : (
+                        <span className="text-[10px] text-rose-500 font-bold">* จำเป็น</span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {groupItems.map((opt) => {
+                        const isSelected = modalOptions[group]?.id === opt.id;
+                        const displayName = opt.detail || opt.option_name || "ตัวเลือก";
+                        const itemPrice = Number(opt.price ?? opt.unit_price ?? 0);
+
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => handleToggleOption(group, opt)}
+                            className={`p-2.5 rounded-xl text-left border text-xs transition cursor-pointer flex items-center justify-between ${
+                              isSelected
+                                ? "bg-blue-50 border-blue-600 text-blue-700 font-bold shadow-2xs"
+                                : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                            }`}
+                          >
+                            <span className="truncate pr-2">{displayName}</span>
+                            <span className="text-[11px] text-slate-500 shrink-0">
+                              {itemPrice > 0 ? `฿${itemPrice}` : "ฟรี"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    {groupItems.map((opt) => {
-                      const isSelected = modalOptions[group]?.id === opt.id;
-                      const displayName = opt.detail || opt.option_name || "ตัวเลือก";
-                      const itemPrice = Number(opt.price ?? opt.unit_price ?? 0);
-
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => handleToggleOption(group, opt)}
-                          className={`p-2.5 rounded-xl text-left border text-xs transition cursor-pointer flex items-center justify-between ${
-                            isSelected
-                              ? "bg-blue-50 border-blue-600 text-blue-700 font-bold shadow-2xs"
-                              : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <span className="truncate pr-2">{displayName}</span>
-                          <span className="text-[11px] text-slate-500 shrink-0">
-                            {itemPrice > 0 ? `฿${itemPrice}` : "ฟรี"}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
 
             {/* จำนวนชุด */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between">

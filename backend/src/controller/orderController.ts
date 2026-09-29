@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
+import multer from 'multer';
 import supabase from '../config/supabase.js';
+
+export const upload = multer({ storage: multer.memoryStorage() });
 
 // Helper Function คำนวณราคา
 export const calculateOrderPricing = (items: Array<any>) => {
@@ -421,3 +424,80 @@ export const confirmReceivedOrder = async (req: Request, res: Response) => {
   }
 };
 
+// ==========================================
+// 6. อัปโหลดสลิปชำระเงินเข้า Bucket payment_slip
+// ==========================================
+export const uploadPaymentSlip = async (req: Request, res: Response) => {
+  try {
+    const { order_id } = req.body;
+    const file = req.file;
+
+    if (!order_id || !file) {
+      return res.status(400).json({ success: false, message: "กรุณาระบุ order_id และแนบไฟล์สลิป" });
+    }
+
+    // 1. ดึงข้อมูลออเดอร์เพื่อเอา customer_id และ shop_id ไปบันทึกลงตาราง payment
+    const { data: orderData, error: orderErr } = await supabase
+      .from("print_order")
+      .select("id, customer_id, shop_id, total_price")
+      .eq("id", order_id)
+      .single();
+
+    if (orderErr || !orderData) {
+      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลคำสั่งซื้อ" });
+    }
+
+    // 2. ตั้งชื่อไฟล์รูปภาพสำหรับอัปโหลดเข้า Bucket payment_slip
+    const fileExt = file.originalname.split(".").pop();
+    const fileName = `slip_${order_id}_${Date.now()}.${fileExt}`;
+
+    // 3. Upload ไฟล์สลิปเข้า Supabase Storage
+    const { error: storageErr } = await supabase.storage
+      .from("payment_slip")
+      .upload(fileName, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (storageErr) throw storageErr;
+
+    // 4. ดึง Public URL ของภาพสลิปที่อัปโหลดสำเร็จ
+    const { data: urlData } = supabase.storage
+      .from("payment_slip")
+      .getPublicUrl(fileName);
+
+    const slipPublicUrl = urlData.publicUrl;
+
+    // 5. บันทึกข้อมูลการชำระเงินลงตาราง payment (ตรงตาม Database Schema)
+    const { data: paymentData, error: payErr } = await supabase
+      .from("payment")
+      .insert({
+        order_id: order_id,
+        sender: orderData.customer_id,
+        receiver: orderData.shop_id,
+        amount: orderData.total_price,
+        slip_url: slipPublicUrl,
+        status: "paid",
+        payment_date: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (payErr) throw payErr;
+
+    // 6. อัปเดต payment_id กลับเข้าตาราง print_order
+    await supabase
+      .from("print_order")
+      .update({ payment_id: paymentData.id })
+      .eq("id", order_id);
+
+    return res.status(200).json({
+      success: true,
+      message: "อัปโหลดสลิปชำระเงินเรียบร้อยแล้ว",
+      slip_url: slipPublicUrl,
+    });
+  } catch (error: any) {
+    console.error("Upload payment slip error:", error.message || error);
+    return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+  }
+};
