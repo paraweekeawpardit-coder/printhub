@@ -3,66 +3,85 @@
 import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { useParams, useRouter } from "next/navigation";
-import ShopNavbar from "@/src/component/shop/navbar";
-import PageHeading from "@/src/component/shop/Pageheading";
+import ShopNavbar from "@/component/shop/navbar";
+import PageHeading from "@/component/shop/Pageheading";
 import OrderStatusTabs, {
   OrderStatusFilter,
-} from "@/src/component/shop/orderStatus";
+} from "@/component/shop/orderStatus";
 import OrderDetailCard, {
   OrderDetail,
-} from "@/src/component/shop/order-detail-card";
+} from "@/component/shop/order-detail-card";
 
 const API_BASE = "http://localhost:5000";
 
 export default function OrderPage() {
   const router = useRouter();
   const params = useParams();
-  const shop_id = Array.isArray(params?.shop_id)
+
+  // 1. ดึง paramShopId จาก URL params
+  const paramShopId = Array.isArray(params?.shop_id)
     ? params.shop_id[0]
     : (params?.shop_id as string);
 
-  console.log("get ordertab from shop", shop_id);
+  // ประกาศ State shopId สำหรับเก็บ ID ร้านค้า
+  const [shopId, setShopId] = useState<string>(paramShopId || "");
 
   const [activeFilter, setActiveFilter] =
     useState<OrderStatusFilter>("ทั้งหมด");
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
+  // 2. ถ้า paramShopId ไม่มี ให้ดึงจาก localStorage
+  useEffect(() => {
+    if (!shopId && typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") || localStorage.getItem("id");
+      if (storedShopId) setShopId(storedShopId);
+    } else if (paramShopId && paramShopId !== shopId) {
+      setShopId(paramShopId);
+    }
+  }, [paramShopId, shopId]);
+
+  // 3. ฟังก์ชันดึงรายการออเดอร์ตามสถานะ
   const getOrder = useCallback(async () => {
-    if (!shop_id) return;
+    if (!shopId) return;
 
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE}/shop/getOrderByStatus`, {
-        headers: { shop_id },
+        headers: { shop_id: shopId },
         params: { status: activeFilter },
       });
       setOrders(response.data.orders ?? []);
     } catch (error) {
       console.error("Get order error:", error);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
-  }, [shop_id, activeFilter]);
+  }, [shopId, activeFilter]);
 
   useEffect(() => {
     getOrder();
   }, [getOrder]);
 
+  // 4. ฟังก์ชันอัปเดตสถานะออเดอร์
   const handleUpdateStatus = useCallback(
     async (orderId: string, newStatus: string) => {
+      if (!shopId) return;
+
       try {
         await axios.patch(
           `${API_BASE}/shop/orders/${orderId}/status`,
           { status_name: newStatus },
-          { params: { shop_id } }
+          { params: { shop_id: shopId } }
         );
         await getOrder();
       } catch (error) {
         console.error("Update order status error:", error);
       }
     },
-    [shop_id, getOrder]
+    [shopId, getOrder]
   );
 
   return (

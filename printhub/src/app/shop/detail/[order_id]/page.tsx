@@ -26,6 +26,7 @@ export default function OrderDetailPage() {
 
   const orderId = (params?.id || params?.order_id) as string;
 
+  const [shopId, setShopId] = useState<string>("");
   const [order, setOrder] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
@@ -64,21 +65,34 @@ export default function OrderDetailPage() {
     fetchOrder();
   }, [orderId]);
 
+  useEffect(() => {
+    if (!shopId && typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") || localStorage.getItem("id");
+      if (storedShopId) setShopId(storedShopId);
+    }
+  }, [shopId]);
+
   const handleUpdateStatus = async (nextStatus: string) => {
     try {
       setIsUpdating(true);
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+      const headers = {
+        shop_id: String(shopId),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
 
       await axios.patch(
         `http://localhost:5000/shop/orders/${orderId}/status`,
-        {
-          status_name: nextStatus,
-        }
+        { status_name: nextStatus },
+        { headers }
       );
 
       await fetchOrder();
     } catch (err: any) {
-      const message =
-        err.response?.data?.error || "อัปเดตสถานะไม่สำเร็จ";
+      const message = err.response?.data?.error || "อัปเดตสถานะไม่สำเร็จ";
       alert(message);
     } finally {
       setIsUpdating(false);
@@ -159,14 +173,10 @@ export default function OrderDetailPage() {
     order.status_state !== "ยกเลิกการพิมพ์";
 
   const statusStyles: Record<string, string> = {
-    "รอการดำเนินงาน":
-      "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-    "กำลังพิมพ์":
-      "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-    "พิมพ์เสร็จสิ้น":
-      "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-    "ยกเลิกการพิมพ์":
-      "bg-red-50 text-red-700 ring-1 ring-red-200",
+    รอการดำเนินงาน: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+    กำลังพิมพ์: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+    พิมพ์เสร็จสิ้น: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+    ยกเลิกการพิมพ์: "bg-red-50 text-red-700 ring-1 ring-red-200",
   };
 
   const allFiles = order.files || [];
@@ -521,6 +531,42 @@ export default function OrderDetailPage() {
                     : "-"}
                 </span>
               </div>
+            </div>
+
+            {/* Payment Slip Section (เพิ่มส่วนสลิปโอนเงินตรงนี้) */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <ImageIcon size={17} className="text-blue-600" />
+                หลักฐานการชำระเงิน (สลิป)
+              </h2>
+
+              {slipUrl ? (
+                <div className="space-y-3">
+                  <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center p-2">
+                    <img
+                      src={slipUrl}
+                      alt="สลิปการโอนเงิน"
+                      className="max-h-72 w-auto object-contain rounded-lg"
+                    />
+                  </div>
+
+                  <a
+                    href={slipUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-1.5 w-full py-2 bg-blue-50 text-blue-600 border border-blue-100 rounded-xl text-xs font-semibold hover:bg-blue-100 transition-colors"
+                  >
+                    <Download size={14} />
+                    ดูรูปขนาดใหญ่ / ดาวน์โหลด
+                  </a>
+                </div>
+              ) : (
+                <div className="py-6 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <p className="text-xs text-gray-400">
+                    ยังไม่มีหลักฐานการชำระเงิน
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

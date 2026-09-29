@@ -86,7 +86,7 @@ export const getOrder = async (
     }
 
     // ==========================================
-    // Status / Payment / Review (fetched by id, no embed)
+    // Status / Payment / Review (fetched by id)
     // ==========================================
     const [
       { data: statusRow, error: statusError },
@@ -136,12 +136,14 @@ export const getOrder = async (
       : formattedCustomer?.address;
 
     // ==========================================
-    // Items (sub-orders from cart checkout)
+    // Items
     // ==========================================
     const items = (order.print_order_item || []).map((item: any) => ({
       id: item.id,
       category: item.category || "รายการพิมพ์",
+      group_name: item.category || "รายการพิมพ์", // เพิ่ม map สำหรับ Frontend
       describe: item.describe || "",
+      detail: item.describe || "",               // เพิ่ม map สำหรับ Frontend
       file_url: item.file_url || null,
       quantity: item.quantity,
       unit_price: Number(item.unit_price || 0),
@@ -172,7 +174,11 @@ export const getOrder = async (
         small_order_fee: Number(order.small_order_fee || 0),
         platform_fee: Number(order.platform_fee || 0),
         total_amount: Number(order.total_amount || 0),
+        total_price: Number(order.total_amount || 0), // เพิ่ม total_price ตรงกับ Frontend
         status_state: statusState,
+
+        // ส่ง slip_url ออกไปโดยตรงเพื่อให้ Frontend อ่านค่าได้ทันที
+        slip_url: paymentRow?.slip_url || null,
 
         customer: {
           id: formattedCustomer?.id,
@@ -261,7 +267,6 @@ export const updateOrderStatus = async (
       return res.status(400).json({ error: insertError.message });
     }
 
-    // อัปเดต current_status_id และ work_state_id ใน print_order
     const { error: updateOrderError } = await supabase
       .from("print_order")
       .update({

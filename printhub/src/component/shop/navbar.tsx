@@ -30,8 +30,8 @@ export default function ShopNavbar() {
   }, []);
 
   const isHomeActive = pathname === "/shop";
-  const isOrderActive = pathname.startsWith("/shop/order");
-  const isChatActive = pathname.startsWith("/shop/chat");
+  const isOrderActive = pathname.startsWith("/shop/order") && !pathname.endsWith("/chat");
+  const isChatActive = pathname.includes("/chat");
   const isSettingActive = pathname.startsWith("/shop/setting");
 
   const goTo = (path: string) => {
@@ -40,6 +40,18 @@ export default function ShopNavbar() {
       alert("ไม่พบข้อมูลร้านค้า กรุณาล็อกอินใหม่อีกครั้ง");
       return;
     }
+
+    if (path === "chat") {
+      // ส่งไปที่ Route ของร้านค้าพร้อม Query Parameter ?from=navbar
+      router.push(`/shop/order/${shopId}/chat?from=navbar`); 
+      return;
+    }
+
+    if (path === "order") {
+      router.push(`/shop/order/${shopId}`);
+      return;
+    }
+
     router.push(`/shop/${path}/${shopId}`);
   };
 

@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
+// ==========================================
+// Get Shop Profile
+// ==========================================
 export const getShopProfile = async (
   req: Request,
   res: Response
@@ -50,6 +53,9 @@ export const getShopProfile = async (
   }
 };
 
+// ==========================================
+// Get Bank Account
+// ==========================================
 export const getBankAccount = async (
   req: Request,
   res: Response
@@ -78,6 +84,9 @@ export const getBankAccount = async (
   }
 };
 
+// ==========================================
+// Get Shop Services
+// ==========================================
 export const getShopServices = async (
   req: Request,
   res: Response
@@ -116,6 +125,9 @@ export const getShopServices = async (
   }
 };
 
+// ==========================================
+// Check Shop Verification Status
+// ==========================================
 export const checkShopVerified = async (
   req: Request,
   res: Response
@@ -150,9 +162,8 @@ export const checkShopVerified = async (
 };
 
 // ==========================================
-// Temporarily open/close the shop
+// Toggle Open/Close Shop Status
 // ==========================================
-
 export const setShopOpenStatus = async (
   req: Request,
   res: Response
@@ -188,9 +199,15 @@ export const setShopOpenStatus = async (
   }
 };
 
-export const saveShopServices = async (req: Request, res: Response): Promise<Response> => {
+// ==========================================
+// Save/Update Shop Services
+// ==========================================
+export const saveShopServices = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
   try {
-    const shop_id = req.headers.shop_id as string;
+    const shop_id = (req.headers.shop_id as string) || req.body.shop_id;
     const { services } = req.body;
 
     if (!shop_id) {
@@ -201,7 +218,7 @@ export const saveShopServices = async (req: Request, res: Response): Promise<Res
       return res.status(400).json({ error: "Invalid services format" });
     }
 
-    // 1. ลบ service_type เก่าของร้านค้านี้ทั้งหมด (หรือจะใช้วิธี Upsert ก็ได้)
+    // 1. ดึง service_type เก่าเพื่อลบรายละเอียดย่อย (service_detail) ออกก่อน
     const { data: oldTypes } = await supabase
       .from("service_type")
       .select("id")
@@ -217,7 +234,6 @@ export const saveShopServices = async (req: Request, res: Response): Promise<Res
     for (const service of services) {
       if (!service.type) continue;
 
-      // Insert service_type
       const { data: newType, error: typeErr } = await supabase
         .from("service_type")
         .insert({ shop_id, type: service.type })
@@ -229,10 +245,9 @@ export const saveShopServices = async (req: Request, res: Response): Promise<Res
         continue;
       }
 
-      // Insert service_detail
       if (Array.isArray(service.service_detail) && service.service_detail.length > 0) {
         const detailsToInsert = service.service_detail
-          .filter((d: any) => d.detail) // กรองตัวเลือกที่เว้นว่างไว้ออก
+          .filter((d: any) => d.detail)
           .map((d: any) => ({
             service_type_id: newType.id,
             detail: d.detail,
@@ -276,10 +291,10 @@ export const updateShopProfile = async (
 
     let address_id = address?.id;
 
-    // 1. ถ้ามีข้อมูล Address ให้ทำการ Upsert ในตาราง address ก่อน
+    // 1. ถ้าส่งข้อมูล Address มา ให้ทำการ Insert หรือ Update ตาราง address
     if (address) {
       if (address_id) {
-        await supabase
+        const { error: updateAddrErr } = await supabase
           .from("address")
           .update({
             detail: address.detail,
@@ -289,6 +304,10 @@ export const updateShopProfile = async (
             postcode: address.postcode,
           })
           .eq("id", address_id);
+
+        if (updateAddrErr) {
+          console.error("Update Address Error:", updateAddrErr);
+        }
       } else {
         const { data: newAddr, error: addrErr } = await supabase
           .from("address")
@@ -304,21 +323,28 @@ export const updateShopProfile = async (
 
         if (!addrErr && newAddr) {
           address_id = newAddr.id;
+        } else {
+          console.error("Insert Address Error:", addrErr);
         }
       }
     }
 
     // 2. อัปเดตข้อมูลตาราง print_shop
+    const updateData: Record<string, any> = {
+      shop_name,
+      owner_name,
+      phone,
+      open_time,
+      close_time,
+    };
+
+    if (address_id) {
+      updateData.address_id = address_id;
+    }
+
     const { error: shopErr } = await supabase
       .from("print_shop")
-      .update({
-        shop_name,
-        owner_name,
-        phone,
-        open_time,
-        close_time,
-        ...(address_id && { address_id }),
-      })
+      .update(updateData)
       .eq("id", shop_id);
 
     if (shopErr) {

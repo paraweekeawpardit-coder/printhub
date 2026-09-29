@@ -88,6 +88,15 @@ export default function OrderDetailCard({
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
 
+  // ฟังก์ชันนำทางไปหน้าแชทของออเดอร์นี้
+  const handleGoToChat = (e: React.MouseEvent) => {
+    e.stopPropagation(); // ป้องกันไม่ให้ทะลุไปโดน onClick หลักของการ์ด
+    const shopId = localStorage.getItem("shop_id") || "";
+    if (shopId && order.order_id) {
+      router.push(`/shop/order/${shopId}/chat?order_id=${order.order_id}`);
+    }
+  };
+
   return (
     <div
       onClick={onClick}

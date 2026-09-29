@@ -1,22 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-
-interface Shop {
-  id: string;
-  shop_name: string;
-  owner_name: string;
-  email: string;
-  phone: string;
-  profile_image?: string;
-  open_time?: string;
-  close_time?: string;
-  is_verify: boolean;
-  created_at?: string;
-}
+import ShopCard, { Shop } from "../../../component/admin/ShopCard";
+import ShopDetailModal from "../../../component/admin/ShopDetailModal";
 
 export default function ShopsPage() {
   const [pendingShops, setPendingShops] = useState<Shop[]>([]);
+  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -26,7 +16,6 @@ export default function ShopsPage() {
     fetchPendingShops();
   }, []);
 
-  // ดึงข้อมูลร้านค้า status = 'pending' จาก Supabase ผ่าน Backend API
   const fetchPendingShops = async () => {
     try {
       setLoading(true);
@@ -42,14 +31,13 @@ export default function ShopsPage() {
     } catch (err: any) {
       console.error("Fetch Pending Shops Error:", err);
       setErrorMsg(err.message || "ไม่สามารถดึงข้อมูลร้านค้าได้");
-    } fontFinally: {
+    } finally {
       setLoading(false);
     }
   };
 
-  // ส่งคำขออนุมัติหรือปฏิเสธไปยัง Supabase
-  const handleVerifyShop = async (shop_id: string, action: "approve" | "reject") => {
-    const actionText = action == "approve" ? "อนุมัติ" : "ปฏิเสธ";
+  const handleVerifyShop = async (shop_id: string | number, action: "approve" | "reject") => {
+    const actionText = action === "approve" ? "อนุมัติ" : "ปฏิเสธ";
     if (!window.confirm(`คุณต้องการ${actionText}ร้านค้านี้ใช่หรือไม่?`)) return;
 
     try {
@@ -62,11 +50,15 @@ export default function ShopsPage() {
       const result = await res.json();
 
       if (!res.ok) {
-        throw new Error(result.error || "การอัปเดตสถานะล้มเหลว");
+        throw new Error(result.error || result.message || "การอัปเดตสถานะล้มเหลว");
       }
 
-      // ลบรายการที่อนุมัติ/ปฏิเสธแล้วออกจาก State
-      setPendingShops((prev) => prev.filter((shop) => shop.id !== shop_id));
+      // 🌟 ตัดออกจาก State เมื่ออัปเดต DB สำเร็จจริงเทียบ String ID ป้องกัน Type ต่างกัน
+      setPendingShops((prev) =>
+        prev.filter((shop) => String(shop.id || shop._id) !== String(shop_id))
+      );
+      
+      setSelectedShop(null);
       alert(`ทำรายการ${actionText}ร้านค้าเรียบร้อยแล้ว`);
     } catch (err: any) {
       console.error("Verify Shop Error:", err);
@@ -74,10 +66,23 @@ export default function ShopsPage() {
     }
   };
 
-  const formatTime = (timeStr?: string) => {
-    if (!timeStr) return "ไม่ระบุ";
-    return timeStr.slice(0, 5) + " น.";
-  };
+  // แมปข้อมูลให้เข้ากับ Props ของ ShopDetailModal
+  const formattedSelectedShop = selectedShop
+    ? {
+        _id: selectedShop.id || selectedShop._id || "",
+        name: selectedShop.shop_name || selectedShop.name || "ไม่ระบุชื่อร้าน",
+        ownerName: selectedShop.owner_name || selectedShop.ownerName || "ไม่ระบุ",
+        email: selectedShop.email || "",
+        phone: selectedShop.phone || "",
+        openTime: selectedShop.open_time || selectedShop.openTime,
+        closeTime: selectedShop.close_time || selectedShop.closeTime,
+        address: selectedShop.address,
+        description: selectedShop.description,
+        logoUrl: selectedShop.profile_image || selectedShop.logoUrl,
+        documentUrl: selectedShop.documentUrl,
+        status: "PENDING" as const,
+      }
+    : null;
 
   return (
     <div className="shops-container">
@@ -97,13 +102,15 @@ export default function ShopsPage() {
       {errorMsg && (
         <div className="error-box">
           <p>⚠️ {errorMsg}</p>
-          <button onClick={fetchPendingShops} className="btn-retry">ลองใหม่</button>
+          <button onClick={fetchPendingShops} className="btn-retry">
+            ลองใหม่
+          </button>
         </div>
       )}
 
       {/* Content Area */}
       {loading ? (
-        <div className="loading-state">กำลังเชื่อมต่อข้อมูลกับ Supabase...</div>
+        <div className="loading-state">กำลังเชื่อมต่อข้อมูล...</div>
       ) : pendingShops.length === 0 ? (
         <div className="empty-card">
           <div className="empty-icon">✓</div>
@@ -112,70 +119,35 @@ export default function ShopsPage() {
         </div>
       ) : (
         <div className="shop-grid">
-          {pendingShops.map((shop) => (
-            <div key={shop.id} className="shop-card">
-              <div className="card-top">
-                <div className="avatar-wrapper">
-                  {shop.profile_image ? (
-                    <img src={shop.profile_image} alt={shop.shop_name} className="avatar-img" />
-                  ) : (
-                    <div className="avatar-placeholder">
-                      {shop.shop_name?.charAt(0) || "S"}
-                    </div>
-                  )}
-                </div>
-                <span className="status-pill">Pending</span>
-              </div>
-
-              <div className="card-body">
-                <h3 className="shop-name">{shop.shop_name}</h3>
-                <p className="owner-name">เจ้าของร้าน: <span>{shop.owner_name || "ไม่ระบุ"}</span></p>
-
-                <div className="info-divider" />
-
-                <div className="info-list">
-                  <div className="info-item">
-                    <span className="info-label">อีเมล</span>
-                    <span className="info-value">{shop.email}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">เบอร์โทรศัพท์</span>
-                    <span className="info-value">{shop.phone || "-"}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">เวลาทำการ</span>
-                    <span className="info-value highlight">
-                      {formatTime(shop.open_time)} - {formatTime(shop.close_time)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card-actions">
-                <button
-                  className="btn btn-reject"
-                  onClick={() => handleVerifyShop(shop.id, "reject")}
-                >
-                  ปฏิเสธ
-                </button>
-                <button
-                  className="btn btn-approve"
-                  onClick={() => handleVerifyShop(shop.id, "approve")}
-                >
-                  อนุมัติร้านค้า
-                </button>
-              </div>
-            </div>
-          ))}
+          {pendingShops.map((shop, index) => {
+            const shopId = shop.id || shop._id;
+            const shopKey = shopId ? String(shopId) : `shop-${index}`;
+            return (
+              <ShopCard
+                key={shopKey}
+                shop={shop}
+                onVerify={(id, action) => handleVerifyShop(id, action)}
+                onSelectShop={(selected: Shop) => setSelectedShop(selected)}
+              />
+            );
+          })}
         </div>
       )}
+
+      {/* Modal Popup แสดงรายละเอียดร้านค้า */}
+      <ShopDetailModal
+        shop={formattedSelectedShop}
+        onClose={() => setSelectedShop(null)}
+        onApprove={(id) => handleVerifyShop(id, "approve")}
+        onReject={(id) => handleVerifyShop(id, "reject")}
+      />
 
       <style jsx>{`
         .shops-container {
           max-width: 1200px;
           margin: 0 auto;
           font-family: 'Prompt', 'Kanit', sans-serif;
-          color: #0F172A;
+          color: #0f172a;
         }
         .page-header {
           display: flex;
@@ -186,16 +158,16 @@ export default function ShopsPage() {
         .section-title {
           font-size: 1.35rem;
           font-weight: 700;
-          color: #0F172A;
+          color: #0f172a;
           margin: 0 0 4px 0;
         }
         .subtitle {
           font-size: 0.9rem;
-          color: #64748B;
+          color: #64748b;
           margin: 0;
         }
         .pending-badge {
-          background-color: #F0F8FF;
+          background-color: #f0f8ff;
           border-radius: 12px;
           padding: 8px 16px;
           display: flex;
@@ -213,9 +185,9 @@ export default function ShopsPage() {
           font-size: 0.85rem;
         }
         .error-box {
-          background-color: #FEF2F2;
-          border: 1px solid #FECDD3;
-          color: #991B1B;
+          background-color: #fef2f2;
+          border: 1px solid #fecdd3;
+          color: #991b1b;
           padding: 12px 16px;
           border-radius: 12px;
           margin-bottom: 20px;
@@ -224,7 +196,7 @@ export default function ShopsPage() {
           align-items: center;
         }
         .btn-retry {
-          background-color: #991B1B;
+          background-color: #991b1b;
           color: white;
           border: none;
           padding: 6px 12px;
@@ -237,143 +209,18 @@ export default function ShopsPage() {
           grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
           gap: 24px;
         }
-        .shop-card {
-          background-color: #FFFFFF;
-          border: 1px solid #E2E8F0;
-          border-radius: 16px;
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          transition: all 0.2s ease;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
-        }
-        .shop-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-          border-color: #CBD5E1;
-        }
-        .card-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 16px;
-        }
-        .avatar-wrapper {
-          width: 56px;
-          height: 56px;
-          border-radius: 14px;
-          overflow: hidden;
-          background-color: #F0F8FF;
-        }
-        .avatar-img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .avatar-placeholder {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background-color: #E0F2FE;
-          color: #0284C7;
-          font-size: 1.5rem;
-          font-weight: 700;
-        }
-        .status-pill {
-          background-color: #FEF3C7;
-          color: #D97706;
-          font-size: 0.75rem;
-          font-weight: 700;
-          padding: 4px 12px;
-          border-radius: 20px;
-          text-transform: uppercase;
-        }
-        .shop-name {
-          font-size: 1.15rem;
-          font-weight: 700;
-          color: #0F172A;
-          margin: 0 0 4px 0;
-        }
-        .owner-name {
-          font-size: 0.88rem;
-          color: #64748B;
-          margin: 0;
-        }
-        .owner-name span {
-          color: #334155;
-          font-weight: 600;
-        }
-        .info-divider {
-          height: 1px;
-          background-color: #F1F5F9;
-          margin: 16px 0;
-        }
-        .info-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-        .info-item {
-          display: flex;
-          justify-content: space-between;
-          font-size: 0.85rem;
-        }
-        .info-label {
-          color: #94A3B8;
-        }
-        .info-value {
-          color: #334155;
-          font-weight: 500;
-        }
-        .info-value.highlight {
-          color: #003554;
-          font-weight: 600;
-        }
-        .card-actions {
-          display: flex;
-          gap: 12px;
-          margin-top: 24px;
-        }
-        .btn {
-          flex: 1;
-          padding: 10px;
-          border-radius: 10px;
-          font-size: 0.88rem;
-          font-weight: 600;
-          cursor: pointer;
-          border: none;
-          transition: background-color 0.15s ease;
-        }
-        .btn-approve {
-          background-color: #003554;
-          color: white;
-        }
-        .btn-approve:hover {
-          background-color: #002238;
-        }
-        .btn-reject {
-          background-color: #FFF5F5;
-          color: #E11D48;
-          border: 1px solid #FECDD3;
-        }
-        .btn-reject:hover {
-          background-color: #FFE4E6;
-        }
         .empty-card {
-          background-color: #FFFFFF;
+          background-color: #ffffff;
           border-radius: 16px;
           padding: 48px;
           text-align: center;
-          border: 1px dashed #CBD5E1;
+          border: 1px dashed #cbd5e1;
         }
         .empty-icon {
           width: 48px;
           height: 48px;
-          background-color: #DCFCE7;
-          color: #16A34A;
+          background-color: #dcfce7;
+          color: #16a34a;
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -384,17 +231,17 @@ export default function ShopsPage() {
         }
         .empty-card h3 {
           margin: 0 0 8px;
-          color: #0F172A;
+          color: #0f172a;
         }
         .empty-card p {
-          color: #64748B;
+          color: #64748b;
           margin: 0;
           font-size: 0.9rem;
         }
         .loading-state {
           text-align: center;
           padding: 40px;
-          color: #64748B;
+          color: #64748b;
         }
       `}</style>
     </div>
