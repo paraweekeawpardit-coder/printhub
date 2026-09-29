@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/config/supabase"; // ปรับ path ตามไฟล์ supabase ของคุณ
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/config/supabase";
 
 export interface NotificationItem {
   id: string;
@@ -20,7 +20,7 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!userId || userId === "undefined" || userId === "null") {
       setNotifications([]);
       setUnreadCount(0);
@@ -30,15 +30,13 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
 
     try {
       setLoading(true);
-      let query = supabase.from("notifications").select("*");
+      const columnCheck = role === "customer" ? "customer_id" : "shop_id";
 
-      if (role === "customer") {
-        query = query.eq("customer_id", userId);
-      } else {
-        query = query.eq("shop_id", userId);
-      }
-
-      const { data, error } = await query.order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq(columnCheck, userId)
+        .order("created_at", { ascending: false });
 
       if (error) {
         console.error("Supabase notification fetch error:", error);
@@ -51,38 +49,43 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, role]);
 
   const markAsRead = async (id: string) => {
-    const { error } = await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("id", id);
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", id);
 
-    if (!error) {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      if (!error) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
+    } catch (err) {
+      console.error("Error marking as read:", err);
     }
   };
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || userId === "undefined" || userId === "null") return;
 
     fetchNotifications();
 
     const columnCheck = role === "customer" ? "customer_id" : "shop_id";
 
+    // Realtime listener
     const channel = supabase
-      .channel(`noti_\({role}_\){userId}`)
+      .channel(`noti_channel_${role}_${userId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "notifications",
-          filter: `\({columnCheck}=eq.\){userId}`,
+          filter: `${columnCheck}=eq.${userId}`,
         },
         (payload) => {
           const newNoti = payload.new as NotificationItem;
@@ -95,7 +98,7 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, role]);
+  }, [userId, role, fetchNotifications]);
 
   return { notifications, unreadCount, loading, markAsRead, fetchNotifications };
 }

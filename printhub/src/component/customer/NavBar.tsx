@@ -7,14 +7,15 @@ import {
   Printer, 
   Home, 
   ClipboardList, 
-  MessageCircle, 
   ShoppingBag, 
   User, 
   Settings, 
   LogOut,
-  LayoutDashboard
+  LayoutDashboard,
+  Bell
 } from "lucide-react";
 import NotificationBell from "@/component/NotificationBell";
+import { supabase } from "@/config/supabase"; // 👈 เพิ่มการดึง Supabase Client
 
 interface NavBarProps {
   cartCount?: number;
@@ -27,45 +28,58 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
   const [customerId, setCustomerId] = useState<string | null>(null);
 
   useEffect(() => {
-    // 1. ลองดึงจาก localStorage ตรงๆ
-    const directCustomerId =
-      localStorage.getItem("customer_id") ||
-      localStorage.getItem("user_id") ||
-      localStorage.getItem("userId");
+    const getUserId = async () => {
+      // 1. ลองดึงจาก localStorage ตรงๆ
+      const directCustomerId =
+        localStorage.getItem("customer_id") ||
+        localStorage.getItem("user_id") ||
+        localStorage.getItem("userId") ||
+        localStorage.getItem("id");
 
-    if (directCustomerId) {
-      setCustomerId(directCustomerId);
-      return;
-    }
-
-    // 2. แกะจาก object 'user' หรือ 'customer'
-    const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        const actualId =
-          user.customer_id ||
-          user.id ||
-          user.user_id ||
-          user.customer?.id ||
-          user.customer?.customer_id;
-
-        setCustomerId(actualId || null);
-      } catch (e) {
-        console.error("Error parsing user data:", e);
+      if (directCustomerId) {
+        setCustomerId(directCustomerId);
+        return;
       }
-    }
+
+      // 2. แกะจาก object 'user' หรือ 'customer'
+      const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          const actualId =
+            user.customer_id ||
+            user.id ||
+            user.user_id ||
+            user.customer?.id ||
+            user.customer?.customer_id;
+
+          if (actualId) {
+            setCustomerId(String(actualId));
+            return;
+          }
+        } catch (e) {
+          console.error("Error parsing user data:", e);
+        }
+      }
+
+      // 3. สำรอง: ดึงตรงจาก Supabase Auth Session เผื่อไม่ได้ลง localStorage
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user?.id) {
+        setCustomerId(data.session.user.id);
+      }
+    };
+
+    getUserId();
   }, []);
 
   // ตรวจจับ active path
   const isHomeActive = pathname === "/customer" || pathname === "/";
   const isOrdersActive = pathname.startsWith("/customer/orders") || pathname.startsWith("/customer/order");
-  const isChatActive = pathname.startsWith("/customer/chat");
   const isSettingActive = pathname.startsWith("/customer/setting") || pathname.startsWith("/customer/profile");
   const isDashboardActive = pathname.startsWith("/customer/dashboard");
 
   // ฟังก์ชันสำหรับการออกจากระบบ
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (typeof window !== "undefined") {
       localStorage.removeItem("customer_id");
       localStorage.removeItem("id");
@@ -75,6 +89,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
       localStorage.removeItem("token");
       sessionStorage.clear();
     }
+    await supabase.auth.signOut();
     router.push("/auth");
   };
 
@@ -95,7 +110,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
           </span>
         </Link>
 
-        {/* เมนูหลักตรงกลาง (หน้าหลัก / คำสั่งซื้อ / แชท) */}
+        {/* เมนูหลักตรงกลาง (หน้าแรก / คำสั่งซื้อ) */}
         <div className="flex items-center gap-1.5 text-sm font-medium">
           {/* หน้าแรก */}
           <Link
@@ -128,14 +143,23 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
               คำสั่งซื้อของฉัน
             </span>
           </Link>
-
         </div>
 
         {/* ฝั่งขวา: กระดิ่งแจ้งเตือน, ตะกร้าสินค้า, โปรไฟล์, แดชบอร์ด, ปุ่มออกจากระบบ */}
         <div className="flex items-center gap-2 sm:gap-3">
           
           {/* กระดิ่งแจ้งเตือนสำหรับลูกค้า */}
-          {customerId && <NotificationBell userId={customerId} role="customer" />}
+          {customerId ? (
+            <NotificationBell userId={customerId} role="customer" />
+          ) : (
+            <button
+              type="button"
+              title="การแจ้งเตือน"
+              className="relative flex items-center justify-center w-10 h-10 rounded-full text-slate-400 hover:text-[#0F2942] hover:bg-slate-100 transition-colors focus:outline-none cursor-pointer"
+            >
+              <Bell size={19} />
+            </button>
+          )}
 
           {/* ตะกร้าสินค้า */}
           <button
