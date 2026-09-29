@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import ShopCard, { Shop, checkIsShopOpen } from "../../component/customer/ShopCard";
 import SearchBar from "../../component/customer/SearchBar";
 import ServiceCategoryList from "../../component/customer/ServiceCategoryList";
-import FilterPillsBar from "../../component/customer/FilterPillsBar";
+// 🌟 ตรวจสอบ Path ให้ตรงกับโฟลเดอร์ที่คุณวาง FilterPillsBar ไว้ (เช่น ../../component/customer/filter/FilterPillsBar หรือ ../../component/customer/FilterPillsBar)
+import FilterPillsBar from "../../component/customer/filter/FilterPillsBar";
 import LocationMapModal from "../../component/customer/LocationMapModal";
 import { 
   MapPinSearch, 
@@ -104,7 +105,7 @@ export default function CustomerHomePage() {
     fetchCartData();
   }, [fetchCurrentGps, fetchCartData]);
 
-  // 🌟 ฟังก์ชันดึงข้อมูลร้านค้าที่เชื่อมกับ Combination Price Logic ของ Backend
+  // ฟังก์ชันดึงข้อมูลร้านค้าจาก Backend
   const fetchShops = useCallback(async () => {
     setLoading(true);
     try {
@@ -118,7 +119,6 @@ export default function CustomerHomePage() {
         params.append("finishing_service", selectedFinishing.join(","));
       }
 
-      // กรองส่งเฉพาะราคาที่มากกว่า 0 เท่านั้น
       if (minPrice !== undefined && minPrice !== null && Number(minPrice) > 0) {
         params.append("min_price", minPrice.toString());
       }
@@ -174,14 +174,29 @@ export default function CustomerHomePage() {
     fetchShops();
   }, [fetchShops]);
 
+  // 🌟 กรองรายการร้านค้าสำรองฝั่งหน้าบ้าน ป้องกันกรณี API ยังไม่ได้กรองหมวดหมู่หรือสถานะร้าน
   const displayedShops = useMemo(() => {
-    return shops.filter((shop) => {
-      if (isOpenOnly) {
-        return checkIsShopOpen(shop);
+    return shops.filter((shop: any) => {
+      // 1. กรองเปิดให้บริการ
+      if (isOpenOnly && !checkIsShopOpen(shop)) {
+        return false;
       }
+
+      // 2. กรองตามประเภทบริการหลัก (ถ้ามีการเลือกไว้)
+      if (selectedService && selectedService !== "ทั้งหมด") {
+        const types = shop.service_types || shop.services || shop.service_type || [];
+        if (Array.isArray(types) && types.length > 0) {
+          const hasMatchingService = types.some((st: any) => {
+            const name = typeof st === "string" ? st : (st.type || st.category || "");
+            return name.trim().includes(selectedService.trim()) || selectedService.trim().includes(name.trim());
+          });
+          if (!hasMatchingService) return false;
+        }
+      }
+
       return true;
     });
-  }, [shops, isOpenOnly]);
+  }, [shops, isOpenOnly, selectedService]);
 
   const handleResetFilters = () => {
     setIsNearest(false);
