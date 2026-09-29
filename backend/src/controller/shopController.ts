@@ -28,9 +28,9 @@ export const getShops = async (req: Request, res: Response) => {
     const userLng = user_lng ? parseFloat(user_lng as string) : 100.7782;
 
     const categoryParam = ((service_type || category) as string || '').trim();
-    const finishingParam = finishing_service || finishing;
+    const finishingParam = (finishing_service || finishing) as string;
 
-    // แปลงช่วงราคาและป้องกันการติดลบ (ต้อง > 0 เสมอ)
+    // แปลงช่วงราคาและตรวจสอบเงื่อนไขต้อง > 0 เสมอ
     const rawMin = min_price || minPrice;
     const rawMax = max_price || maxPrice;
     const parsedMin = rawMin ? parseFloat(rawMin as string) : null;
@@ -39,7 +39,7 @@ export const getShops = async (req: Request, res: Response) => {
     const filterMinPrice = parsedMin !== null && !isNaN(parsedMin) && parsedMin > 0 ? parsedMin : null;
     const filterMaxPrice = parsedMax !== null && !isNaN(parsedMax) && parsedMax > 0 ? parsedMax : null;
 
-    // 🌟 2. ปรับ Query ให้ดึง group_type และ price จาก service_detail มาด้วย
+    // 🌟 2. Query ดึงข้อมูลร้านค้าพร้อมบริการและราคาของสเปกย่อย
     let query = supabase
       .from('print_shop')
       .select(`
@@ -119,7 +119,6 @@ export const getShops = async (req: Request, res: Response) => {
         : [];
 
       const detailsByCategory: Record<string, string[]> = {};
-      // 🌟 โครงสร้างไว้เก็บข้อมูลการบริการแบบแยกหมวดหมู่และกลุ่ม
       const itemsByCategory: Record<string, Array<{ group: string; detail: string; price: number }>> = {};
 
       if (Array.isArray(shop.service_type)) {
@@ -131,7 +130,7 @@ export const getShops = async (req: Request, res: Response) => {
               .filter(Boolean);
 
             itemsByCategory[typeName] = st.service_detail.map((sd: any) => ({
-              group: sd?.group_type?.trim() || '',
+              group: sd?.group_type?.trim() || 'default',
               detail: sd?.detail?.trim() || '',
               price: Number(sd?.price || 0)
             }));
@@ -158,6 +157,9 @@ export const getShops = async (req: Request, res: Response) => {
       };
     });
 
+    // -------------------------------------------------------------
+    // กรองด้วย Search Box (ค้นหาชื่อร้าน, หมวดหมู่, หรือสเปก)
+    // -------------------------------------------------------------
     if (search && typeof search === 'string') {
       const keyword = search.trim().toLowerCase();
       formattedShops = formattedShops.filter((s: any) => {
@@ -172,12 +174,132 @@ export const getShops = async (req: Request, res: Response) => {
       });
     }
 
+    // -------------------------------------------------------------
+    // กรอง 1: ประเภทงานพิมพ์หลัก (Category / Service Type)
+    // -------------------------------------------------------------
+    if (categoryParam && categoryParam !== 'ทั้งหมด') {
+      formattedShops = formattedShops.filter((shop: any) => {
+        return (shop.service_types || []).some(
+          (t: string) => t.toLowerCase() === categoryParam.toLowerCase()
+        );
+      });
+    }
+
+    // -------------------------------------------------------------
+    // 🌟 กรอง 2: สเปกย่อย + คำนวณราคาแบบ Combination Matching
+    // -------------------------------------------------------------
+    if (finishingParam && typeof finishingParam === 'string' && finishingParam.trim() !== '') {
+      const selectedSpecs = finishingParam
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (selectedSpecs.length > 0) {
+        formattedShops = formattedShops.filter((shop: any) => {
+          // ดึงรายการไอเทมของร้าน (ถ้าเลือกหมวดให้ดูเฉพาะหมวดนั้น ถ้าไม่เลือกให้ดูทั้งหมด)
+          let availableItems: Array<{ group: string; detail: string; price: number }> = [];
+
+          if (categoryParam && categoryParam !== 'ทั้งหมด' && shop.items_by_category?.[categoryParam]) {
+            availableItems = shop.items_by_category[categoryParam];
+          } else {
+            Object.values(shop.items_by_category || {}).forEach((items: any) => {
+              availableItems.push(...items);
+            });
+          }
+
+          // 1. ตรวจสอบว่าร้านต้องมีครบทุกตัวเลือกที่ลูกค้าติ๊ก (AND Condition)
+          const hasAllSpecs = selectedSpecs.every((spec) => {
+            const cleanSpec = spec.toLowerCase();
+            return availableItems.some((item) => {
+              const d = item.detail.toLowerCase();
+              return d.includes(cleanSpec) || cleanSpec.includes(d);
+            });
+          });
+
+          // ถ้าร้านไม่มีตัวเลือกใดตัวเลือกหนึ่ง ให้ตัดออกทันที
+          if (!hasAllSpecs) return false;
+
+          // ถ้าร้านมีครบ และลูกค้าไม่ได้ระบุช่วงราคา ให้ผ่านได้เลย
+          if (filterMinPrice === null && filterMaxPrice === null) return true;
+
+          // 2. จัดกลุ่มตัวเลือกที่เลือกตาม group_type เพื่อเตรียมรวมราคา
+          const selectedByGroup: Record<string, number[]> = {};
+
+          selectedSpecs.forEach((spec) => {
+            const cleanSpec = spec.toLowerCase();
+            const matchedItem = availableItems.find((item) => {
+              const d = item.detail.toLowerCase();
+              return d.includes(cleanSpec) || cleanSpec.includes(d);
+            });
+
+            if (matchedItem) {
+              const groupKey = matchedItem.group || 'default';
+              if (!selectedByGroup[groupKey]) selectedByGroup[groupKey] = [];
+              selectedByGroup[groupKey].push(matchedItem.price);
+            }
+          });
+
+          // 3. แตกคู่ Combination ข้ามกลุ่ม (Cartesian Product)
+          const groupArrays = Object.values(selectedByGroup);
+          const combinations = groupArrays.reduce<number[][]>(
+            (acc, currentGroup) => {
+              const nextAcc: number[][] = [];
+              acc.forEach((prevCombination) => {
+                currentGroup.forEach((price) => {
+                  nextAcc.push([...prevCombination, price]);
+                });
+              });
+              return nextAcc;
+            },
+            [[]]
+          );
+
+          // 4. ตรวจสอบว่ามีอย่างน้อย 1 กรณี Combination ที่ราคารวมผ่านเกณฑ์งบประมาณหรือไม่
+          return combinations.some((comboPrices) => {
+            const totalPrice = comboPrices.reduce((sum, p) => sum + p, 0);
+            if (filterMinPrice !== null && totalPrice < filterMinPrice) return false;
+            if (filterMaxPrice !== null && totalPrice > filterMaxPrice) return false;
+            return true;
+          });
+        });
+      }
+    } else if (filterMinPrice !== null || filterMaxPrice !== null) {
+      // กรณีกำหนดเฉพาะราคา แต่ไม่ได้เลือกสเปกย่อย (ตรวจราคาเริ่มต้นของร้าน)
+      formattedShops = formattedShops.filter((shop: any) => {
+        let allPrices: number[] = [];
+        Object.values(shop.items_by_category || {}).forEach((items: any) => {
+          items.forEach((it: any) => allPrices.push(it.price));
+        });
+
+        if (allPrices.length === 0) return true;
+        const minShopPrice = Math.min(...allPrices);
+
+        if (filterMinPrice !== null && minShopPrice < filterMinPrice) return false;
+        if (filterMaxPrice !== null && minShopPrice > filterMaxPrice) return false;
+        return true;
+      });
+    }
+
+    // -------------------------------------------------------------
+    // กรองเปิดให้บริการ
+    // -------------------------------------------------------------
     if (is_open === 'true') {
       formattedShops = formattedShops.filter((s) => s.is_open === true);
     }
 
+    // -------------------------------------------------------------
+    // เรียงลำดับ (Sorting)
+    // -------------------------------------------------------------
     if (sort_by === 'rating') {
       formattedShops.sort((a, b) => b.rating - a.rating);
+    } else if (sort_by === 'both') {
+      formattedShops.sort((a, b) => {
+        const ratingDiff = b.rating - a.rating;
+        if (ratingDiff !== 0) return ratingDiff;
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
     } else {
       formattedShops.sort((a, b) => {
         if (a.distance === null) return 1;
