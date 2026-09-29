@@ -21,24 +21,36 @@ export default function CustomerOrderChatPage() {
   const [statusName, setStatusName] = useState("กำลังโหลดสถานะ...");
   const [isChatDisabled, setIsChatDisabled] = useState(false);
 
-  // ฟังก์ชันสไตล์สีตามสถานะให้เหมือนฝั่งร้านค้า
+  // ฟังก์ชันสไตล์สีตามสถานะ
   const getStatusBadgeClass = (status: string) => {
     const s = status.trim().toLowerCase();
     
+    // 1. พิมพ์เสร็จสิ้น -> สีเขียว
+    if (s.includes("พิมพ์เสร็จสิ้น")) {
+      return "bg-emerald-50 text-emerald-600 border border-emerald-200";
+    }
+
+    // 2. กำลังพิมพ์ -> สีฟ้า
     if (s.includes("กำลังพิมพ์") || s.includes("printing")) {
-      return "bg-blue-50 text-blue-600 border border-blue-200"; // สีฟ้าอ่อน
+      return "bg-blue-50 text-blue-600 border border-blue-200";
     }
+
+    // 3. รอการดำเนินงาน -> สีส้ม
     if (s.includes("รอการดำเนินงาน") || s.includes("pending")) {
-      return "bg-amber-50 text-amber-600 border border-amber-200"; // สีส้มอ่อน
+      return "bg-amber-50 text-amber-600 border border-amber-200";
     }
-    if (s.includes("เสร็จสิ้น") || s.includes("completed")) {
-      return "bg-slate-100 text-slate-600 border border-slate-300"; // สีเทาอ่อน
+
+    // 4. รายการเสร็จสิ้น / completed -> สีเทา
+    if (s.includes("รายการเสร็จสิ้น") || s.includes("เสร็จสิ้น") || s.includes("completed")) {
+      return "bg-slate-100 text-slate-600 border border-slate-300";
     }
+
+    // 5. ยกเลิก -> สีแดง
     if (s.includes("ยกเลิก") || s.includes("cancel")) {
-      return "bg-rose-50 text-rose-600 border border-rose-200"; // สีแดง/ชมพูอ่อน
+      return "bg-rose-50 text-rose-600 border border-rose-200";
     }
     
-    return "bg-emerald-50 text-emerald-600 border border-emerald-200"; // สีเขียวพื้นฐาน
+    return "bg-emerald-50 text-emerald-600 border border-emerald-200";
   };
 
   useEffect(() => {
