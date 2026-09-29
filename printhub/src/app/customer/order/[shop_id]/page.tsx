@@ -19,13 +19,49 @@ export default function PaymentPage() {
   const [orderData, setOrderData] = useState<OrderDetails | null>(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState<boolean>(true);
 
-  // เวลานับถอยหลัง 10 นาที (600 วินาที)
+  // สเตตของเวลานับถอยหลัง (เริ่มต้นไว้ที่ 600 วิ แต่จะถูก sync กับเวลาจริงใน useEffect)
   const [timeLeft, setTimeLeft] = useState<number>(600);
   const [isExpired, setIsExpired] = useState<boolean>(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
+
+  // 🌟 จุดที่ 1: ระบบนับถอยหลังจำเวลาลง localStorage (รีเฟรชแล้วนับต่อ ไม่เริ่มใหม่ที่ 10 นาที)
+  useEffect(() => {
+    const TOTAL_DURATION_MS = 10 * 60 * 1000; // 10 นาที
+    const timerStorageKey = `payment_expire_time_${orderId || 'default'}`;
+
+    let targetTime = typeof window !== 'undefined' ? localStorage.getItem(timerStorageKey) : null;
+
+    if (!targetTime) {
+      const newTarget = Date.now() + TOTAL_DURATION_MS;
+      localStorage.setItem(timerStorageKey, newTarget.toString());
+      targetTime = newTarget.toString();
+    }
+
+    const updateRemaining = () => {
+      const remainingSeconds = Math.max(0, Math.floor((Number(targetTime) - Date.now()) / 1000));
+      setTimeLeft(remainingSeconds);
+
+      if (remainingSeconds <= 0) {
+        setIsExpired(true);
+        return false;
+      }
+      return true;
+    };
+
+    updateRemaining();
+
+    const timer = setInterval(() => {
+      const isRunning = updateRemaining();
+      if (!isRunning) {
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [orderId]);
 
   // ดึงข้อมูล Order โดยเช็คจาก sessionStorage ก่อน
   useEffect(() => {
@@ -98,19 +134,6 @@ export default function PaymentPage() {
     };
   }, [orderId]);
 
-  // Countdown timer 10 นาที
-  useEffect(() => {
-    if (timeLeft <= 0) {
-      setIsExpired(true);
-      return;
-    }
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [timeLeft]);
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -133,6 +156,12 @@ export default function PaymentPage() {
         body: formData,
       });
 
+      // 🌟 จุดที่ 2: ล้างเวลาและเคลียร์ตะกร้า "เฉพาะตอนส่งสลิปชำระเงินสำเร็จแล้วเท่านั้น"
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`payment_expire_time_${orderId || 'default'}`);
+        sessionStorage.removeItem('pending_order_data');
+      }
+
       setShowSuccessModal(true);
     } catch (err) {
       setShowSuccessModal(true);
@@ -147,8 +176,9 @@ export default function PaymentPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <button 
+            type="button"
             onClick={() => router.back()}
-            className="flex items-center text-sm font-medium text-gray-600 bg-white border border-gray-200 px-4 py-2 rounded-full shadow-sm hover:bg-gray-50"
+            className="flex items-center text-sm font-medium text-gray-600 bg-white border border-gray-200 px-4 py-2 rounded-full shadow-sm hover:bg-gray-50 cursor-pointer"
           >
             ‹ ย้อนกลับ
           </button>
@@ -177,12 +207,13 @@ export default function PaymentPage() {
 
             <div className="mt-6 border-t pt-4">
               <button
+                type="button"
                 onClick={handleSubmit}
                 disabled={isExpired || !selectedFile || isSubmitting}
                 className={`w-full py-3 rounded-xl font-bold transition-all ${
                   isExpired || !selectedFile || isSubmitting
                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg cursor-pointer'
                 }`}
               >
                 {isSubmitting ? 'กำลังส่งข้อมูล...' : 'ยืนยันการชำระเงิน'}

@@ -86,8 +86,10 @@ export const createOrder = async (req: Request, res: Response) => {
     const { data: statusRow } = await supabase
       .from("status")
       .select("id")
-      .eq("state", "Pending")
+      .eq("state", "รอการชำระเงิน")
       .maybeSingle();
+    
+    const pendingPaymentStatusId = statusRow?.id || "8961dbd1-5317-4690-b037-e2ed4e9587e5";
 
     const { data: newOrder, error: orderError } = await supabase
       .from("print_order")
@@ -98,7 +100,7 @@ export const createOrder = async (req: Request, res: Response) => {
           description: description || null,
           receive_date: receive_date || null,
           appointment_time: appointment_time || null,
-          current_status_id: statusRow?.id || "8c416cf8-140c-4563-a912-6a4a6c0a4d9f",
+          current_status_id: pendingPaymentStatusId,
           subtotal_price: pricing.subtotal_price,
           small_order_fee: pricing.small_order_fee,
           platform_fee: pricing.platform_fee,
@@ -110,6 +112,13 @@ export const createOrder = async (req: Request, res: Response) => {
       .single();
 
     if (orderError) throw orderError;
+
+    await supabase.from("work_status").insert([
+      {
+        order_id: newOrder.id,
+        status_id: pendingPaymentStatusId,
+      },
+    ]);
 
     // 2. ปรับให้ insert เฉพาะคอลัมน์ที่มีอยู่จริงในตาราง print_order_item
     const orderItems = cart.cart_item.map((item: any) => ({
@@ -182,8 +191,8 @@ export const createOrder = async (req: Request, res: Response) => {
       }
     }
 
-    await supabase.from("cart_item").delete().eq("cart_id", cart.id);
-    await supabase.from("cart").delete().eq("id", cart.id);
+    // await supabase.from("cart_item").delete().eq("cart_id", cart.id);
+    // await supabase.from("cart").delete().eq("id", cart.id);
 
     // 🟢 [เพิ่มใหม่] แจ้งเตือนส่งหา "ร้านค้า" เท่านั้น เมื่อมีออเดอร์ใหม่เข้ามา
     await supabase.from("notifications").insert([
@@ -499,5 +508,38 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Upload payment slip error:", error.message || error);
     return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+  }
+};
+
+// ==========================================
+// ยกเลิกคำสั่งซื้ออัตโนมัติเมื่อหมดเวลาชำระเงิน (10 นาที)
+// ==========================================
+export const cancelOrderTimeout = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+
+    // รหัสสถานะ "ยกเลิกการพิมพ์"
+    const cancelStatusId = "9aee439b-3d24-4b4e-8d68-d9b63081b80c";
+
+    // อัปเดตตาราง print_order
+    const { error: orderError } = await supabase
+      .from("print_order")
+      .update({ current_status_id: cancelStatusId })
+      .eq("id", orderId);
+
+    if (orderError) throw orderError;
+
+    // บันทึกลงตาราง work_status
+    await supabase.from("work_status").insert([
+      {
+        order_id: orderId,
+        status_id: cancelStatusId,
+      },
+    ]);
+
+    return res.status(200).json({ success: true, message: "ยกเลิกคำสั่งซื้อเนื่องจากหมดเวลาแล้ว" });
+  } catch (error: any) {
+    console.error("Cancel order timeout error:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
