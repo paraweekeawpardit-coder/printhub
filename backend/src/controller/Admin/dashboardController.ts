@@ -8,88 +8,100 @@ interface PaymentRow {
 }
 
 /**
+ * Helper ฟังก์ชันแปลง Date เป็น string รูปแบบ YYYY-MM-DD ตาม Local Time
+ */
+const formatDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+/**
  * GET /api/admin/dashboard-stats
  */
 export const getPlatformStats = async (req: Request, res: Response): Promise<Response> => {
-  let customerCount = 0;
-  let shopCount = 0;
-  let totalPlatformIncome = 0;
-  let pendingReports = 0;
-  let dailyIncome: { name: string; income: number }[] = [];
-
   try {
-    const { count } = await supabase
-      .from("customer")
-      .select("*", { count: "exact", head: true });
-    customerCount = count ?? 0;
-  } catch (err: any) {
-    console.warn("Customer table error:", err.message || err);
-  }
+    // 1. คำนวณช่วงเวลาย้อนหลัง 7 วัน (นับรวมวันนี้)
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0); // ตั้งเวลาเริ่มต้นของวันแรก (00:00:00)
 
-  try {
-    const { count } = await supabase
-      .from("print_shop")
-      .select("*", { count: "exact", head: true })
-      .or("is_verify.eq.true,is_verified.eq.true");
-    shopCount = count ?? 0;
-  } catch (err: any) {
-    console.warn("Print Shop table error:", err.message || err);
-  }
+    // 2. ดึงข้อมูลแบบ Parallel ด้วย Promise.all เพื่อความเร็วสูงสุด
+    const [customerRes, shopRes, reportRes, paymentRes] = await Promise.all([
+      // (1) จำนวนลูกค้าทั้งหมด
+      supabase
+        .from("customer")
+        .select("*", { count: "exact", head: true }),
 
-  try {
-    const { data: payments } = await supabase
-      .from("payment")
-      .select("amount, payment_date, created_at");
+      // (2) จำนวนร้านค้าที่ Active (ไม่ใช่ PENDING)
+      supabase
+        .from("print_shop")
+        .select("*", { count: "exact", head: true })
+        .not("status", "ilike", "PENDING"),
 
-    if (payments) {
-      const paymentRows = payments as PaymentRow[];
-      const sumIncome = paymentRows.reduce((sum, row) => sum + (row.amount || 0) * 0.05, 0);
-      totalPlatformIncome = Number(sumIncome.toFixed(2));
+      // (3) จำนวนรายงานปัญหาที่รอตรวจสอบ
+      supabase
+        .from("report")
+        .select("*", { count: "exact", head: true })
+        .ilike("status", "PENDING"), // แนะนำให้กรองเฉพาะสถานะที่รอดำเนินการจริง (ถ้ามี column status)
 
-      const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const last7DaysMap: { [key: string]: { name: string; income: number } } = {};
+      // (4) ดึงข้อมูล Payment เฉพาะช่วง 7 วันย้อนหลัง
+      supabase
+        .from("payment")
+        .select("amount, payment_date, created_at")
+        .gte("created_at", sevenDaysAgo.toISOString()), // หรือใช้ payment_date ขึ้นอยู่กับ schema
+    ]);
 
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split("T")[0];
-        last7DaysMap[dateStr] = { name: daysOfWeek[d.getDay()], income: 0 };
-      }
+    // สกัดค่า Count
+    const customerCount = customerRes.count ?? 0;
+    const shopCount = shopRes.count ?? 0;
+    const pendingReports = reportRes.count ?? 0;
 
-      paymentRows.forEach((p) => {
-        const rawDate = p.payment_date || p.created_at;
-        if (rawDate) {
-          const pDateStr = new Date(rawDate).toISOString().split("T")[0];
-          if (last7DaysMap[pDateStr]) {
-            last7DaysMap[pDateStr].income += (p.amount || 0) * 0.05;
-          }
-        }
-      });
+    // 3. เตรียม Map สำหรับ 7 วันย้อนหลัง
+    const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const last7DaysMap: Record<string, { name: string; income: number }> = {};
 
-      dailyIncome = Object.values(last7DaysMap).map((item) => ({
-        name: item.name,
-        income: Number(item.income.toFixed(2)),
-      }));
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(now.getDate() - i);
+      const dateStr = formatDateKey(d);
+      last7DaysMap[dateStr] = { name: daysOfWeek[d.getDay()], income: 0 };
     }
-  } catch (err: any) {
-    console.warn("Payment table error:", err.message || err);
-  }
 
-  try {
-    const { count } = await supabase
-      .from("report")
-      .select("*", { count: "exact", head: true })
-      .or("is_verify.eq.false,is_verify.is.null");
-    pendingReports = count ?? 0;
-  } catch (err: any) {
-    console.warn("Report table error:", err.message || err);
-  }
+    // 4. คำนวณรายได้ย้อนหลัง 7 วัน
+    let total7DaysIncome = 0;
+    const payments = (paymentRes.data as PaymentRow[]) || [];
 
-  return res.status(200).json({
-    totalCustomers: customerCount,
-    totalActiveShops: shopCount,
-    totalPlatformIncome,
-    pendingReports,
-    dailyIncome,
-  });
+    payments.forEach((p) => {
+      const rawDate = p.payment_date || p.created_at;
+      if (rawDate) {
+        const pDateKey = formatDateKey(new Date(rawDate));
+        const platformFee = (p.amount || 0) * 0.05; // ส่วนแบ่งแพลตฟอร์ม 5%
+
+        if (last7DaysMap[pDateKey]) {
+          last7DaysMap[pDateKey].income += platformFee;
+          total7DaysIncome += platformFee;
+        }
+      }
+    });
+
+    // 5. แปลงข้อมูลกราฟให้อยู่ในรูปแบบ Array
+    const dailyIncome = Object.values(last7DaysMap).map((item) => ({
+      name: item.name,
+      income: Number(item.income.toFixed(2)),
+    }));
+
+    return res.status(200).json({
+      totalCustomers: customerCount,
+      totalActiveShops: shopCount,
+      totalPlatformIncome: Number(total7DaysIncome.toFixed(2)),
+      pendingReports,
+      dailyIncome,
+    });
+  } catch (err: any) {
+    console.error("Dashboard Stats Error:", err.message || err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };

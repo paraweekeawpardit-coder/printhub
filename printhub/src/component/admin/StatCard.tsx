@@ -1,11 +1,14 @@
 "use client";
 
+import Link from "next/link";
+
 interface StatCardProps {
   title: string;
   value: number | string | undefined;
   unit: string;
   subtitle: string;
   isAlert?: boolean;
+  href?: string;
 }
 
 export default function StatCard({
@@ -14,12 +17,13 @@ export default function StatCard({
   unit,
   subtitle,
   isAlert = false,
+  href,
 }: StatCardProps) {
-  return (
+  const content = (
     <div className={`stat-card ${isAlert ? "stat-alert" : ""}`}>
       <div className="stat-header">
         <span>{title}</span>
-        <span className="arrow-icon">›</span>
+        <span className="arrow-icon">&rsaquo;</span>
       </div>
       <div className="stat-value-container">
         <span className="stat-value">{value ?? 0}</span>
@@ -35,11 +39,13 @@ export default function StatCard({
           display: flex;
           flex-direction: column;
           gap: 16px;
-          transition: transform 0.2s ease;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          cursor: pointer;
         }
 
         .stat-card:hover {
           transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
 
         .stat-alert {
@@ -57,7 +63,8 @@ export default function StatCard({
 
         .arrow-icon {
           color: #94a3b8;
-          font-size: 1.2rem;
+          font-size: 1.4rem;
+          line-height: 1;
         }
 
         .stat-value-container {
@@ -87,4 +94,14 @@ export default function StatCard({
       `}</style>
     </div>
   );
+
+  if (href) {
+    return (
+      <Link href={href} style={{ textDecoration: "none" }}>
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }
