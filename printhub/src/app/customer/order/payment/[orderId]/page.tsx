@@ -21,95 +21,81 @@ export default function PaymentPage() {
   const [orderData, setOrderData] = useState<OrderDetails | null>(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState<boolean>(true);
 
-  // 🟢 1. ระบบเวลานับถอยหลังต่อ (Sync กับ timestamp ใน sessionStorage)
-  const [timeLeft, setTimeLeft] = useState<number>(() => {
-    if (typeof window === 'undefined' || !orderId) return 600;
-    const key = `payment_expiry_${orderId}`;
-    const savedExpiry = sessionStorage.getItem(key);
-
-    if (savedExpiry) {
-      const remaining = Math.floor((parseInt(savedExpiry, 10) - Date.now()) / 1000);
-      return remaining > 0 ? remaining : 0;
-    } else {
-      const newExpiry = Date.now() + 600 * 1000; // 10 นาที
-      sessionStorage.setItem(key, newExpiry.toString());
-      return 600;
-    }
-  });
-
+  // 🟢 1. จัดการเวลานับถอยหลัง
+  const [targetExpiryTime, setTargetExpiryTime] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number>(600);
   const [isExpired, setIsExpired] = useState<boolean>(false);
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // 🔴 2. ฟังก์ชันยกเลิกออเดอร์อัตโนมัติเมื่อหมดเวลา 10 นาที (เปลี่ยนเป็น "ยกเลิกการพิมพ์")
+  // 🛠️ ฟังก์ชันแปลงเวลาแบบรองรับทุกรูปแบบ ป้องกัน Timezone เพี้ยน 7 ชั่วโมง
+  const parseSafeTimestamp = (dateStr?: string | null): number | null => {
+    if (!dateStr) return null;
+    try {
+      // ตรวจสอบว่ามี Timezone ระบุมาหรือไม่ ถ้าไม่มีให้เติม Z กำกับไว้
+      let cleaned = dateStr.trim();
+      if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
+        cleaned = `${cleaned.replace(" ", "T")}Z`;
+      }
+      const parsed = new Date(cleaned).getTime();
+      return isNaN(parsed) ? null : parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  // 🔴 2. ฟังก์ชันยกเลิกออเดอร์อัตโนมัติเมื่อหมดเวลา
   const handleTimeoutCancelOrder = async () => {
     if (!orderId) return;
     try {
-      // รหัสสถานะ "ยกเลิกการพิมพ์" จากตาราง status: 9aee439b-3d24-4b4e-8d68-d9b63081b80c
       await fetch(`http://localhost:5000/api/customer/orders/${orderId}/cancel`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status_id: '9aee439b-3d24-4b4e-8d68-d9b63081b80c',
+          status_id: '9aee439b-3d24-4b4e-8d68-d9b63081b80c', // ID ยกเลิกการพิมพ์
           reason: 'หมดเวลาชำระเงิน (เกิน 10 นาที)',
         }),
       });
-      // ล้างเวลาหมดอายุออก
-      sessionStorage.removeItem(`payment_expiry_${orderId}`);
       sessionStorage.removeItem('pending_order_data');
     } catch (err) {
       console.error('Error auto-cancelling order:', err);
     }
   };
 
-  // 🟢 3. Timer Effect ตรวจสอบการนับถอยหลัง
+  // 🟢 3. Timer Effect: ทำงานต่อเมื่อโหลดข้อมูลออเดอร์เสร็จและมี targetExpiryTime แล้วเท่านั้น
   useEffect(() => {
-    if (timeLeft <= 0) {
-      setIsExpired(true);
-      handleTimeoutCancelOrder();
-      return;
-    }
+    if (!targetExpiryTime || isLoadingOrder) return;
 
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          setIsExpired(true);
-          handleTimeoutCancelOrder();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const calculateRemaining = () => {
+      const now = Date.now();
+      const remainingSeconds = Math.floor((targetExpiryTime - now) / 1000);
+
+      if (remainingSeconds <= 0) {
+        setTimeLeft(0);
+        setIsExpired(true);
+        handleTimeoutCancelOrder();
+      } else {
+        setTimeLeft(remainingSeconds);
+        setIsExpired(false);
+      }
+    };
+
+    calculateRemaining();
+    const timer = setInterval(calculateRemaining, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, orderId]);
+  }, [targetExpiryTime, isLoadingOrder, orderId]);
 
-  // 🟢 4. โหลดข้อมูลรายละเอียดคำสั่งซื้อ
+  // 🟢 4. โหลดข้อมูลคำสั่งซื้อจาก Backend
   useEffect(() => {
     let isMounted = true;
 
     async function fetchOrderDetails() {
       setIsLoadingOrder(true);
-
-      // 4.1 ตรวจสอบข้อมูลจาก sessionStorage ที่ตรงกับ orderId ปัจจุบัน
-      try {
-        const savedSessionData = sessionStorage.getItem('pending_order_data');
-        if (savedSessionData) {
-          const parsedData = JSON.parse(savedSessionData);
-          if (parsedData && (parsedData.id === orderId || !orderId) && parsedData.items?.length > 0) {
-            if (isMounted) {
-              setOrderData(parsedData);
-              setIsLoadingOrder(false);
-            }
-            return;
-          }
-        }
-      } catch (e) {
-        console.error('Error reading sessionStorage:', e);
-      }
 
       const emptyFallbackData: OrderDetails = {
         id: orderId || 'ORDER-PENDING',
@@ -129,27 +115,47 @@ export default function PaymentPage() {
         smallOrderFeeThreshold: 50,
       };
 
-      // 4.2 ดึงข้อมูลคำสั่งซื้อจาก API
       try {
         const customerId = localStorage.getItem('customer_id') || localStorage.getItem('id') || '';
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-        const res = await fetch(`http://localhost:5000/api/customer/orders?customer_id=${customerId}`, {
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
+        const res = await fetch(`http://localhost:5000/api/customer/orders?customer_id=${customerId}`);
 
         if (res.ok) {
           const result = await res.json();
           const orderList = Array.isArray(result.data) ? result.data : [];
           const apiOrder = orderList.find((o: any) => String(o.id) === String(orderId));
 
-          if (apiOrder) {
-            // ถ้าออเดอร์นี้ถูกยกเลิกไปแล้วจากหลังบ้าน ให้ตัดสเตทเป็นหมดเวลาทันที
+          if (apiOrder && isMounted) {
             const statusState = apiOrder.status?.state || apiOrder.current_status?.state || '';
+
+            // ตรวจสอบสถานะถ้าถูกยกเลิกแล้วจริง ๆ
             if (statusState === 'ยกเลิกการพิมพ์' || statusState === 'ยกเลิก') {
               setIsExpired(true);
+              setTimeLeft(0);
+            } else {
+              // 🌟 คำนวณเวลาเป้าหมาย (targetExpiryTime)
+              const parsedExpiry = parseSafeTimestamp(apiOrder.expires_at);
+              const now = Date.now();
+
+              if (parsedExpiry && parsedExpiry > now) {
+                // กรณี 1: มี expires_at จาก Database และยังไม่หมดเวลา
+                setTargetExpiryTime(parsedExpiry);
+              } else if (apiOrder.order_date || apiOrder.created_at) {
+                // กรณี 2: คำนวณจากเวลาที่สั่งซื้อ (order_date + 10 นาที)
+                const baseTime = parseSafeTimestamp(apiOrder.order_date || apiOrder.created_at);
+                const calcExpiry = baseTime ? baseTime + 10 * 60 * 1000 : null;
+
+                if (calcExpiry && calcExpiry > now) {
+                  setTargetExpiryTime(calcExpiry);
+                } else if (statusState === 'รอการชำระเงิน') {
+                  // ป้องกัน Timezone Server เพี้ยน: ถ้าเพิ่งสั่งและสถานะยังรอชำระเงิน ให้เริ่มนับ 10 นาที
+                  setTargetExpiryTime(now + 600 * 1000);
+                } else {
+                  setIsExpired(true);
+                  setTimeLeft(0);
+                }
+              } else {
+                setTargetExpiryTime(now + 600 * 1000);
+              }
             }
 
             const formattedItems = (apiOrder.print_order_item || []).map((item: any) => {
@@ -168,24 +174,39 @@ export default function PaymentPage() {
               };
             });
 
-            if (isMounted) {
-              setOrderData({
-                id: apiOrder.id || orderId,
-                items: formattedItems.length > 0 ? formattedItems : emptyFallbackData.items,
-                services: [],
-                smallOrderFeeThreshold: 50,
-              });
-              setIsLoadingOrder(false);
-              return;
-            }
+            setOrderData({
+              id: apiOrder.id || orderId,
+              items: formattedItems.length > 0 ? formattedItems : emptyFallbackData.items,
+              services: [],
+              smallOrderFeeThreshold: 50,
+            });
+            setIsLoadingOrder(false);
+            return;
           }
         }
       } catch (err) {
         console.warn('Cannot fetch order list from backend:', err);
       }
 
+      // Fallback: ดึงจาก sessionStorage (กรณีสร้างจังหวะแรก)
+      try {
+        const savedSessionData = sessionStorage.getItem('pending_order_data');
+        if (savedSessionData && isMounted) {
+          const parsedData = JSON.parse(savedSessionData);
+          if (parsedData && (parsedData.id === orderId || !orderId) && parsedData.items?.length > 0) {
+            setOrderData(parsedData);
+            setTargetExpiryTime(Date.now() + 600 * 1000);
+            setIsLoadingOrder(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('Error reading sessionStorage:', e);
+      }
+
       if (isMounted) {
         setOrderData(emptyFallbackData);
+        setTargetExpiryTime(Date.now() + 600 * 1000);
         setIsLoadingOrder(false);
       }
     }
@@ -231,11 +252,8 @@ export default function PaymentPage() {
       const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
-        // เคลียร์ข้อมูลเวลาและแคชของออเดอร์นี้
         sessionStorage.removeItem('pending_order_data');
-        sessionStorage.removeItem(`payment_expiry_${orderId}`);
 
-        // ล้างตะกร้าในฐานข้อมูลหลังจากชำระเงินสำเร็จ
         if (customerId) {
           fetch('http://localhost:5000/api/customer/cart', {
             method: 'DELETE',
@@ -260,7 +278,7 @@ export default function PaymentPage() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <NavBar 
         cartCount={orderData?.items?.length || 0} 
-        onOpenCart={() => router.push('/customer')} 
+        onOpenCart={() => router.push('/customer/cart')} 
       />
 
       <div className="p-6 flex-1 flex justify-center items-start">
@@ -269,10 +287,10 @@ export default function PaymentPage() {
           <div className="flex items-center justify-between mb-6">
             <button 
               type="button"
-              onClick={() => router.back()}
-              className="flex items-center text-sm font-medium text-gray-600 bg-white border border-gray-200 px-4 py-2 rounded-full shadow-sm hover:bg-gray-50 cursor-pointer"
+              onClick={() => router.push('/customer/orders')}
+              className="flex items-center text-sm font-medium text-gray-600 bg-white border border-gray-200 px-4 py-2 rounded-full shadow-xs hover:bg-gray-50 cursor-pointer transition"
             >
-              ‹ ย้อนกลับ
+              ‹ ไปที่คำสั่งซื้อของฉัน
             </button>
             <h1 className="text-xl font-bold text-gray-800">PrintHub ชำระเงินค่าบริการ</h1>
             <PaymentTimer timeLeft={timeLeft} />
@@ -286,7 +304,7 @@ export default function PaymentPage() {
             </div>
 
             {/* ฝั่งขวา: แนบสลิป & สถานะการชำระเงิน */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between">
+            <div className="bg-white p-6 rounded-2xl shadow-xs border border-gray-100 flex flex-col justify-between">
               <div>
                 <h2 className="text-lg font-bold text-gray-800 mb-4">แนบหลักฐานการโอนเงิน (สลิป)</h2>
 
@@ -298,10 +316,10 @@ export default function PaymentPage() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => router.push('/customer')}
+                      onClick={() => router.push('/customer/orders')}
                       className="mt-3 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition cursor-pointer"
                     >
-                      กลับสู่หน้าหลัก
+                      ดูคำสั่งซื้อของฉัน
                     </button>
                   </div>
                 ) : (

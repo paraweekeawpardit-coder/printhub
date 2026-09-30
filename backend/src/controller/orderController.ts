@@ -83,13 +83,9 @@ export const createOrder = async (req: Request, res: Response) => {
 
     const pricing = calculateOrderPricing(cart.cart_item);
 
-    const { data: statusRow } = await supabase
-      .from("status")
-      .select("id")
-      .eq("state", "รอการชำระเงิน")
-      .maybeSingle();
-    
-    const pendingPaymentStatusId = statusRow?.id || "8961dbd1-5317-4690-b037-e2ed4e9587e5";
+    // ID สถานะ "รอการชำระเงิน"
+    const pendingPaymentStatusId = "8961dbd1-5317-4690-b037-e2ed4e9587e5";
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
     const { data: newOrder, error: orderError } = await supabase
       .from("print_order")
@@ -101,6 +97,7 @@ export const createOrder = async (req: Request, res: Response) => {
           receive_date: receive_date || null,
           appointment_time: appointment_time || null,
           current_status_id: pendingPaymentStatusId,
+          expires_at: expiresAt,
           subtotal_price: pricing.subtotal_price,
           small_order_fee: pricing.small_order_fee,
           platform_fee: pricing.platform_fee,
@@ -108,19 +105,24 @@ export const createOrder = async (req: Request, res: Response) => {
           total_price: pricing.net_total,
         },
       ])
-      .select("id")
+      .select("id, expires_at")
       .single();
 
     if (orderError) throw orderError;
 
-    await supabase.from("work_status").insert([
-      {
-        order_id: newOrder.id,
-        status_id: pendingPaymentStatusId,
-      },
-    ]);
+    // บันทึกลง work_status รอบเดียวตรงนี้
+    try {
+      await supabase.from("work_status").insert([
+        {
+          order_id: newOrder.id,
+          status_id: pendingPaymentStatusId,
+        },
+      ]);
+    } catch (wsErr) {
+      console.warn("work_status trigger warning:", wsErr);
+    }
 
-    // 2. ปรับให้ insert เฉพาะคอลัมน์ที่มีอยู่จริงในตาราง print_order_item
+    // Insert รายการพิมพ์
     const orderItems = cart.cart_item.map((item: any) => ({
       order_id: newOrder.id,
       file_url: item.file_url,
@@ -138,7 +140,6 @@ export const createOrder = async (req: Request, res: Response) => {
       ].filter(Boolean).join(" | ") || null,
     }));
 
-    // ✅ รับค่าเข้า data: insertedItems ชัดเจน
     const { data: insertedItems, error: itemsError } = await supabase
       .from("print_order_item")
       .insert(orderItems)
@@ -146,17 +147,12 @@ export const createOrder = async (req: Request, res: Response) => {
 
     if (itemsError) throw itemsError;
 
-    // =========================================================================
-    // 🌟 3. บันทึกลงตาราง print_file เพื่อเชื่อมโยง Storage URL เข้ากับ Database
-    // =========================================================================
-    // ใน createOrder ตอนบันทึกลง print_file
+    // Insert print_file
     const filesToInsert: any[] = [];
-
     (cart.cart_item || []).forEach((item: any, idx: number) => {
       if (!item.file_url) return;
 
       const correspondingItemId = (insertedItems as any)?.[idx]?.id || null;
-      // แยก URL ออกจากกันหากมีหลายไฟล์
       const urls = item.file_url.split(",").map((u: string) => u.trim()).filter(Boolean);
 
       urls.forEach((url: string, fileIdx: number) => {
@@ -176,25 +172,11 @@ export const createOrder = async (req: Request, res: Response) => {
       await supabase.from("print_file").insert(filesToInsert);
     }
 
-    // =========================================================================
+    // เคลียร์ตะกร้าสินค้า
+    await supabase.from("cart_item").delete().eq("cart_id", cart.id);
+    await supabase.from("cart").delete().eq("id", cart.id);
 
-    if (statusRow?.id) {
-      try {
-        await supabase.from("work_status").insert([
-          {
-            order_id: newOrder.id,
-            status_id: statusRow.id,
-          },
-        ]);
-      } catch (wsErr) {
-        console.warn("work_status trigger warning:", wsErr);
-      }
-    }
-
-    // await supabase.from("cart_item").delete().eq("cart_id", cart.id);
-    // await supabase.from("cart").delete().eq("id", cart.id);
-
-    // 🟢 [เพิ่มใหม่] แจ้งเตือนส่งหา "ร้านค้า" เท่านั้น เมื่อมีออเดอร์ใหม่เข้ามา
+    // แจ้งเตือนร้านค้า
     await supabase.from("notifications").insert([
       {
         shop_id: cart.shop_id,
@@ -208,7 +190,11 @@ export const createOrder = async (req: Request, res: Response) => {
     return res.status(201).json({
       success: true,
       message: "สร้างคำสั่งซื้อสำเร็จ",
-      data: { order_id: newOrder.id, total_price: pricing.net_total },
+      data: { 
+        order_id: newOrder.id, 
+        total_price: pricing.net_total,
+        expires_at: (newOrder as any)?.expires_at || expiresAt
+      },
     });
   } catch (error: any) {
     console.error("Create order error:", error.message);
@@ -231,7 +217,9 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
         total_price,
         order_date,
         receive_date,
+        expires_at,
         description,
+        current_status_id,
         print_shop (
           id,
           shop_name,
@@ -278,7 +266,6 @@ export const updateWorkStatus = async (req: Request, res: Response) => {
 
     if (orderError) throw orderError;
 
-    // 🟢 [เพิ่มใหม่] ดึง customer_id และ ชื่อสถานะ เพื่อส่งแจ้งเตือนหา "ลูกค้า"
     const { data: orderData } = await supabase
       .from("print_order")
       .select("customer_id")
@@ -316,7 +303,6 @@ export const cancelOrder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // 1. ดึงสถานะปัจจุบันของออเดอร์
     const { data: order, error: findError } = await supabase
       .from("print_order")
       .select(`
@@ -341,33 +327,19 @@ export const cancelOrder = async (req: Request, res: Response) => {
       });
     }
 
-    // 2. ดึง ID ของสถานะ 'ยกเลิกการพิมพ์' จากตาราง status
-    const { data: cancelStatus, error: statusError } = await supabase
-      .from("status")
-      .select("id")
-      .eq("state", "ยกเลิกการพิมพ์")
-      .single();
+    const cancelStatusId = "9aee439b-3d24-4b4e-8d68-d9b63081b80c";
 
-    if (statusError || !cancelStatus) {
-      return res.status(500).json({
-        success: false,
-        message: "ไม่พบสถานะ 'ยกเลิกการพิมพ์' ในตาราง status",
-      });
-    }
-
-    // 3. อัปเดตคอลัมน์ current_status_id ใน print_order
     const { error: updateError } = await supabase
       .from("print_order")
-      .update({ current_status_id: cancelStatus.id })
+      .update({ current_status_id: cancelStatusId })
       .eq("id", id);
 
     if (updateError) throw updateError;
 
-    // 4. บันทึกลง work_status (ครอบ try/catch แยก ป้องกัน Trigger เก่าที่เรียก status_type ขัดจังหวะ)
     try {
       await supabase.from("work_status").insert({
         order_id: id,
-        status_id: cancelStatus.id,
+        status_id: cancelStatusId,
       });
     } catch (wsErr) {
       console.warn("work_status trigger warning (ignored):", wsErr);
@@ -390,7 +362,6 @@ export const confirmReceivedOrder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // 1. ค้นหาสถานะ 'รับงานแล้ว' หรือ 'รายการเสร็จสิ้น' จากตาราง status
     const { data: doneStatus, error: statusError } = await supabase
       .from("status")
       .select("id")
@@ -405,7 +376,6 @@ export const confirmReceivedOrder = async (req: Request, res: Response) => {
       });
     }
 
-    // 2. อัปเดต current_status_id ใน print_order
     const { error: updateError } = await supabase
       .from("print_order")
       .update({ current_status_id: doneStatus.id })
@@ -413,7 +383,6 @@ export const confirmReceivedOrder = async (req: Request, res: Response) => {
 
     if (updateError) throw updateError;
 
-    // 3. บันทึกลง work_status
     try {
       await supabase.from("work_status").insert({
         order_id: id,
@@ -445,7 +414,6 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "กรุณาระบุ order_id และแนบไฟล์สลิป" });
     }
 
-    // 1. ดึงข้อมูลออเดอร์เพื่อเอา customer_id และ shop_id ไปบันทึกลงตาราง payment
     const { data: orderData, error: orderErr } = await supabase
       .from("print_order")
       .select("id, customer_id, shop_id, total_price")
@@ -456,11 +424,9 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "ไม่พบข้อมูลคำสั่งซื้อ" });
     }
 
-    // 2. ตั้งชื่อไฟล์รูปภาพสำหรับอัปโหลดเข้า Bucket payment_slip
     const fileExt = file.originalname.split(".").pop();
     const fileName = `slip_${order_id}_${Date.now()}.${fileExt}`;
 
-    // 3. Upload ไฟล์สลิปเข้า Supabase Storage
     const { error: storageErr } = await supabase.storage
       .from("payment_slip")
       .upload(fileName, file.buffer, {
@@ -470,14 +436,12 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
 
     if (storageErr) throw storageErr;
 
-    // 4. ดึง Public URL ของภาพสลิปที่อัปโหลดสำเร็จ
     const { data: urlData } = supabase.storage
       .from("payment_slip")
       .getPublicUrl(fileName);
 
     const slipPublicUrl = urlData.publicUrl;
 
-    // 5. บันทึกข้อมูลการชำระเงินลงตาราง payment (ตรงตาม Database Schema)
     const { data: paymentData, error: payErr } = await supabase
       .from("payment")
       .insert({
@@ -494,11 +458,29 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
 
     if (payErr) throw payErr;
 
-    // 6. อัปเดต payment_id กลับเข้าตาราง print_order
+    // รหัสสถานะ "รอดำเนินงาน" (เมื่อลูกค้าส่งสลิปชำระเงินแล้ว)
+    const inProgressStatusId = "8c416cf8-140c-4563-a912-6a4a6c0a4d9f";
+
+    // อัปเดตสถานะเป็น "รอดำเนินงาน" และล้าง expires_at เพื่อหยุดการตัดหมดเวลา
     await supabase
       .from("print_order")
-      .update({ payment_id: paymentData.id })
+      .update({ 
+        payment_id: paymentData.id,
+        current_status_id: inProgressStatusId,
+        expires_at: null 
+      })
       .eq("id", order_id);
+
+    try {
+      await supabase.from("work_status").insert([
+        {
+          order_id: order_id,
+          status_id: inProgressStatusId,
+        },
+      ]);
+    } catch (wsErr) {
+      console.warn("work_status insert warning:", wsErr);
+    }
 
     return res.status(200).json({
       success: true,
@@ -512,16 +494,13 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// ยกเลิกคำสั่งซื้ออัตโนมัติเมื่อหมดเวลาชำระเงิน (10 นาที)
+// 7. ยกเลิกคำสั่งซื้ออัตโนมัติเมื่อหมดเวลาชำระเงิน (10 นาที)
 // ==========================================
 export const cancelOrderTimeout = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
-
-    // รหัสสถานะ "ยกเลิกการพิมพ์"
     const cancelStatusId = "9aee439b-3d24-4b4e-8d68-d9b63081b80c";
 
-    // อัปเดตตาราง print_order
     const { error: orderError } = await supabase
       .from("print_order")
       .update({ current_status_id: cancelStatusId })
@@ -529,7 +508,6 @@ export const cancelOrderTimeout = async (req: Request, res: Response) => {
 
     if (orderError) throw orderError;
 
-    // บันทึกลงตาราง work_status
     await supabase.from("work_status").insert([
       {
         order_id: orderId,
