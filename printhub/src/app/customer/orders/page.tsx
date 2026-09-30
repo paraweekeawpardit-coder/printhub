@@ -1,59 +1,32 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Loader2, 
-  Star, 
-  MessageSquare, 
-  ChevronDown, 
-  Clock, 
-  Printer, 
   Package, 
+  Check, 
+  ShoppingBag,
+  Store,
+  Calendar,
+  Clock,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
+  Ban,
+  CheckCircle2,
+  Star,
   AlertTriangle,
-  X,
-  Check,
-  CreditCard
+  MessageCircle
 } from 'lucide-react';
 import NavBar from '../../../component/customer/NavBar';
 
-interface OrderItem {
-  id?: string;
-  category?: string;
-  selected_size?: string;
-  color_type?: string;
-  paper_type?: string;
-  quantity: number;
-  unit_price: number;
-  subtotal: number;
-}
+// 🌟 ดึง Component ตัวกรอง และ Modals มาจาก dashboard ตรงๆ ตามที่ต้องการ
+import DashboardStatusFilter from '../../../component/customer/dashboard/DashboardStatusFilter';
+import ConfirmActionModal from '../../../component/customer/dashboard/ConfirmActionModal';
+import ReportIssueModal from '../../../component/customer/dashboard/ReportIssueModal';
 
-interface Order {
-  id: string;
-  order_no?: number | string;
-  order_date: string;
-  receive_date: string;
-  appointment_time?: string;
-  total_price: number;
-  total_amount?: number;
-  description: string;
-  shop_id?: string;
-  print_shop?: {
-    id?: string;
-    shop_name: string;
-    profile_image: string | null;
-  };
-  status?: {
-    id?: string;
-    state: string;
-  } | string;
-  print_order_item?: OrderItem[];
-  order_items?: OrderItem[];
-  items?: OrderItem[];
-}
-
-// รายการสถานะตามค่า state ในฐานข้อมูล
 const FILTER_TABS = [
   'ทั้งหมด',
   'รอการชำระเงิน',
@@ -65,25 +38,29 @@ const FILTER_TABS = [
 ];
 
 export default function CustomerOrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const router = useRouter();
+  const [orders, setOrders] = useState<any[]>([]);
   const [cartCount, setCartCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
-  
-  // State สำหรับแท็บสถานะที่เลือก (ค่าเริ่มต้นคือ 'ทั้งหมด')
+
   const [selectedStatus, setSelectedStatus] = useState<string>('ทั้งหมด');
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
-  // State สำหรับจัดการเปิด/ปิด Dropdown ของแต่ละ Order
-  const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
-
-  // State สำหรับ Modal ร้องเรียน / ขอคืนเงิน
+  // Modals state
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
-  const [selectedOrderForReport, setSelectedOrderForReport] = useState<Order | null>(null);
+  const [selectedOrderForReport, setSelectedOrderForReport] = useState<any>(null);
   const [reportDescription, setReportDescription] = useState<string>('');
   const [reportImageUrl, setReportImageUrl] = useState<string>('');
   const [submittingReport, setSubmittingReport] = useState<boolean>(false);
 
-  // Toast Notification
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: 'cancel' | 'received';
+    orderId: string;
+    orderNo: string;
+  }>({ isOpen: false, type: 'cancel', orderId: '', orderNo: '' });
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -91,127 +68,160 @@ export default function CustomerOrdersPage() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const router = useRouter();
-
-  const toggleDropdown = (orderId: string) => {
-    setExpandedOrders((prev) => ({
-      ...prev,
-      [orderId]: !prev[orderId],
-    }));
+  const isOrderExpired = (orderDateStr?: string) => {
+    if (!orderDateStr) return false;
+    const orderTime = new Date(orderDateStr).getTime();
+    if (isNaN(orderTime)) return false;
+    return Date.now() - orderTime > 10 * 60 * 1000;
   };
 
+  const fetchOrdersData = useCallback(async (customerId: string) => {
+    setLoading(true);
+    setError('');
+
+    try {
+      // ดึงจาก dashboard API เพื่อให้ได้ข้อมูลครบถ้วนเหมือนแดชบอร์ด
+      const res = await fetch(`http://localhost:5000/api/customer/dashboard?customer_id=${customerId}`);
+      const json = await res.json();
+
+      if (res.ok && json.success && json.data) {
+        setOrders(json.data.orders || []);
+      } else {
+        const orderRes = await fetch(`http://localhost:5000/api/customer/orders?customer_id=${customerId}`);
+        const orderJson = await orderRes.json();
+        if (orderRes.ok && orderJson.success) {
+          setOrders(orderJson.data || []);
+        } else {
+          setError(orderJson.message || 'ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้');
+        }
+      }
+
+      // ดึงจำนวนในตะกร้า
+      const cartRes = await fetch(`http://localhost:5000/api/customer/cart?customer_id=${customerId}`);
+      const cartJson = await cartRes.json();
+      if (cartJson.success && cartJson.data) {
+        const rawItems = Array.isArray(cartJson.data)
+          ? cartJson.data
+          : cartJson.data.cart_items || cartJson.data.cart_item || cartJson.data.items || [];
+        setCartCount(rawItems.length);
+      }
+    } catch (err: any) {
+      console.error('Fetch orders error:', err);
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const customerId =
+    const cid =
       typeof window !== 'undefined'
         ? localStorage.getItem('customer_id') || localStorage.getItem('id')
         : null;
 
-    if (!customerId || customerId === 'undefined' || customerId === 'null') {
+    if (!cid || cid === 'undefined' || cid === 'null') {
       setLoading(false);
       setError('กรุณาเข้าสู่ระบบก่อนดูรายการคำสั่งซื้อ');
       return;
     }
 
-    const fetchOrders = async () => {
-      setLoading(true);
-      setError('');
+    fetchOrdersData(cid);
+  }, [fetchOrdersData]);
 
-      try {
-        const res = await fetch(
-          `http://localhost:5000/api/customer/orders?customer_id=${customerId}`
-        );
-        const result = await res.json();
+  const getOrderState = (order: any): string => {
+    if (!order) return 'รอการดำเนินงาน';
+    let state =
+      order.current_status?.state ||
+      order.status?.state ||
+      (typeof order.status === 'string' ? order.status : 'รอการดำเนินงาน');
 
-        if (res.ok && result.success) {
-          setOrders(result.data || []);
-        } else {
-          setError(result.message || 'ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้');
-        }
-      } catch (err) {
-        console.error('Fetch orders error:', err);
-        setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchCartCount = async () => {
-      try {
-        const res = await fetch(
-          `http://localhost:5000/api/customer/cart?customer_id=${customerId}`
-        );
-        const json = await res.json();
-        if (json.success && json.data) {
-          const rawItems = Array.isArray(json.data)
-            ? json.data
-            : json.data.cart_items ||
-              json.data.cart_item ||
-              json.data.items ||
-              [];
-          setCartCount(rawItems.length);
-        }
-      } catch (err) {
-        console.error('Fetch cart error:', err);
-      }
-    };
-
-    fetchOrders();
-    fetchCartCount();
-  }, [router]);
-
-  // ฟังก์ชันดึงสถานะที่เป็น string ปลอดภัย
-  const getOrderState = (order: Order): string => {
-    if (typeof order.status === 'string') return order.status;
-    return order.status?.state || 'รอการดำเนินงาน';
+    if (state === 'รอการชำระเงิน' && isOrderExpired(order.order_date)) {
+      state = 'ยกเลิกการพิมพ์';
+    }
+    return state;
   };
 
-  // กรองตามแท็บสถานะ + เรียงจากคำสั่งซื้อล่าสุด (เวลาใหม่สุดขึ้นก่อน)
-  const filteredAndSortedOrders = useMemo(() => {
-    let result = [...orders];
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      ทั้งหมด: orders.length,
+      รอการชำระเงิน: 0,
+      รอการดำเนินงาน: 0,
+      กำลังพิมพ์: 0,
+      พิมพ์เสร็จสิ้น: 0,
+      รายการเสร็จสิ้น: 0,
+      ยกเลิกการพิมพ์: 0,
+    };
 
-    // 1. เรียงตามเวลาล่าสุด (Descending)
-    result.sort((a, b) => {
+    orders.forEach((o) => {
+      if (!o) return;
+      const state = getOrderState(o);
+      if (state === 'รับงานแล้ว' || state === 'รายการเสร็จสิ้น' || state === 'พร้อมรับเอกสาร') {
+        counts['รายการเสร็จสิ้น'] = (counts['รายการเสร็จสิ้น'] || 0) + 1;
+      } else if (counts[state] !== undefined) {
+        counts[state]++;
+      }
+    });
+
+    return counts;
+  }, [orders]);
+
+  // เรียงลำดับจากวันที่สั่งซื้อล่าสุดเสมอ
+  const filteredOrders = useMemo(() => {
+    const validOrders = orders.filter((o) => Boolean(o && (o.id || o.order_no)));
+
+    validOrders.sort((a, b) => {
       const dateA = new Date(a.order_date).getTime() || 0;
       const dateB = new Date(b.order_date).getTime() || 0;
       return dateB - dateA;
     });
 
-    // 2. กรองตามแท็บที่เลือก
-    if (selectedStatus !== 'ทั้งหมด') {
-      result = result.filter((order) => getOrderState(order) === selectedStatus);
-    }
+    if (selectedStatus === 'ทั้งหมด') return validOrders;
 
-    return result;
+    return validOrders.filter((order) => {
+      const state = getOrderState(order);
+      if (selectedStatus === 'รายการเสร็จสิ้น') {
+        return state === 'รายการเสร็จสิ้น' || state === 'รับงานแล้ว' || state === 'พร้อมรับเอกสาร';
+      }
+      return state === selectedStatus;
+    });
   }, [orders, selectedStatus]);
 
-  // 🌟 จุดแก้ที่ 1: เพิ่มสีสำหรับป้าย "รอการชำระเงิน"
-  const getStatusBadgeStyle = (state: string) => {
-    switch (state) {
-      case 'รอการชำระเงิน':
-        return 'bg-amber-50 text-amber-800 border-amber-300';
-      case 'รอการดำเนินงาน':
-      case 'รอดำเนินการ':
-      case 'Pending':
-        return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'กำลังพิมพ์':
-      case 'In Progress':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'พิมพ์เสร็จสิ้น':
-      case 'พร้อมรับเอกสาร':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'รายการเสร็จสิ้น':
-      case 'Completed':
-        return 'bg-slate-100 text-slate-800 border-slate-300';
-      case 'ยกเลิกการพิมพ์':
-      case 'ยกเลิก':
-      case 'Cancelled':
-        return 'bg-rose-100 text-rose-800 border-rose-200';
-      default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
+  const handleExecuteAction = async () => {
+    const cid = localStorage.getItem('customer_id') || localStorage.getItem('id');
+    const { type, orderId } = confirmModal;
+
+    try {
+      if (type === 'cancel') {
+        const res = await fetch(`http://localhost:5000/api/customer/order/${orderId}/cancel`, {
+          method: 'PUT',
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast('ยกเลิกคำสั่งซื้อเรียบร้อยแล้ว');
+          if (cid) fetchOrdersData(cid);
+        } else {
+          showToast(data.message || data.error || 'ไม่สามารถยกเลิกได้');
+        }
+      } else if (type === 'received') {
+        const res = await fetch(`http://localhost:5000/api/customer/order/${orderId}/confirm-received`, {
+          method: 'PUT',
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast('ยืนยันรับงานสำเร็จ คุณสามารถรีวิวร้านค้าได้แล้ว');
+          if (cid) fetchOrdersData(cid);
+        } else {
+          showToast(data.message || data.error || 'เกิดข้อผิดพลาดในการยืนยันรับงาน');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('ไม่สามารถติดต่อเซิร์ฟเวอร์ได้');
+    } finally {
+      setConfirmModal({ isOpen: false, type: 'cancel', orderId: '', orderNo: '' });
     }
   };
 
-  // ยื่นเรื่องขอคืนเงิน / ร้องเรียน
   const handleSubmitReport = async (e: React.FormEvent) => {
     e.preventDefault();
     const cid = localStorage.getItem('customer_id') || localStorage.getItem('id');
@@ -224,7 +234,7 @@ export default function CustomerOrdersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer_id: cid,
-          shop_id: selectedOrderForReport?.print_shop?.id || selectedOrderForReport?.shop_id,
+          shop_id: selectedOrderForReport?.shop?.id || selectedOrderForReport?.print_shop?.id || selectedOrderForReport?.shop_id,
           order_id: selectedOrderForReport?.id,
           description: reportDescription,
           image_url: reportImageUrl || null,
@@ -237,6 +247,7 @@ export default function CustomerOrdersPage() {
         setIsReportModalOpen(false);
         setReportDescription('');
         setReportImageUrl('');
+        if (cid) fetchOrdersData(cid);
       } else {
         showToast(data.error || 'ไม่สามารถส่งคำขอได้');
       }
@@ -248,25 +259,14 @@ export default function CustomerOrdersPage() {
     }
   };
 
-  // ฟังก์ชันตรวจว่าออเดอร์นี้สั่งมาเกิน 10 นาทีหรือยัง
-const isOrderExpired = (orderDateStr: string) => {
-  if (!orderDateStr) return false;
-  const orderTime = new Date(orderDateStr).getTime();
-  const now = Date.now();
-  const TEN_MINUTES_MS = 10 * 60 * 1000;
-  return now - orderTime > TEN_MINUTES_MS;
-};
-
-
-
   return (
-    <div className="min-h-screen bg-[#F9FAFB] font-sans pb-12 relative">
+    <div className="min-h-screen bg-[#F9FAFB] font-sans pb-12 relative text-slate-800">
       <NavBar 
         cartCount={cartCount}
         onOpenCart={() => router.push('/customer/cart')}
       />
 
-      {/* Toast Notification */}
+      {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed top-20 right-5 z-50 bg-[#0F2942] text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs animate-in slide-in-from-top-3">
           <Check className="w-4 h-4 text-emerald-400" />
@@ -281,52 +281,26 @@ const isOrderExpired = (orderDateStr: string) => {
           <span className="text-xs text-slate-400 font-medium">เรียงตามเวลาล่าสุด</span>
         </div>
 
-        {/* Tab Filter กรองสถานะ */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          {FILTER_TABS.map((tab) => {
-            const isActive = selectedStatus === tab;
-            const count = tab === 'ทั้งหมด' 
-              ? orders.length 
-              : orders.filter((o) => getOrderState(o) === tab).length;
-
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setSelectedStatus(tab)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
-                  isActive
-                    ? 'bg-[#12356b] text-white shadow-xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-                }`}
-              >
-                <span>{tab}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                    isActive
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        {/* แถบตัวกรองสถานะดึงมาจาก Dashboard */}
+        <DashboardStatusFilter
+          filters={FILTER_TABS}
+          selectedFilter={selectedStatus}
+          counts={statusCounts}
+          onSelectFilter={setSelectedStatus}
+        />
 
         {loading ? (
-          <div className="py-20 text-center text-xs text-slate-400 space-y-2">
-            <Loader2 className="w-6 h-6 text-blue-600 animate-spin mx-auto" />
+          <div className="py-24 text-center text-xs text-slate-400 space-y-2">
+            <Loader2 className="w-7 h-7 text-blue-600 animate-spin mx-auto" />
             <p>กำลังโหลดประวัติคำสั่งซื้อ...</p>
           </div>
         ) : error ? (
           <div className="p-4 bg-rose-50 border border-rose-200 text-rose-600 rounded-2xl text-center text-xs">
             {error}
           </div>
-        ) : filteredAndSortedOrders.length === 0 ? (
-          <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-3">
-            <Package className="w-10 h-10 text-slate-400 mx-auto" />
+        ) : filteredOrders.length === 0 ? (
+          <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center space-y-3 shadow-2xs">
+            <Package className="w-12 h-12 text-slate-300 mx-auto" />
             <p className="text-sm font-bold text-slate-700">
               {selectedStatus === 'ทั้งหมด' 
                 ? 'ยังไม่มีประวัติคำสั่งซื้อ' 
@@ -334,293 +308,387 @@ const isOrderExpired = (orderDateStr: string) => {
             </p>
             <p className="text-xs text-slate-400">
               {selectedStatus === 'ทั้งหมด'
-                ? 'คุณยังไม่ได้ส่งไฟล์พิมพ์งานกับร้านค้าใดๆ ในขณะนี้'
-                : 'ลองเลือกแท็บสถานะอื่น หรือเลือกดูรายการทั้งหมด'}
+                ? 'คุณยังไม่มีรายการสั่งพิมพ์งานในขณะนี้ สามารถค้นหาร้านค้าเพื่อสั่งพิมพ์ได้ทันที'
+                : 'ลองเลือกดูสถานะอื่น หรือเลือกดูรายการทั้งหมด'}
             </p>
             {selectedStatus === 'ทั้งหมด' ? (
               <button
                 type="button"
                 onClick={() => router.push('/customer')}
-                className="mt-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition"
+                className="mt-3 inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer shadow-xs"
               >
-                เลือกดูร้านค้า
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>ค้นหาร้านพิมพ์งาน</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setSelectedStatus('ทั้งหมด')}
-                className="mt-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-200 transition"
+                className="mt-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-200 transition cursor-pointer"
               >
-                ดูทั้งหมด
+                ดูรายการทั้งหมด
               </button>
             )}
           </div>
         ) : (
-          filteredAndSortedOrders.map((order) => {
-            let currentStatus = getOrderState(order);
-            
-            // 🌟 ถ้าสถานะเป็น "รอการชำระเงิน" แต่เวลาเกิน 10 นาทีแล้ว ให้ตัดเป็น "ยกเลิกการพิมพ์" ทันที
-            const expired = isOrderExpired(order.order_date);
-            if (currentStatus === 'รอการชำระเงิน' && expired) {
-              currentStatus = 'ยกเลิกการพิมพ์';
-            }
+          <div className="space-y-3">
+            {filteredOrders.map((order) => {
+              const isExpanded = expandedOrderId === order.id;
+              let state = getOrderState(order);
+              const expired = isOrderExpired(order.order_date);
 
-            const items = order.print_order_item || order.order_items || order.items || [];
-            const isExpanded = !!expandedOrders[order.id];
+              const isPendingPayment = state === 'รอการชำระเงิน' && !expired;
+              const isPending = state === 'รอการดำเนินงาน';
+              const isPrinting = state === 'กำลังพิมพ์';
+              const isReady = state === 'พิมพ์เสร็จสิ้น';
+              const isReceived = state === 'รับงานแล้ว' || state === 'รายการเสร็จสิ้น';
+              const isCanceled = state === 'ยกเลิกการพิมพ์';
 
-            // ปุ่มจ่ายเงินจะแสดงได้ก็ต่อเมื่อ "รอการชำระเงิน" และ "ยังไม่หมดเวลา (< 10 นาที)" เท่านั้น
-            const isPendingPayment = currentStatus === 'รอการชำระเงิน' && !expired;
+              const stateBadgeStyle =
+                isPendingPayment
+                  ? 'bg-amber-50 text-amber-700 border-amber-200/80'
+                  : isReady
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+                  : isReceived
+                  ? 'bg-slate-100 text-slate-600 border-slate-200'
+                  : isCanceled
+                  ? 'bg-rose-50 text-rose-600 border-rose-200/80'
+                  : isPrinting
+                  ? 'bg-blue-50 text-blue-700 border-blue-200/80'
+                  : 'bg-slate-50 text-slate-600 border-slate-200';
 
-            const isDone =
-              currentStatus === 'พิมพ์เสร็จสิ้น' ||
-              currentStatus === 'พร้อมรับเอกสาร' ||
-              currentStatus === 'รายการเสร็จสิ้น' ||
-              currentStatus === 'Completed';
+              // 🌟 วันที่และเวลาสั่งซื้อ (Order Date & Time) ที่เพิ่มเข้ามาเฉพาะในหน้านี้
+              const formattedOrderDate = order.order_date
+                ? new Date(order.order_date).toLocaleDateString('th-TH', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })
+                : '-';
 
-            const canChat =
-              currentStatus === 'กำลังพิมพ์' ||
-              currentStatus === 'In Progress' ||
-              isDone;
+              const formattedOrderTime = order.order_date
+                ? new Date(order.order_date).toLocaleTimeString('th-TH', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }) + ' น.'
+                : '';
 
-            const orderPrice = order.total_amount || order.total_price || 0;
+              // วันเวลานัดรับงาน
+              const formattedReceiveDate = order.receive_date
+                ? new Date(order.receive_date).toLocaleDateString('th-TH', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })
+                : '-';
 
-            return (
-              <div
-                key={order.id}
-                className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition space-y-4"
-              >
-                {/* Header การ์ดร้านค้าและสถานะ */}
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-slate-500 overflow-hidden border border-slate-200">
-                      {order.print_shop?.profile_image ? (
-                        <img
-                          src={order.print_shop.profile_image}
-                          alt={order.print_shop.shop_name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <Printer className="w-5 h-5 text-slate-400" />
+              const formattedReceiveTime = order.appointment_time
+                ? new Date(order.appointment_time).toLocaleTimeString('th-TH', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }) + ' น.'
+                : '';
+
+              const items = order.print_order_item || order.order_items || order.items || [];
+              const itemCategorySummary = (() => {
+                if (!items || items.length === 0) return 'เอกสาร x1 ชุด';
+                const categoryTotals: Record<string, number> = {};
+                items.forEach((it: any) => {
+                  const cat = it?.category || 'เอกสาร';
+                  const qty = Number(it?.quantity) || 1;
+                  categoryTotals[cat] = (categoryTotals[cat] || 0) + qty;
+                });
+                return Object.entries(categoryTotals)
+                  .map(([cat, totalQty]) => `${cat} x${totalQty} ชุด`)
+                  .join(', ');
+              })();
+
+              const orderPrice = Number(order.total_amount || order.total_price || 0);
+              const orderNumberStr = `#ORD-${order.order_no || order.id?.slice(0, 6) || '------'}`;
+              const shopId = order.shop?.id || order.print_shop?.id || order.shop_id;
+              const shopName = order.shop?.shop_name || order.print_shop?.shop_name || 'ร้านค้า';
+
+              return (
+                <div key={order.id} className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all overflow-hidden">
+                  
+                  {/* แถว 1: Header ร้านค้า + แชท + สถานะ */}
+                  <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="font-extrabold text-slate-900 text-sm sm:text-base tracking-tight shrink-0">
+                        {orderNumberStr}
+                      </span>
+                      <span className="text-slate-300">|</span>
+                      <div className="flex items-center gap-1.5 font-bold text-slate-800 text-sm sm:text-base truncate">
+                        <Store className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span className="truncate">{shopName}</span>
+                      </div>
+
+                      {!isCanceled && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!order?.id || !shopId) {
+                              showToast('ไม่พบข้อมูลร้านค้า');
+                              return;
+                            }
+                            router.push(`/customer/order/${shopId}/chat?order_id=${order.id}`);
+                          }}
+                          className="p-1 sm:px-2.5 sm:py-1 text-indigo-600 hover:bg-indigo-50 rounded-lg transition text-xs font-semibold flex items-center gap-1 cursor-pointer border border-indigo-100 shrink-0"
+                          title="เปิดแชทกับร้านนี้"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">แชท</span>
+                        </button>
                       )}
                     </div>
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-900">
-                        {order.print_shop?.shop_name || 'ร้านพิมพ์เอกสาร'}
-                      </h3>
-                      <p className="text-[11px] text-slate-400">
-                        สั่งซื้อเมื่อ:{' '}
-                        {order.order_date
-                          ? new Date(order.order_date).toLocaleString('th-TH')
-                          : '-'}
-                      </p>
+
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border shrink-0 ${stateBadgeStyle}`}>
+                      {state}
+                    </span>
+                  </div>
+
+                  {/* แถว 2: ข้อมูลวันเวลาสั่งซื้อ (เพิ่มใหม่) + วันเวลานัดรับ (Pill) */}
+                  <div className="p-4 sm:px-5 space-y-3">
+                    <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+                      
+                      {/* 🌟 วันที่และเวลาสั่งซื้อที่เพิ่มเข้ามาในหน้านี้ */}
+                      <div className="flex items-center gap-1.5 text-slate-500">
+                        <CalendarDays className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>สั่งซื้อเมื่อ:</span>
+                        <span className="font-medium text-slate-700">{formattedOrderDate}</span>
+                        {formattedOrderTime && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span className="font-medium text-slate-700">{formattedOrderTime}</span>
+                          </>
+                        )}
+                      </div>
+
+                      <span className="text-slate-200 hidden sm:inline">|</span>
+
+                      {/* วันเวลานัดรับแบบ Pill เหมือนแดชบอร์ด */}
+                      <div className="inline-flex items-center gap-2 bg-slate-50 text-slate-600 px-3 py-1 rounded-full border border-slate-200/80 text-[11px] sm:text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>นัดรับ: <strong className="text-slate-800 font-semibold">{formattedReceiveDate}</strong></span>
+                        </div>
+
+                        {formattedReceiveTime && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="text-slate-800 font-semibold">{formattedReceiveTime}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* แถว 3: ปุ่มรายละเอียด + ประเภทงานพิมพ์ vs ปุ่ม Actions + ยอดสุทธิขวาสุด */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1 border-t border-slate-100/80">
+                      
+                      {/* ฝั่งซ้าย: ปุ่มรายละเอียด และ ประเภทงานพิมพ์ตัวบาง */}
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                          className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer border ${
+                            isExpanded
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{isExpanded ? 'ซ่อนรายละเอียด' : 'รายละเอียด'}</span>
+                          {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </button>
+
+                        <span className="text-[11px] font-normal text-slate-500">
+                          {itemCategorySummary}
+                        </span>
+                      </div>
+
+                      {/* ฝั่งขวา: ปุ่ม Action ต่างๆ และ ยอดชำระสุทธิขวาสุด */}
+                      <div className="flex items-center justify-between md:justify-end gap-3.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {isPendingPayment && (
+                            <button
+                              type="button"
+                              onClick={() => router.push(`/customer/order/payment/${order.id}?totalPrice=${orderPrice}`)}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1 transition shadow-xs cursor-pointer"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" />
+                              <span>ชำระเงิน</span>
+                            </button>
+                          )}
+
+                          {(isPending || isPendingPayment) && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmModal({
+                                isOpen: true,
+                                type: 'cancel',
+                                orderId: order.id,
+                                orderNo: orderNumberStr,
+                              })}
+                              className="px-2.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>ยกเลิก</span>
+                            </button>
+                          )}
+
+                          {isReady && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmModal({
+                                isOpen: true,
+                                type: 'received',
+                                orderId: order.id,
+                                orderNo: orderNumberStr,
+                              })}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1 transition shadow-xs cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>ยืนยันรับของ</span>
+                            </button>
+                          )}
+
+                          {isReceived && (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => router.push(`/customer/review?order_id=${order.id}&shop_id=${shopId}`)}
+                                className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
+                              >
+                                <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                <span>รีวิว</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedOrderForReport(order);
+                                  setIsReportModalOpen(true);
+                                }}
+                                className="px-2.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
+                              >
+                                <AlertTriangle className="w-3 h-3" />
+                                <span>ขอคืนเงิน</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ยอดชำระสุทธิ วางไว้ขวาสุด */}
+                        <div className="text-right pl-3.5 border-l border-slate-200/80 shrink-0">
+                          <span className="text-[10px] text-slate-400 block font-medium">ยอดชำระสุทธิ</span>
+                          <span className="text-base font-extrabold text-blue-600">
+                            ฿{orderPrice.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+
                     </div>
                   </div>
 
-                  <span
-                    className={`text-xs px-3 py-1 rounded-full font-semibold border ${getStatusBadgeStyle(
-                      currentStatus
-                    )}`}
-                  >
-                    ● {currentStatus}
-                  </span>
-                </div>
-
-                {/* Dropdown ส่วนรายการพิมพ์ */}
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleDropdown(order.id)}
-                    className="w-full flex items-center justify-between py-1 text-left text-xs font-bold text-slate-700 hover:text-blue-600 transition cursor-pointer"
-                  >
-                    <span>รายการพิมพ์ ({items.length} รายการ)</span>
-                    <div className="flex items-center gap-1 text-[11px] font-normal text-slate-400">
-                      <span>{isExpanded ? 'ย่อรายการ' : 'ดูรายละเอียด'}</span>
-                      <ChevronDown
-                        className={`w-4 h-4 text-slate-400 transform transition-transform duration-200 ${
-                          isExpanded ? 'rotate-180 text-blue-600' : ''
-                        }`}
-                      />
-                    </div>
-                  </button>
-
+                  {/* Accordion กางแสดงสเปกและราคา แบบเดียวกับใน Dashboard */}
                   {isExpanded && (
-                    <div className="bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-100 transition-all">
-                      {items.length === 0 ? (
-                        <p className="text-xs text-slate-400">ไม่มีรายละเอียดสินค้า</p>
-                      ) : (
-                        items.map((item, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-xs">
-                            <span className="text-slate-600">
-                              • {item.category || 'งานพิมพ์'}{' '}
-                              {item.selected_size ? `(${item.selected_size})` : ''}{' '}
-                              <span className="text-slate-400">(x{item.quantity})</span>
-                            </span>
-                            <span className="font-semibold text-slate-800">
-                              ฿{Number(item.subtotal || item.unit_price * item.quantity).toFixed(2)}
-                            </span>
+                    <div className="border-t border-slate-100 bg-[#F9FAFB] p-4 text-xs space-y-3">
+                      <div className="space-y-2">
+                        {items.map((item: any, idx: number) => {
+                          const pageCount = Number(item?.page_count) || 1;
+                          const unitPrice = Number(item?.unit_price) || 0;
+                          const quantity = Number(item?.quantity) || 1;
+                          const itemSubtotal = Number(item?.subtotal) || unitPrice * pageCount * quantity;
+
+                          const specs = item?.describe
+                            ? item.describe.split('|').map((s: string) => s.trim()).filter(Boolean)
+                            : [];
+
+                          return (
+                            <div key={item?.id || idx} className="bg-white p-3 rounded-xl border border-slate-200/70 space-y-1.5">
+                              <div className="flex justify-between items-start">
+                                <span className="font-bold text-slate-800 text-xs">
+                                  {idx + 1}. {item?.category || 'งานพิมพ์เอกสาร'}
+                                </span>
+                                <span className="font-bold text-slate-900">
+                                  ฿{itemSubtotal.toFixed(2)}
+                                </span>
+                              </div>
+
+                              {specs.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {specs.map((spec: string, sIdx: number) => (
+                                    <span key={sIdx} className="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded-md font-medium">
+                                      {spec}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div className="text-[11px] text-slate-400 flex justify-between pt-0.5">
+                                <span>{pageCount} หน้า × ฿{unitPrice.toFixed(2)}/หน้า</span>
+                                <span className="font-medium text-slate-600">รวม {quantity} ชุด</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* สรุปราคาท้ายใบเสร็จ */}
+                      <div className="bg-white p-3 rounded-xl border border-slate-200/70 space-y-1 text-slate-600 text-[11px]">
+                        <div className="flex justify-between">
+                          <span>ค่างานพิมพ์รวม</span>
+                          <span className="font-semibold text-slate-800">
+                            ฿{Number(order?.subtotal_price || order?.total_price || 0).toFixed(2)}
+                          </span>
+                        </div>
+
+                        {Number(order?.small_order_fee) > 0 && (
+                          <div className="flex justify-between text-orange-600">
+                            <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (&lt;50 บาท)</span>
+                            <span className="font-semibold">+฿{Number(order.small_order_fee).toFixed(2)}</span>
                           </div>
-                        ))
-                      )}
-                      {order.description && (
-                        <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-200/60">
-                          หมายเหตุ: {order.description}
-                        </p>
-                      )}
+                        )}
+
+                        <div className="flex justify-between items-center text-xs font-bold text-slate-900 pt-1.5 border-t border-slate-100">
+                          <span className="text-blue-700">ยอดชำระสุทธิ</span>
+                          <span className="text-sm font-extrabold text-blue-700">
+                            ฿{orderPrice.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   )}
+
                 </div>
-
-                {/* Footer เวลานัดรับ ยอดรวม และปุ่ม Action */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-slate-100 text-xs gap-3">
-                  <span className="text-slate-500 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>นัดรับ:{' '}</span>
-                    {order.receive_date
-                      ? new Date(order.receive_date).toLocaleDateString('th-TH')
-                      : 'ไม่ระบุ'}
-                    {order.appointment_time && (
-                      <span className="text-slate-400">
-                        ({new Date(order.appointment_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.)
-                      </span>
-                    )}
-                  </span>
-
-                  <div className="flex items-center gap-2.5 self-end sm:self-auto flex-wrap">
-                    {/* 🌟 แสดงปุ่มชำระเงินเฉพาะเมื่อ "รอการชำระเงิน" และ "ยังไม่เกิน 10 นาที" เท่านั้น */}
-                    {isPendingPayment && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          router.push(`/customer/order/payment/${order.id}?totalPrice=${orderPrice}`);
-                        }}
-                        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-                      >
-                        <CreditCard className="w-3.5 h-3.5" />
-                        <span>ชำระเงิน</span>
-                      </button>
-                    )}
-
-                    {/* ปุ่มขอคืนเงิน (แสดงเมื่อพิมพ์เสร็จสิ้น หรือ รายการเสร็จสิ้น) */}
-                    {isDone && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedOrderForReport(order);
-                          setIsReportModalOpen(true);
-                        }}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
-                        <span>ขอคืนเงิน</span>
-                      </button>
-                    )}
-
-                    {/* ปุ่มให้คะแนนร้านค้า (สีครีมขอบเหลืองทอง) */}
-                    {isDone && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          router.push(`/customer/orders/${order.id}/review`);
-                        }}
-                        className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
-                      >
-                        <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                        <span>ให้คะแนนร้านค้า</span>
-                      </button>
-                    )}
-
-                    <div className="flex items-center gap-1 px-1">
-                      <span className="text-slate-500">ยอดรวมทั้งสิ้น:</span>
-                      <span className="text-base font-extrabold text-blue-600">
-                        ฿{Number(orderPrice).toFixed(2)}
-                      </span>
-                    </div>
-
-                    {/* ปุ่มแชตกับร้านค้า */}
-                    {canChat && (
-                      <Link
-                        href={`/customer/order/${order.id}/chat`}
-                        className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer shadow-xs"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 text-white" />
-                        <span>แชตกับร้านค้า</span>
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </main>
 
-      {/* Modal ขอคืนเงิน / ร้องเรียนปัญหา */}
-      {isReportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-slate-100">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-rose-500" />
-                <span>แจ้งขอคืนเงิน / ร้องเรียนปัญหา</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsReportModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
+      {/* Confirmation Modal */}
+      <ConfirmActionModal
+        isOpen={confirmModal.isOpen}
+        type={confirmModal.type}
+        orderNo={confirmModal.orderNo}
+        onClose={() => setConfirmModal({ isOpen: false, type: 'cancel', orderId: '', orderNo: '' })}
+        onConfirm={handleExecuteAction}
+      />
 
-            <form onSubmit={handleSubmitReport} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700 block">
-                  ระบุรายละเอียดปัญหาที่พบ
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={reportDescription}
-                  onChange={(e) => setReportDescription(e.target.value)}
-                  placeholder="เช่น งานพิมพ์สีเพี้ยน ปริมาณหน้าไม่ครบถ้วน หรือร้านค้าพิมพ์ผิดสเปก..."
-                  className="w-full p-3 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700 block">
-                  แนบลิงก์รูปภาพหลักฐาน (ถ้ามี)
-                </label>
-                <input
-                  type="url"
-                  value={reportImageUrl}
-                  onChange={(e) => setReportImageUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full p-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsReportModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold rounded-xl transition cursor-pointer"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingReport}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {submittingReport && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>ส่งข้อร้องเรียน</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Modal ร้องเรียน / ขอคืนเงิน */}
+      <ReportIssueModal
+        isOpen={isReportModalOpen}
+        description={reportDescription}
+        imageUrl={reportImageUrl}
+        isSubmitting={submittingReport}
+        onDescriptionChange={setReportDescription}
+        onImageUrlChange={setReportImageUrl}
+        onClose={() => setIsReportModalOpen(false)}
+        onSubmit={handleSubmitReport}
+      />
     </div>
   );
 }
