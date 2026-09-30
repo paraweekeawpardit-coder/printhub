@@ -58,16 +58,29 @@ export default function CustomerHomePage() {
 
       const res = await fetch(`http://localhost:5000/api/customer/cart?customer_id=${customerId}`);
       const json = await res.json();
+      
       if (json.success && json.data) {
-        const items =
-          json.data.cart_item ||
-          json.data.cart_items ||
-          json.data.items ||
-          (Array.isArray(json.data) ? json.data : []);
+        // 🌟 ดึงรายการสินค้าทั้งหมด ไม่ว่าจะส่งมาเป็น shops หรือ cart_items
+        let items: any[] = [];
+
+        if (Array.isArray(json.data.cart_items)) {
+          items = json.data.cart_items;
+        } else if (Array.isArray(json.data.shops)) {
+          // รวมสินค้าจากทุกร้านค้าในตะกร้า
+          items = json.data.shops.flatMap((s: any) => s.items || []);
+        } else if (Array.isArray(json.data.cart_item)) {
+          items = json.data.cart_item;
+        } else if (Array.isArray(json.data)) {
+          items = json.data;
+        }
+
         setCartItems(items);
+      } else {
+        setCartItems([]);
       }
     } catch (err) {
       console.error("Fetch home cart error:", err);
+      setCartItems([]);
     }
   }, []);
 

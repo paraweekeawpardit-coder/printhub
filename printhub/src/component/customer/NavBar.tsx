@@ -12,6 +12,7 @@ import {
   Settings, 
   LogOut,
   LayoutDashboard,
+  MessageCircle,
   Bell
 } from "lucide-react";
 import NotificationBell from "@/component/NotificationBell";
@@ -93,9 +94,9 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
     router.push("/auth");
   };
 
-  return (
-    <nav className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur shadow-sm">
-      <div className="mx-auto max-w-6xl h-16 flex items-center justify-between gap-2 px-4 sm:px-6">
+ return (
+    <nav className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur shadow-xs">
+      <div className="mx-auto max-w-6xl h-16 flex items-center justify-between gap-2 px-4">
         
         {/* โลโก้ PrintHub */}
         <Link
@@ -110,19 +111,19 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
           </span>
         </Link>
 
-        {/* เมนูหลักตรงกลาง (หน้าแรก / คำสั่งซื้อ) */}
-        <div className="flex items-center gap-1.5 text-sm font-medium">
+        {/* เมนูหลักตรงกลาง (หน้าแรก / คำสั่งซื้อของฉัน / แชท) */}
+        <div className="flex items-center gap-1 text-sm font-medium">
           {/* หน้าแรก */}
           <Link
             href="/customer"
             title="หน้าแรก"
-            className={`flex items-center gap-2 h-10 px-3.5 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
+            className={`flex items-center gap-2 h-10 px-3 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
               isHomeActive
                 ? "bg-[#0F2942] text-white"
                 : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
             }`}
           >
-            <Home size={16} />
+            <Home size={15} />
             <span className={isHomeActive ? "inline" : "hidden md:inline"}>
               หน้าแรก
             </span>
@@ -132,21 +133,37 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
           <Link
             href="/customer/orders"
             title="คำสั่งซื้อของฉัน"
-            className={`flex items-center gap-2 h-10 px-3.5 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
+            className={`flex items-center gap-2 h-10 px-3 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
               isOrdersActive
                 ? "bg-[#0F2942] text-white"
                 : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
             }`}
           >
-            <ClipboardList size={16} />
+            <ClipboardList size={15} />
             <span className={isOrdersActive ? "inline" : "hidden md:inline"}>
               คำสั่งซื้อของฉัน
             </span>
           </Link>
+
+          {/* แชท (ตำแหน่งเดิม) */}
+          {/* <Link
+            href="/customer/chat"
+            title="แชท"
+            className={`flex items-center gap-2 h-10 px-3 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
+              isChatActive
+                ? "bg-[#0F2942] text-white"
+                : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
+            }`}
+          >
+            <MessageCircle size={15} />
+            <span className={isChatActive ? "inline" : "hidden md:inline"}>
+              แชท
+            </span>
+          </Link> */}
         </div>
 
-        {/* ฝั่งขวา: กระดิ่งแจ้งเตือน, ตะกร้าสินค้า, โปรไฟล์, แดชบอร์ด, ปุ่มออกจากระบบ */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* ฝั่งขวา: การแจ้งเตือน, ตะกร้า, แดชบอร์ด (ข้างซ้ายรูปโปรไฟล์), รูปโปรไฟล์, ออกจากระบบ */}
+        <div className="flex items-center gap-2">
           
           {/* กระดิ่งแจ้งเตือนสำหรับลูกค้า */}
           {customerId ? (
@@ -155,9 +172,9 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             <button
               type="button"
               title="การแจ้งเตือน"
-              className="relative flex items-center justify-center w-10 h-10 rounded-full text-slate-400 hover:text-[#0F2942] hover:bg-slate-100 transition-colors focus:outline-none cursor-pointer"
+              className="relative flex items-center justify-center w-9 h-9 rounded-full text-slate-500 hover:text-[#0F2942] hover:bg-slate-100 transition-colors focus:outline-none cursor-pointer"
             >
-              <Bell size={19} />
+              <Bell size={18} />
             </button>
           )}
 
@@ -166,57 +183,62 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             type="button"
             onClick={onOpenCart || (() => router.push("/customer/cart"))}
             title="ตะกร้าสินค้า"
-            className="relative flex items-center justify-center w-10 h-10 rounded-full text-slate-600 hover:text-[#0F2942] hover:bg-slate-100 transition-colors focus:outline-none cursor-pointer"
+            className="relative flex items-center justify-center w-9 h-9 rounded-full text-slate-500 hover:text-[#0F2942] hover:bg-slate-100 transition-colors focus:outline-none cursor-pointer"
           >
-            <ShoppingBag size={19} />
+            <ShoppingBag size={18} />
             {cartCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[20px] h-5 px-1 bg-[#0F2942] text-white text-[11px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-[#0F2942] text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
                 {cartCount > 99 ? "99+" : cartCount}
               </span>
             )}
           </button>
 
-          {/* โปรไฟล์ผู้ใช้ */}
-          <Link
-            href="/customer/setting"
-            title="ตั้งค่าบัญชี"
-            className="flex items-center gap-2 pr-1 cursor-pointer focus:outline-none group"
-          >
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative shadow-xs">
-              <User size={18} />
-              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-md">
-                <Settings 
-                  size={13} 
-                  className={isSettingActive ? "text-[#0F2942]" : "text-slate-500 group-hover:text-[#0F2942]"} 
-                />
-              </div>
-            </div>
-          </Link>
-
-          {/* แดชบอร์ด */}
+          {/* แดชบอร์ด (ย้ายมาอยู่ข้างซ้ายของรูปโปรไฟล์) */}
           <Link
             href="/customer/dashboard"
             title="แดชบอร์ด"
-            className={`flex items-center gap-2 h-10 px-3.5 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
+            className={`flex items-center gap-2 h-10 px-3 md:px-4 rounded-full text-sm font-medium transition-colors cursor-pointer focus:outline-none ${
               isDashboardActive
                 ? "bg-[#0F2942] text-white"
                 : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
             }`}
           >
-            <LayoutDashboard size={16} />
+            <LayoutDashboard size={15} />
             <span className={isDashboardActive ? "inline" : "hidden md:inline"}>
               แดชบอร์ด
             </span>
           </Link>
 
-          {/* ปุ่มออกจากระบบ */}
+          {/* Setting / Profile Button */}
+          <Link
+            href="/customer/setting"
+            title="ตั้งค่าบัญชี"
+            className="flex items-center gap-2.5 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none"
+          >
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative shrink-0">
+              <User size={16} />
+              <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-xs">
+                <Settings
+                  size={12}
+                  className={
+                    isSettingActive ? "text-[#0F2942]" : "text-slate-500"
+                  }
+                />
+              </div>
+            </div>
+          </Link>
+
+          {/* เส้นคั่นแบ่งสัดส่วน */}
+          <div className="h-5 w-[1px] bg-slate-200 my-auto" />
+
+          {/* ปุ่มออกจากระบบ (Logout Button) */}
           <button
             type="button"
             onClick={handleLogout}
             title="ออกจากระบบ"
-            className="flex items-center gap-1.5 h-9 px-3 rounded-full text-xs font-semibold text-rose-600 bg-rose-50/80 hover:bg-rose-100 transition-colors focus:outline-none cursor-pointer"
+            className="flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 transition-colors cursor-pointer focus:outline-none"
           >
-            <LogOut size={14} />
+            <LogOut size={15} />
             <span className="hidden sm:inline">ออกจากระบบ</span>
           </button>
         </div>
