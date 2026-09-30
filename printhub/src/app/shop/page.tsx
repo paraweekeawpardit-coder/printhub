@@ -43,12 +43,12 @@ export default function ShopPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [shopId, setShopId] = useState<string>("");
+  const [isSuspended, setIsSuspended] = useState<boolean>(false);
 
   const [activeView, setActiveView] = useState<
     "orders" | "financial" | "reviews" | null
   >(null);
 
-  // Financial Data State (เพิ่ม financialTrend สำหรับกราฟการเงิน)
   const [financialData, setFinancialData] = useState<{
     totalGross: number;
     totalFee: number;
@@ -130,6 +130,7 @@ export default function ShopPage() {
           financeRes,
           breakdownRes,
           reviewRes,
+          profileRes,
         ] = await Promise.all([
           axios
             .get("http://localhost:5000/shop/numWork", { headers })
@@ -158,7 +159,21 @@ export default function ShopPage() {
               headers,
             })
             .catch(() => ({ data: null })),
+          axios
+            .get(`http://localhost:5000/api/shop/profile/${shopId}`, { headers })
+            .catch(() =>
+              axios
+                .get(`http://localhost:5000/shop/getProfile/${shopId}`, { headers })
+                .catch(() => ({ data: null }))
+            ),
         ]);
+
+        const profData = profileRes?.data?.data || profileRes?.data;
+        if (profData && profData.status === "suspended") {
+          setIsSuspended(true);
+        } else {
+          setIsSuspended(false);
+        }
 
         setNum(`${numRes.data.numWork ?? 0} รายการ`);
         setScore(`${Number(scoreRes.data.score ?? 0).toFixed(1)} / 5.0`);
@@ -212,6 +227,10 @@ export default function ShopPage() {
   }, [shopId, fetchDashboardData]);
 
   const handleOrderClick = (orderId: string) => {
+    if (isSuspended) {
+      console.warn("[Action Blocked] Account is suspended. Cannot view order details.");
+      return;
+    }
     router.push(`/shop/detail/${orderId}`);
   };
 
@@ -332,6 +351,7 @@ export default function ShopPage() {
                   order={item}
                   onClick={() => handleOrderClick(item.id)}
                   onUpdateStatus={handleStatusUpdated}
+                  disabled={isSuspended}
                 />
               ))
             ) : (

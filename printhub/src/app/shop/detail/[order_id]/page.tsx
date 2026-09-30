@@ -169,6 +169,17 @@ export default function OrderDetailPage() {
     );
   }
 
+  // รวม Logic ประกาศตัวแปรสลิปไว้จุดเดียว (ป้องกันชื่อซ้ำ)
+  const slipUrl =
+    order.slip_url ||
+    order.payment_slip ||
+    order.slipUrl ||
+    order.slip_image ||
+    order.slip ||
+    null;
+
+  const allFiles = order.files || [];
+
   const isConfirmed =
     order.status_state !== "รอการดำเนินงาน" &&
     order.status_state !== "ยกเลิกการพิมพ์";
@@ -179,9 +190,6 @@ export default function OrderDetailPage() {
     พิมพ์เสร็จสิ้น: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
     ยกเลิกการพิมพ์: "bg-red-50 text-red-700 ring-1 ring-red-200",
   };
-
-  const allFiles = order.files || [];
-  const slipUrl = order.payment_slip || order.slip_url || order.slip;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">
@@ -490,7 +498,6 @@ export default function OrderDetailPage() {
                 <button
                   disabled={!isConfirmed}
                   onClick={() => {
-                    // ส่ง shopId ไปที่ Path และส่ง order.id / order_no ไปทาง Query Parameter
                     router.push(`/shop/order/${shopId}/chat?order_id=${order.id}`);
                   }}
                   className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors ${
@@ -501,7 +508,7 @@ export default function OrderDetailPage() {
                 >
                   <MessageSquare size={15} />
                   {isConfirmed ? "แชทติดต่อลูกค้า" : "แชท (ยืนยันออเดอร์ก่อน)"}
-              </button>
+                </button>
               </div>
             </div>
 

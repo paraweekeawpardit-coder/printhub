@@ -1,7 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Landmark, User, Hash, Check, Copy, Loader2, Lock } from "lucide-react";
+import {
+  Pencil,
+  Landmark,
+  User,
+  Hash,
+  Check,
+  Copy,
+  Loader2,
+  Lock,
+  AlertTriangle,
+  X,
+  ShieldAlert,
+  Clock,
+} from "lucide-react";
 
 type Props = {
   isVerified: boolean;
@@ -15,6 +28,8 @@ type Props = {
   saving: boolean;
   hasData: boolean;
   isEditing: boolean;
+  isPending?: boolean;
+  pendingCreatedAt?: string; // เพิ่ม Prop สำหรับรับวันเวลาที่ยื่นคำขอ
   onToggleEdit: () => void;
 };
 
@@ -30,9 +45,36 @@ export default function ShopBankTab({
   saving,
   hasData,
   isEditing,
+  isPending = false,
+  pendingCreatedAt,
   onToggleEdit,
 }: Props) {
   const [copied, setCopied] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  // ฟังก์ชันแปลงรูปแบบวันเวลาเป็นภาษาไทย (Timezone: Asia/Bangkok)
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr || dateStr === "-") return "";
+
+    const safeDateStr =
+      typeof dateStr === "string" && !dateStr.endsWith("Z") && !dateStr.includes("+")
+        ? `${dateStr}Z`
+        : dateStr;
+
+    const date = new Date(safeDateStr);
+    if (isNaN(date.getTime())) return "";
+
+    return date.toLocaleDateString("th-TH", {
+      timeZone: "Asia/Bangkok",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  };
 
   const handleCopy = async () => {
     if (!accountNumber) return;
@@ -41,18 +83,64 @@ export default function ShopBankTab({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      console.log(err)
+      console.error("Copy failed:", err);
     }
   };
 
+  // ตรวจสอบข้อมูลก่อนเปิด Modal
+  const handlePreSave = () => {
+    if (!bankName.trim() || !accountName.trim() || !accountNumber.trim()) {
+      const msg = "กรุณากรอกข้อมูลบัญชีธนาคารให้ครบทุกช่อง";
+      setErrorMessage(msg);
+      console.warn("Validation Error:", msg);
+      return;
+    }
+
+    setErrorMessage("");
+    setShowConfirmModal(true);
+  };
+
+  // กดยืนยันใน Modal
+  const handleConfirmSave = () => {
+    console.log("Submitting bank detail changes...", {
+      bankName,
+      accountName,
+      accountNumber,
+    });
+    setShowConfirmModal(false);
+    onSave();
+  };
+
   return (
-    <div className="relative">
+    <div className="relative space-y-4">
+      {/* Banner แจ้งเตือนเมื่อมีคำขอค้างอยู่ */}
+      {isPending && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800 space-y-1">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 font-bold text-amber-900">
+              <ShieldAlert size={18} className="shrink-0 text-amber-600" />
+              <span>กำลังอยู่ระหว่างรออนุมัติ</span>
+            </div>
+            {pendingCreatedAt && (
+              <div className="flex items-center gap-1 rounded-full bg-amber-100/80 px-2.5 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200/60">
+                <Clock size={12} className="text-amber-700" />
+                <span>ยื่นเมื่อ: {formatDate(pendingCreatedAt)} น.</span>
+              </div>
+            )}
+          </div>
+          <p className="text-amber-800/90 leading-relaxed pl-6.5">
+            คุณได้ยื่นคำขอเปลี่ยนแปลงข้อมูลบัญชีธนาคารเรียบร้อยแล้ว ขณะนี้กำลังรอผู้ดูแลระบบ (Admin) ตรวจสอบ
+            ท่านจะไม่สามารถแก้ไขข้อมูลได้ในขณะนี้
+          </p>
+        </div>
+      )}
+
       <div
         className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${
           !isVerified ? "pointer-events-none blur-[2px] select-none" : ""
         }`}
       >
-        {/* Default Mode: View mode */}
+        {/* View Mode */}
         {!isEditing ? (
           <div>
             <div className="flex items-center justify-between gap-4 p-6">
@@ -72,7 +160,12 @@ export default function ShopBankTab({
               <button
                 type="button"
                 onClick={onToggleEdit}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-[#0F2942] transition-colors hover:border-[#0F2942]"
+                disabled={isPending}
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold transition-colors ${
+                  isPending
+                    ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-60"
+                    : "border-slate-200 text-[#0F2942] hover:border-[#0F2942]"
+                }`}
               >
                 <Pencil size={14} /> แก้ไขข้อมูล
               </button>
@@ -105,12 +198,18 @@ export default function ShopBankTab({
             </div>
           </div>
         ) : (
-          /* Edit / Form mode */
+          /* Edit / Form Mode */
           <div>
             <div className="space-y-5 p-6">
               <p className="text-xs leading-relaxed text-slate-400">
                 ข้อมูลบัญชีนี้จะถูกใช้เป็นช่องทางหลักสำหรับการโอนเงินรายได้จากคำสั่งพิมพ์เข้าสู่ร้านค้าของคุณ
               </p>
+
+              {errorMessage && (
+                <div className="rounded-lg bg-red-50 p-3 text-xs font-medium text-red-600 border border-red-100">
+                  {errorMessage}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -125,7 +224,10 @@ export default function ShopBankTab({
                     <input
                       type="text"
                       value={bankName}
-                      onChange={(e) => setBankName(e.target.value)}
+                      onChange={(e) => {
+                        setBankName(e.target.value);
+                        if (errorMessage) setErrorMessage("");
+                      }}
                       placeholder="เช่น ธนาคารกสิกรไทย"
                       className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm text-[#0F2942] outline-none transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
                     />
@@ -144,7 +246,10 @@ export default function ShopBankTab({
                     <input
                       type="text"
                       value={accountName}
-                      onChange={(e) => setAccountName(e.target.value)}
+                      onChange={(e) => {
+                        setAccountName(e.target.value);
+                        if (errorMessage) setErrorMessage("");
+                      }}
                       placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"
                       className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm text-[#0F2942] outline-none transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
                     />
@@ -163,7 +268,10 @@ export default function ShopBankTab({
                     <input
                       type="text"
                       value={accountNumber}
-                      onChange={(e) => setAccountNumber(e.target.value)}
+                      onChange={(e) => {
+                        setAccountNumber(e.target.value);
+                        if (errorMessage) setErrorMessage("");
+                      }}
                       placeholder="xxx-x-xxxxx-x"
                       className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm tabular-nums text-[#0F2942] outline-none transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
                     />
@@ -182,7 +290,8 @@ export default function ShopBankTab({
                 ยกเลิก
               </button>
               <button
-                onClick={onSave}
+                type="button"
+                onClick={handlePreSave}
                 disabled={saving}
                 className="flex items-center gap-2 rounded-xl bg-[#0F2942] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#16385c] disabled:opacity-50"
               >
@@ -200,9 +309,78 @@ export default function ShopBankTab({
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
             <Lock size={20} />
           </div>
-          <p className="text-center px-6 text-sm font-semibold text-gray-900">
+          <p className="px-6 text-center text-sm font-semibold text-gray-900">
             คุณจะสามารถแก้ไขบัญชีธนาคารได้ เมื่อผ่านการยืนยันตัวตนจากผู้ดูแลระบบแล้ว
           </p>
+        </div>
+      )}
+
+      {/* Pop-up Modal ยืนยันก่อนบันทึก */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in zoom-in-95 duration-200">
+            <button
+              type="button"
+              onClick={() => setShowConfirmModal(false)}
+              className="absolute right-4 top-4 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 mb-4">
+                <AlertTriangle size={24} />
+              </div>
+
+              <h3 className="text-base font-bold text-[#0F2942]">
+                ยืนยันการเปลี่ยนแปลงบัญชีธนาคาร
+              </h3>
+              <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                กรุณาตรวจสอบข้อมูลบัญชีใหม่ของท่าน ข้อมูลนี้จะต้องผ่านการตรวจสอบจากผู้ดูแลระบบก่อนอนุมัติใช้งาน
+              </p>
+
+              {/* สรุปข้อมูลใหม่ */}
+              <div className="mt-4 w-full rounded-xl border border-slate-100 bg-slate-50 p-4 text-left space-y-2.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">ธนาคาร:</span>
+                  <span className="font-semibold text-[#0F2942]">{bankName}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">ชื่อบัญชี:</span>
+                  <span className="font-semibold text-[#0F2942]">{accountName}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">เลขที่บัญชี:</span>
+                  <span className="font-semibold text-[#2F6FED] tabular-nums">
+                    {accountNumber}
+                  </span>
+                </div>
+              </div>
+
+              <p className="mt-3 text-[11px] text-amber-700 text-left w-full">
+                * เมื่อส่งคำขอแล้ว จะไม่สามารถยื่นขอเปลี่ยนซ้ำได้จนกว่าผู้ดูแลระบบจะพิจารณาแล้วเสร็จ
+              </p>
+
+              <div className="mt-6 flex w-full gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  disabled={saving}
+                  className="flex-1 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  ย้อนกลับ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmSave}
+                  disabled={saving}
+                  className="flex-1 rounded-xl bg-[#0F2942] py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#16385c]"
+                >
+                  {saving ? "กำลังบันทึก..." : "ยืนยันส่งคำขอ"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

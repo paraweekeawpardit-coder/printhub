@@ -32,6 +32,7 @@ type Props = {
   onClick?: () => void;
   onUpdateStatus?: (orderId: string, newStatus: OrderStatus) => void;
   onChatClick?: (orderId: string) => void;
+  disabled?: boolean;
 };
 
 const STATUS_CONFIG: Record<
@@ -87,22 +88,21 @@ export default function OrderDetailCard({
   onClick,
   onUpdateStatus,
   onChatClick,
+  disabled = false,
 }: Props) {
   const router = useRouter();
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
 
-  // 👈 ฟังก์ชันนำทางไปหน้าแชทของออเดอร์นี้
   const handleGoToChat = (e: React.MouseEvent) => {
-    e.stopPropagation(); // ป้องกันไม่ให้คลิกทะลุไปโดน onClick หลักของการ์ด
+    e.stopPropagation();
+    if (disabled) return;
 
-    // ถ้ามีการส่ง custom callback มาจาก parent ให้รันด้วย
     if (onChatClick) {
       onChatClick(order.order_id);
       return;
     }
 
-    // กรณีทั่วไป: ดึง shop_id และเปิดหน้าแชทตามออเดอร์
     const shopId = localStorage.getItem("shop_id") || "";
     if (shopId && order.order_id) {
       router.push(`/shop/order/${shopId}/chat?order_id=${order.order_id}`);
@@ -113,8 +113,15 @@ export default function OrderDetailCard({
 
   return (
     <div
-      onClick={onClick}
-      className="group relative flex w-full cursor-pointer flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200"
+      onClick={() => {
+        if (disabled) return;
+        onClick?.();
+      }}
+      className={`group relative flex w-full flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 ${
+        disabled
+          ? "opacity-60 cursor-not-allowed"
+          : "cursor-pointer hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200"
+      }`}
     >
       <div>
         {/* Header: Status & Date */}
@@ -206,8 +213,13 @@ export default function OrderDetailCard({
         {/* Chat Action */}
         <button
           type="button"
-          onClick={handleGoToChat} // 👈 เปลี่ยนมาใช้ handleGoToChat ตรงนี้
-          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
+          disabled={disabled}
+          onClick={handleGoToChat}
+          className={`mt-3 inline-flex items-center gap-1.5 text-xs font-semibold ${
+            disabled
+              ? "text-slate-400 cursor-not-allowed"
+              : "text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
+          }`}
         >
           <MessageCircle size={14} />
           <span>แชทกับลูกค้า</span>
@@ -232,9 +244,11 @@ export default function OrderDetailCard({
         <div onClick={(e) => e.stopPropagation()}>
           <OrderActions
             status={order.status}
-            onUpdateStatus={(newStatus) =>
-              onUpdateStatus?.(order.order_id, newStatus)
-            }
+            disabled={disabled}
+            onUpdateStatus={(newStatus) => {
+              if (disabled) return;
+              onUpdateStatus?.(order.order_id, newStatus);
+            }}
           />
         </div>
       </div>
