@@ -433,7 +433,7 @@ export default function CustomerOrdersPage() {
                             }
                             router.push(`/customer/order/${shopId}/chat?order_id=${order.id}`);
                           }}
-                          className="p-1 sm:px-2.5 sm:py-1 text-indigo-600 hover:bg-indigo-50 rounded-lg transition text-xs font-semibold flex items-center gap-1 cursor-pointer border border-indigo-100 shrink-0"
+                          className="p-1 sm:px-2.5 sm:py-1 text-sky-700 bg-sky-50 hover:bg-sky-300 rounded-lg transition text-xs font-semibold flex items-center gap-1 cursor-pointer border border-sky-300 shrink-0"
                           title="เปิดแชทกับร้านนี้"
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
