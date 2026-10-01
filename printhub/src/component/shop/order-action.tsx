@@ -14,6 +14,8 @@ type Props = {
 
 export default function OrderActions({
   status,
+  orderId,
+  onStatusChange,
   onUpdateStatus,
   disabled,
 }: Props) {
@@ -42,7 +44,7 @@ export default function OrderActions({
     );
   }
 
-  if (status === "กำลังพิมพ์") {
+  if (status === "กำลังพิมพ์" || status === "In Progress") {
     return (
       <div className="flex gap-2">
         <button
@@ -75,7 +77,7 @@ export default function OrderActions({
     );
   }
 
-  if (status === "ยกเลิกการพิมพ์") {
+  if (status === "ยกเลิกการพิมพ์" || status === "ยกเลิก" || status === "Cancelled") {
     return (
       <div className="w-full text-center py-2.5 text-xs font-bold text-slate-400 bg-slate-50 rounded-xl">
         ยกเลิกออเดอร์แล้ว
