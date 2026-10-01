@@ -21,6 +21,7 @@ router.get("/getComplaintsAndReviews", Home.getComplaintsAndReviews);
 router.get("/getOrderByStatus", Order.getOrdersByStatus);
 router.get("/orders/:id", Detail.getOrder);
 router.patch("/orders/:id/status", Detail.updateOrderStatus);
+router.patch("/orders/:id/paymentstatus", Detail.verifyPayment)
 
 // Shop Profile
 router.get("/profile/:shop_id", Setting.getShopProfile);

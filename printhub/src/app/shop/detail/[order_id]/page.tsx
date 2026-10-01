@@ -18,7 +18,14 @@ import {
   AlertCircle,
   Lock,
   Layers,
+  Receipt,
+  Eye,
+  ShieldCheck,
+  X,
 } from "lucide-react";
+
+// ต้องตรงกับค่าใน backend (detail.ts)
+const PAYMENT_VERIFIED_STATUS = "ตรวจสอบแล้ว";
 
 export default function OrderDetailPage() {
   const params = useParams();
@@ -31,6 +38,12 @@ export default function OrderDetailPage() {
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // ตรวจสอบสลิปโอนเงิน
+  const [slipViewed, setSlipViewed] = useState<boolean>(false); // เปิดดูสลิปแล้วหรือยัง
+  const [slipVerified, setSlipVerified] = useState<boolean>(false); // กดยืนยันหลักฐานแล้วหรือยัง
+  const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
   const fetchOrder = async () => {
     if (!orderId) return;
@@ -45,6 +58,12 @@ export default function OrderDetailPage() {
 
       if (res.data && res.data.order) {
         setOrder(res.data.order);
+
+        // ให้ server เป็นตัวตัดสินว่าตรวจสลิปแล้วหรือยัง (รีเฟรชแล้วไม่หาย)
+        const verified =
+          res.data.order.payment?.status === PAYMENT_VERIFIED_STATUS;
+        setSlipVerified(verified);
+        if (verified) setSlipViewed(true);
       } else {
         throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
       }
@@ -83,6 +102,32 @@ export default function OrderDetailPage() {
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const handleViewSlip = () => {
+    setShowSlipModal(true);
+    setSlipViewed(true);
+  };
+
+  const handleVerifySlip = async () => {
+    if (!slipViewed) return;
+
+    try {
+      setIsUpdating(true);
+      await axios.patch(
+        `http://localhost:5000/shop/orders/${orderId}/verify-payment`
+      );
+      setSlipVerified(true);
+    } catch (err: any) {
+      alert(err.response?.data?.error || "ยืนยันหลักฐานการชำระเงินไม่สำเร็จ");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleConfirmAccept = async () => {
+    await handleUpdateStatus("กำลังพิมพ์");
+    setShowConfirmModal(false);
   };
 
   // ฟังก์ชันช่วยดาวน์โหลดไฟล์โดยตรง ไม่เปิดหน้าใหม่
@@ -171,6 +216,10 @@ export default function OrderDetailPage() {
 
   const allFiles = order.files || [];
 
+  const payment = order.payment;
+  const slipUrl: string | null = payment?.slip_url || null;
+  const isPending = order.status_state === "รอการดำเนินงาน";
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">
       {/* Top Bar */}
@@ -226,9 +275,14 @@ export default function OrderDetailPage() {
                 </button>
 
                 <button
-                  onClick={() => handleUpdateStatus("กำลังพิมพ์")}
-                  disabled={isUpdating}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors shadow-xs shadow-blue-600/20 disabled:opacity-50"
+                  onClick={() => setShowConfirmModal(true)}
+                  disabled={isUpdating || !slipVerified}
+                  title={
+                    !slipVerified
+                      ? "ต้องตรวจสอบและยืนยันหลักฐานการชำระเงินก่อน"
+                      : undefined
+                  }
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors shadow-xs shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
                     <Loader2 size={16} className="animate-spin" />
@@ -456,23 +510,12 @@ export default function OrderDetailPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs text-gray-400 mb-0.5">เบอร์ติดต่อ</p>
+                  <p className="text-xs text-gray-400 mb-0.5">ติดต่อ</p>
                   <p className="font-medium text-gray-700">
                     {order.customer?.contact || "-"}
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5 flex items-center gap-1">
-                    <MapPin size={11} />
-                    ที่อยู่จัดส่ง
-                  </p>
-                  <p className="text-gray-600 text-xs leading-relaxed">
-                    {order.customer?.address
-                      ? `${order.customer.address.detail} ต.${order.customer.address.subdistrict || ""} อ.${order.customer.address.district || ""} จ.${order.customer.address.province || ""} ${order.customer.address.postcode || ""}`
-                      : "ไม่ได้ระบุที่อยู่"}
-                  </p>
-                </div>
               </div>
 
               <div className="mt-5 pt-4 border-t border-gray-100">
@@ -494,6 +537,72 @@ export default function OrderDetailPage() {
                     ? "แชทติดต่อลูกค้า"
                     : "แชท (ยืนยันออเดอร์ก่อน)"}
                 </button>
+              </div>
+            </div>
+
+            {/* Payment Slip */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs">
+              <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Receipt size={17} className="text-blue-600" />
+                หลักฐานการชำระเงิน
+              </h2>
+
+              <div className="space-y-3.5 text-sm">
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">ยอดที่ชำระ</p>
+                  <p className="font-medium text-gray-800">
+                    ฿{Number(payment?.amount ?? order.total_amount ?? 0).toLocaleString()}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">เวลาที่ชำระ</p>
+                  <p className="font-medium text-gray-700">
+                    {payment?.payment_date
+                      ? new Date(payment.payment_date).toLocaleString("th-TH")
+                      : "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 pt-4 border-t border-gray-100 space-y-2.5">
+                <button
+                  type="button"
+                  onClick={handleViewSlip}
+                  disabled={!slipUrl}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors text-blue-600 bg-blue-50/80 border border-blue-200 hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
+                >
+                  <Eye size={15} />
+                  {slipUrl ? "ดูสลิปโอนเงิน" : "ยังไม่มีสลิปโอนเงิน"}
+                </button>
+
+                {slipVerified ? (
+                  <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                    <ShieldCheck size={15} />
+                    ตรวจสอบหลักฐานแล้ว
+                    <Lock size={12} className="opacity-60" />
+                  </div>
+                ) : (
+                  isPending && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleVerifySlip}
+                        disabled={!slipViewed || !slipUrl || isUpdating}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors bg-[#12356b] text-white hover:bg-[#0e2b57] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      >
+                        <ShieldCheck size={15} />
+                        ยืนยันหลักฐานการชำระเงิน
+                      </button>
+                      {slipUrl && !slipViewed && (
+                        <p className="text-[11px] text-amber-600 text-center flex items-center justify-center gap-1">
+                          <Lock size={12} />
+                          ต้องเปิดดูสลิปก่อนจึงจะยืนยันได้
+                        </p>
+                      )}
+                    </>
+                  )
+                )}
               </div>
             </div>
 
@@ -525,6 +634,103 @@ export default function OrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal: ดูสลิปโอนเงิน */}
+      {showSlipModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setShowSlipModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-md max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <Receipt size={18} className="text-blue-600" />
+                สลิปโอนเงิน
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSlipModal(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto">
+              {slipUrl && (
+                <img
+                  src={slipUrl}
+                  alt="สลิปโอนเงิน"
+                  className="w-full h-auto rounded-xl border border-slate-200/80"
+                />
+              )}
+            </div>
+
+            <div className="p-5 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowSlipModal(false)}
+                className="w-full py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
+              >
+                ปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: ยืนยันการรับงาน */}
+      {showConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => !isUpdating && setShowConfirmModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4">
+              <ShieldCheck className="text-blue-600" size={22} />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">
+              ยืนยันการรับงาน
+            </h3>
+            <p className="text-sm text-gray-500 mb-6">
+              คุณได้ตรวจสอบหลักฐานการชำระเงินว่าถูกต้องแล้ว
+              ยืนยันหรือไม่?
+              <br />
+              หากยืนยัน สถานะจะเปลี่ยนเป็น &quot;กำลังพิมพ์&quot;
+            </p>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isUpdating}
+                className="py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAccept}
+                disabled={isUpdating}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors shadow-xs shadow-blue-600/20 disabled:opacity-50"
+              >
+                {isUpdating ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <CheckCircle size={16} />
+                )}
+                ยืนยัน
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

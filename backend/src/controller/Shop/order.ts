@@ -4,11 +4,6 @@ import supabase from "../../config/supabase.js";
 // ==========================================
 // Types
 // ==========================================
-// NOTE: 1 order (print_order) can now hold MULTIPLE items
-// (print_order_item rows), since these are created from a cart
-// that can have several items in it at once. Each item below is
-// what the frontend calls a "sub-order".
-
 export interface OrderItemDetail {
   id: string;
   category: string;
@@ -55,6 +50,8 @@ export const getOrdersByStatus = async (
         id,
         order_no,
         order_date,
+        appointment_time,
+        receive_date,
         total_amount,
 
         customer:customer_id (
@@ -78,8 +75,7 @@ export const getOrdersByStatus = async (
         )
         `
       )
-      .eq("shop_id", shop_id)
-      .order("order_date", { ascending: false });
+      .eq("shop_id", shop_id);
 
     if (error) {
       console.error("Get orders error:", error);
@@ -88,7 +84,19 @@ export const getOrdersByStatus = async (
       });
     }
 
-    const result: ResultOrder[] = (orders || [])
+    const now = new Date().getTime();
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+    // 1. กรองสถานะ "รอการชำระเงิน" ออก
+    const filteredOrders = (orders || []).filter((order: any) => {
+      const currentStatus = Array.isArray(order.current_status)
+        ? order.current_status[0]
+        : order.current_status;
+      return currentStatus?.state !== "รอการชำระเงิน";
+    });
+
+    // 2. คำนวณและปรับเปลี่ยนสถานะตามเงื่อนไขเวลา
+    const processedOrders: ResultOrder[] = filteredOrders
       .map((order: any) => {
         const customer = Array.isArray(order.customer)
           ? order.customer[0]
@@ -98,11 +106,34 @@ export const getOrdersByStatus = async (
           ? order.current_status[0]
           : order.current_status;
 
-        const statusState = currentStatus?.state || "รอการดำเนินงาน";
+        let computedStatus = currentStatus?.state || "รอการดำเนินงาน";
 
-        // ==========================================
+        // ตรวจสอบเวลาเพื่อนัดรับ/ประมวลผลเปลี่ยนสถานะ
+        const appointmentTimeStr =
+          order.appointment_time || order.receive_date || order.order_date;
+
+        if (appointmentTimeStr) {
+          const appointmentTime = new Date(appointmentTimeStr).getTime();
+
+          // เงื่อนไข 1: รอดำเนินการ/กำลังพิมพ์ แล้วเลยเวลานัดรับ -> เปลี่ยนเป็น "ยกเลิกการพิมพ์"
+          const isPending =
+            computedStatus === "รอการดำเนินการ" ||
+            computedStatus === "รอการดำเนินงาน" ||
+            computedStatus === "กำลังพิมพ์";
+
+          if (isPending && now > appointmentTime) {
+            computedStatus = "ยกเลิกการพิมพ์";
+          }
+
+          // เงื่อนไข 2: พิมพ์เสร็จสิ้น แล้วเลยเวลานัดรับมาเกิน 1 วัน (24 ชม.) -> เปลี่ยนเป็น "รายการเสร็จสิ้น"
+          const isCompletedPrint = computedStatus === "พิมพ์เสร็จสิ้น";
+
+          if (isCompletedPrint && now > appointmentTime + ONE_DAY_MS) {
+            computedStatus = "รายการเสร็จสิ้น";
+          }
+        }
+
         // Sub-orders (cart items -> print_order_item)
-        // ==========================================
         const items: OrderItemDetail[] = (order.print_order_item || []).map(
           (item: any) => ({
             id: item.id,
@@ -123,16 +154,42 @@ export const getOrdersByStatus = async (
           customer_name: `${customer?.first_name ?? ""} ${
             customer?.last_name ?? ""
           }`.trim(),
-          status: statusState,
+          status: computedStatus,
           amount: Number(order.total_amount || 0),
           items,
         };
       })
       .filter((order) => status === "ทั้งหมด" || order.status === status);
 
+    // 3. กำหนดลำดับความสำคัญของสถานะ (ตัวเลขอันดับน้อยกว่า = แสดงก่อน)
+    const STATUS_PRIORITY: Record<string, number> = {
+      รอการดำเนินการ: 1,
+      รอการดำเนินงาน: 1,
+      กำลังพิมพ์: 2,
+      พิมพ์เสร็จสิ้น: 3,
+      รายการเสร็จสิ้น: 4,
+      ยกเลิกการพิมพ์: 5,
+    };
+
+    // 4. จัดเรียงข้อมูล (Status Priority -> Order Date จากใหม่ไปเก่า)
+    const sortedOrders = processedOrders.sort((a, b) => {
+      const priorityA = STATUS_PRIORITY[a.status] ?? 99;
+      const priorityB = STATUS_PRIORITY[b.status] ?? 99;
+
+      // ถ้าสถานะต่างกัน ให้เรียงตามลำดับความสำคัญของสถานะ
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // ถ้าสถานะเหมือนกัน ให้เรียงตามเวลาสั่งซื้อล่าสุด -> เก่าสุด (Newest First)
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateB - dateA;
+    });
+
     return res.status(200).json({
-      count: result.length,
-      orders: result,
+      count: sortedOrders.length,
+      orders: sortedOrders,
     });
   } catch (err) {
     console.error("Backend Error:", err);

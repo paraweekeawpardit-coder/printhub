@@ -1,4 +1,4 @@
-import { MessageCircle, ExternalLink, FileText } from "lucide-react";
+import { MessageCircle, ExternalLink, Download } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
 
@@ -35,20 +35,20 @@ const STATUS_CONFIG: Record<
   string,
   { dot: string; text: string; bg: string }
 > = {
-  รอการดำเนินการ: {
-    dot: "bg-amber-500 animate-pulse",
-    text: "text-amber-700",
-    bg: "bg-amber-500/10",
+  รอการดำเนินงาน: {
+    dot: "bg-yellow-500 animate-pulse",
+    text: "text-amber-800",
+    bg: "bg-amber-100",
   },
   กำลังพิมพ์: {
-    dot: "bg-blue-600 animate-pulse",
-    text: "text-blue-700",
-    bg: "bg-blue-500/10",
+    dot: "bg-blue-400 animate-pulse",
+    text: "text-blue-500 font-semibold",
+    bg: "bg-blue-50",
   },
   พิมพ์เสร็จสิ้น: {
-    dot: "bg-purple-500",
-    text: "text-purple-700",
-    bg: "bg-purple-500/10",
+    dot: "bg-blue-500",
+    text: "text-blue-700",
+    bg: "bg-blue-500/10",
   },
   รายการเสร็จสิ้น: {
     dot: "bg-emerald-500",
@@ -88,6 +88,35 @@ export default function OrderDetailCard({
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
 
+  const isDisabledFile =
+    order.status === "รอการดำเนินงาน" ||
+    order.status === "ยกเลิกการพิมพ์";
+
+  const handleDownloadFile = async (
+    e: React.MouseEvent,
+    fileUrl: string,
+    fileName: string
+  ) => {
+    e.stopPropagation();
+    if (isDisabledFile) return;
+
+    try {
+      const response = await fetch(fileUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName || "download-file";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed, fallbacking to direct URL:", error);
+      window.open(fileUrl, "_self");
+    }
+  };
+
   return (
     <div
       onClick={onClick}
@@ -97,7 +126,7 @@ export default function OrderDetailCard({
         {/* Header: Status & Date */}
         <div className="flex items-center justify-between">
           <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${statusConfig.bg} ${statusConfig.text}`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`} />
             {order.status || "ไม่ทราบสถานะ"}
@@ -119,9 +148,7 @@ export default function OrderDetailCard({
             </h3>
           </div>
 
-          <CustomerBadge
-            name={order.customer_name}
-          />
+          <CustomerBadge name={order.customer_name} />
         </div>
 
         {/* Items List */}
@@ -160,16 +187,30 @@ export default function OrderDetailCard({
                       ฿{item.subtotal.toLocaleString()}
                     </span>
                     {item.file_url && (
-                      <a
-                        href={item.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                      <button
+                        type="button"
+                        disabled={isDisabledFile}
+                        onClick={(e) =>
+                          handleDownloadFile(
+                            e,
+                            item.file_url!,
+                            `order-${order.order_no ?? "file"}-${item.category}`
+                          )
+                        }
+                        className={`flex items-center gap-1 text-[11px] font-semibold transition-all ${
+                          isDisabledFile
+                            ? "text-slate-400 opacity-50 cursor-not-allowed"
+                            : "text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                        }`}
+                        title={
+                          isDisabledFile
+                            ? "ไม่สามารถดาวน์โหลดไฟล์ในสถานะนี้ได้"
+                            : "ดาวน์โหลดไฟล์"
+                        }
                       >
-                        <FileText size={12} />
-                        ไฟล์
-                      </a>
+                        <Download size={12} />
+                        ดาวน์โหลด
+                      </button>
                     )}
                   </div>
                 </div>
