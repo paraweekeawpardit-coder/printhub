@@ -10,6 +10,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
+import NotificationBell from "@/component/NotificationBell"; // 👈 1. Import NotificationBell
 
 export default function ShopNavbar() {
   const pathname = usePathname();
@@ -30,8 +31,8 @@ export default function ShopNavbar() {
   }, []);
 
   const isHomeActive = pathname === "/shop";
-  const isOrderActive = pathname.startsWith("/shop/order");
-  const isChatActive = pathname.startsWith("/shop/chat");
+  const isOrderActive = pathname.startsWith("/shop/order") && !pathname.endsWith("/chat");
+  const isChatActive = pathname.includes("/chat");
   const isSettingActive = pathname.startsWith("/shop/setting");
 
   const goTo = (path: string) => {
@@ -40,18 +41,32 @@ export default function ShopNavbar() {
       alert("ไม่พบข้อมูลร้านค้า กรุณาล็อกอินใหม่อีกครั้ง");
       return;
     }
+
+    if (path === "chat") {
+      router.push(`/shop/order/${shopId}/chat?from=navbar`);
+      return;
+    }
+
+    if (path === "order") {
+      router.push(`/shop/order/${shopId}`);
+      return;
+    }
+
+    if (path === "setting") {
+      router.push("/customer/setting");
+      return;
+    }
+
     router.push(`/shop/${path}/${shopId}`);
   };
 
-
   const handleLogout = () => {
-      localStorage.removeItem("shop_id");
-      localStorage.removeItem("shop_name");
-      localStorage.removeItem("token");
-      localStorage.clear();
+    localStorage.removeItem("shop_id");
+    localStorage.removeItem("shop_name");
+    localStorage.removeItem("token");
+    localStorage.clear();
 
-
-      router.push("/auth");
+    router.push("/auth");
   };
 
   return (
@@ -121,8 +136,11 @@ export default function ShopNavbar() {
           </button>
         </div>
 
-        {/* Setting & Logout Section */}
+        {/* Setting, Notification & Logout Section */}
         <div className="flex items-center gap-2">
+          {/* 👈 2. ใช้ NotificationBell แทนปุ่มเดิม */}
+          {shopId && <NotificationBell userId={shopId} role="shop" />}
+
           {/* Setting / Profile Button */}
           <button
             onClick={() => goTo("setting")}

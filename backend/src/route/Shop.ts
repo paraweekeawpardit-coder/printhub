@@ -7,27 +7,38 @@ import * as Setting from "../controller/Shop/setting.js";
 
 const router = express.Router();
 
-// Dashboard
+// ==================== Dashboard ====================
 router.get("/getScore", Home.getTotalScore);
 router.get("/getIncome", Home.getTodayInCome);
 router.get("/numWork", Home.getNumOrderUnAccept);
 router.get("/getTopOrder", Home.getTopOrder);
 router.get("/getFinancialOverview", Home.getFinancialOverview);
-// เพิ่ม 2 Endpoint ในส่วน Dashboard
 router.get("/getOrderStatusBreakdown", Home.getOrderStatusBreakdown);
 router.get("/getComplaintsAndReviews", Home.getComplaintsAndReviews);
 
-// Orders
+// ==================== Orders ====================
 router.get("/getOrderByStatus", Order.getOrdersByStatus);
 router.get("/orders/:id", Detail.getOrder);
 router.patch("/orders/:id/status", Detail.updateOrderStatus);
 router.patch("/orders/:id/verify-payment", Detail.verifyPayment);
 
-// Shop Profile
+// 🟢 สลับมาใช้ Order.updateOrderStatus ที่มีระบบตรวจสอบสถานะร้านค้า (suspended check)
+router.patch("/orders/:orderId/status", Order.updateOrderStatus);
+
+// ==================== Shop Profile & Settings ====================
 router.get("/profile/:shop_id", Setting.getShopProfile);
+router.put("/profile/:shop_id", Setting.updateShopProfile);
+router.patch("/open-status/:shop_id", Setting.setShopOpenStatus);
+
+// ดึงข้อมูลบัญชีธนาคาร และ บันทึก/อัปเดตข้อมูลบัญชีธนาคาร
 router.get("/bank-account/:shop_id", Setting.getBankAccount);
-router.get("/services/:shop_id", Setting.getShopServices);
+router.put("/bank-account/:shop_id", Setting.updateBankAccount);
+
+// ตรวจสอบสถานะการยืนยันตัวตน (เปลี่ยนจาก checkShopVerified เป็น getVerifyStatus)
 router.get("/verify-status/:shop_id", Setting.checkShopVerified);
+
+// บริการของร้านค้า
+router.get("/services/:shop_id", Setting.getShopServices);
 router.post("/services", Setting.saveShopServices);
 
 export default router;

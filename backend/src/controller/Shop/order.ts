@@ -229,3 +229,69 @@ export const getOrdersByStatus = async (
     });
   }
 };
+
+// ==========================================
+// Update Order Status (Check Suspended)
+// ==========================================
+
+export const updateOrderStatus = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { orderId } = req.params;
+    const { newStatus } = req.body;
+    const shop_id = (req.headers.shop_id || req.query.shop_id || req.body.shop_id) as string;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    // 🟢 1. เช็กสถานะของร้านค้าว่าถูกระงับการใช้งานอยู่หรือไม่
+    const { data: shop, error: shopError } = await supabase
+      .from("shop")
+      .select("status")
+      .eq("id", shop_id)
+      .single();
+
+    if (shopError || !shop) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลร้านค้า" });
+    }
+
+    if (shop.status === "suspended") {
+      return res.status(403).json({
+        error: "บัญชีของคุณถูกระงับการใช้งาน ไม่สามารถเปลี่ยนสถานะออเดอร์ได้",
+      });
+    }
+
+    // 🟢 2. ค้นหา status_id จากตาราง order_status ตามชื่อ newStatus
+    const { data: statusData, error: statusError } = await supabase
+      .from("order_status")
+      .select("id")
+      .eq("state", newStatus)
+      .single();
+
+    if (statusError || !statusData) {
+      return res.status(400).json({ error: "ไม่พบสถานะออเดอร์ที่ระบุ" });
+    }
+
+    // 🟢 3. อัปเดตสถานะ current_status_id ในตาราง print_order
+    const { error: updateError } = await supabase
+      .from("print_order")
+      .update({ current_status_id: statusData.id })
+      .eq("id", orderId)
+      .eq("shop_id", shop_id);
+
+    if (updateError) {
+      console.error("Update order status error:", updateError);
+      return res.status(400).json({ error: updateError.message });
+    }
+
+    return res.status(200).json({
+      message: "อัปเดตสถานะออเดอร์เรียบร้อยแล้ว",
+    });
+  } catch (err) {
+    console.error("Update order status server error:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};

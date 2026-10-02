@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MessageCircle, ExternalLink, Download, Eye, X, Check, Loader2 } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
+import { useRouter, useParams } from "next/navigation";
 
 export type OrderItemDetail = {
   id: string;
@@ -38,6 +39,7 @@ type Props = {
   onUpdateStatus?: (orderId: string, newStatus: OrderStatus) => void;
   onVerifyPayment?: (orderId: string, isVerified: boolean) => Promise<void>;
   onChatClick?: (orderId: string) => void;
+  disabled?: boolean;
 };
 
 const STATUS_CONFIG: Record<
@@ -94,7 +96,12 @@ export default function OrderDetailCard({
   onUpdateStatus,
   onVerifyPayment,
   onChatClick,
+  disabled = false,
 }: Props) {
+  const router = useRouter();
+  const params = useParams();
+  const shopId = params?.shop_id; // ดึง shop_id จาก URL ปัจจุบัน
+
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
 

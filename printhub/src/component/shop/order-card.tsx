@@ -32,6 +32,7 @@ type Props = {
   order: Order;
   onClick?: () => void;
   onUpdateStatus?: (orderId: string, newStatus: string) => void;
+  disabled?: boolean; // เพิ่ม prop disabled เพื่อรองรับการบล็อกการทำงานกรณีร้านถูกระงับ
 };
 
 const API_BASE = "http://localhost:5000";
@@ -72,7 +73,12 @@ const FALLBACK_STYLE = {
   dot: "bg-slate-400",
 };
 
-export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
+export default function OrderCard({
+  order,
+  onClick,
+  onUpdateStatus,
+  disabled = false,
+}: Props) {
   const initialStatus =
     order.latest_status || order.current_status?.state || STATUS.PENDING;
 
@@ -98,7 +104,7 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
   }, [order]);
 
   async function updateState(newStatus: string) {
-    if (updating) return;
+    if (updating || disabled) return;
 
     setPendingAction(newStatus);
     setErrorMsg(null);
@@ -156,6 +162,11 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
   const initialLetter = order.customer?.first_name?.charAt(0) || "U";
 
   const style = STATUS_STYLE[currentState] ?? FALLBACK_STYLE;
+
+  const handleCardClick = () => {
+    if (disabled) return;
+    onClick?.();
+  };
 
   return (
     <>
