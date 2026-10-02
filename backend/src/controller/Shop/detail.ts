@@ -1,10 +1,9 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
-// ค่า payment.status เมื่อร้านตรวจสอบสลิปแล้ว (ปรับให้ตรงกับข้อมูลจริงในตาราง payment)
-const PAYMENT_VERIFIED_STATUS = "ตรวจสอบแล้ว";
-const ORDER_PENDING_STATE = "รอการดำเนินงาน";
-
+// ==========================================
+// GET ORDER DETAIL
+// ==========================================
 export const getOrder = async (
   req: Request,
   res: Response
@@ -22,9 +21,7 @@ export const getOrder = async (
       });
     }
 
-    // ==========================================
     // Main order + standard reverse relations
-    // ==========================================
     const { data: order, error } = await supabase
       .from("print_order")
       .select(
@@ -89,9 +86,7 @@ export const getOrder = async (
       });
     }
 
-    // ==========================================
     // Status / Payment / Review (fetched by id)
-    // ==========================================
     const [
       { data: statusRow, error: statusError },
       { data: paymentRow, error: paymentError },
@@ -128,9 +123,7 @@ export const getOrder = async (
 
     const statusState = statusRow?.state || "รอการดำเนินงาน";
 
-    // ==========================================
     // Customer
-    // ==========================================
     const formattedCustomer = Array.isArray(order.customer)
       ? order.customer[0]
       : order.customer;
@@ -139,15 +132,13 @@ export const getOrder = async (
       ? formattedCustomer.address[0]
       : formattedCustomer?.address;
 
-    // ==========================================
     // Items
-    // ==========================================
     const items = (order.print_order_item || []).map((item: any) => ({
       id: item.id,
       category: item.category || "รายการพิมพ์",
-      group_name: item.category || "รายการพิมพ์", // เพิ่ม map สำหรับ Frontend
+      group_name: item.category || "รายการพิมพ์",
       describe: item.describe || "",
-      detail: item.describe || "",               // เพิ่ม map สำหรับ Frontend
+      detail: item.describe || "",
       file_url: item.file_url || null,
       quantity: item.quantity,
       unit_price: Number(item.unit_price || 0),
@@ -155,9 +146,7 @@ export const getOrder = async (
       page_count: item.page_count ?? null,
     }));
 
-    // ==========================================
-    // Files (mapped with item_id)
-    // ==========================================
+    // Files
     const files = (order.print_file || []).map((f: any) => ({
       id: f.id,
       filename: f.filename,
@@ -178,10 +167,8 @@ export const getOrder = async (
         small_order_fee: Number(order.small_order_fee || 0),
         platform_fee: Number(order.platform_fee || 0),
         total_amount: Number(order.total_amount || 0),
-        total_price: Number(order.total_amount || 0), // เพิ่ม total_price ตรงกับ Frontend
+        total_price: Number(order.total_amount || 0),
         status_state: statusState,
-
-        // ส่ง slip_url ออกไปโดยตรงเพื่อให้ Frontend อ่านค่าได้ทันที
         slip_url: paymentRow?.slip_url || null,
 
         customer: {
@@ -206,7 +193,9 @@ export const getOrder = async (
   }
 };
 
+// ==========================================
 // UPDATE ORDER STATUS
+// ==========================================
 export const updateOrderStatus = async (
   req: Request,
   res: Response
@@ -228,7 +217,7 @@ export const updateOrderStatus = async (
 
     const { data: order, error: orderError } = await supabase
       .from("print_order")
-      .select("id, shop_id, payment_id")
+      .select("id, shop_id")
       .eq("id", id)
       .single();
 
@@ -240,27 +229,6 @@ export const updateOrderStatus = async (
       return res
         .status(403)
         .json({ error: "This order does not belong to this shop" });
-    }
-
-    // การรับงาน (กำลังพิมพ์) ต้องผ่านการตรวจสอบสลิปก่อนเสมอ
-    if (status_name === "กำลังพิมพ์") {
-      if (!order.payment_id) {
-        return res
-          .status(400)
-          .json({ error: "ยังไม่มีหลักฐานการชำระเงินสำหรับออเดอร์นี้" });
-      }
-
-      const { data: paymentRow, error: paymentError } = await supabase
-        .from("payment")
-        .select("status")
-        .eq("id", order.payment_id)
-        .single();
-
-      if (paymentError || paymentRow?.status !== PAYMENT_VERIFIED_STATUS) {
-        return res.status(400).json({
-          error: "ต้องตรวจสอบและยืนยันหลักฐานการชำระเงินก่อน",
-        });
-      }
     }
 
     const { data: statusData, error: statusError } = await supabase
@@ -320,103 +288,51 @@ export const updateOrderStatus = async (
   }
 };
 
-// VERIFY PAYMENT SLIP
+// ==========================================
+// UPDATE PAYMENT STATUS (เพิ่มเติมส่วนที่ขาดหาย)
+// ==========================================
 export const verifyPayment = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
     const { id } = req.params;
-    const shop_id = (req.query.shop_id || req.headers.shop_id) as
-      | string
-      | undefined;
+    const { status } = req.body; // เช่น 'paid', 'verified', 'rejected'
 
     if (!id) {
       return res.status(400).json({ error: "order_id is required" });
     }
 
+    // 1. หา payment_id จาก print_order
     const { data: order, error: orderError } = await supabase
       .from("print_order")
-      .select("id, shop_id, payment_id, current_status_id")
+      .select("payment_id")
       .eq("id", id)
       .single();
 
-    if (orderError || !order) {
-      return res.status(404).json({ error: "Order not found" });
+    if (orderError || !order || !order.payment_id) {
+      return res.status(404).json({ error: "Payment record not found for this order" });
     }
 
-    if (shop_id && order.shop_id !== shop_id) {
-      return res
-        .status(403)
-        .json({ error: "This order does not belong to this shop" });
-    }
-
-    // ตรวจสอบสลิปได้เฉพาะออเดอร์ที่ยังรอการดำเนินงาน
-    // หลังรับงาน/ปฏิเสธไปแล้ว (สถานะเปลี่ยน) จะแก้ผลการตรวจสลิปไม่ได้อีก
-    if (order.current_status_id) {
-      const { data: statusRow, error: statusError } = await supabase
-        .from("status")
-        .select("state")
-        .eq("id", order.current_status_id)
-        .single();
-
-      if (statusError || !statusRow) {
-        return res.status(500).json({ error: "Cannot resolve order status" });
-      }
-
-      if (statusRow.state !== ORDER_PENDING_STATE) {
-        return res.status(409).json({
-          error: "ออเดอร์นี้ดำเนินการไปแล้ว ไม่สามารถเปลี่ยนผลการตรวจสลิปได้",
-        });
-      }
-    }
-
-    if (!order.payment_id) {
-      return res
-        .status(400)
-        .json({ error: "ยังไม่มีหลักฐานการชำระเงินสำหรับออเดอร์นี้" });
-    }
-
-    const { data: payment, error: paymentError } = await supabase
+    // 2. อัปเดตสถานะในตาราง payment
+    const { data: updatedPayment, error: paymentError } = await supabase
       .from("payment")
-      .select("id, slip_url, status")
+      .update({ status: status || "verified" })
       .eq("id", order.payment_id)
+      .select()
       .single();
 
-    if (paymentError || !payment) {
-      return res.status(404).json({ error: "Payment not found" });
-    }
-
-    if (!payment.slip_url) {
-      return res.status(400).json({ error: "ยังไม่มีสลิปโอนเงิน" });
-    }
-
-    // กดซ้ำได้ ไม่ error
-    if (payment.status === PAYMENT_VERIFIED_STATUS) {
-      return res.status(200).json({
-        message: "Payment already verified",
-        data: { payment_id: payment.id, status: payment.status },
-      });
-    }
-
-    const { data: updated, error: updateError } = await supabase
-      .from("payment")
-      .update({ status: PAYMENT_VERIFIED_STATUS })
-      .eq("id", payment.id)
-      .select("id, status")
-      .single();
-
-    if (updateError) {
-      console.error("Verify payment error:", updateError);
-      return res.status(400).json({ error: updateError.message });
+    if (paymentError) {
+      console.error("Update payment error:", paymentError);
+      return res.status(400).json({ error: paymentError.message });
     }
 
     return res.status(200).json({
-      message: "Payment verified successfully",
-      data: { payment_id: updated.id, status: updated.status },
+      message: "Payment status updated successfully",
+      data: updatedPayment,
     });
   } catch (err) {
-    console.error("Verify Payment Error:", err);
+    console.error("Update Payment Status Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };

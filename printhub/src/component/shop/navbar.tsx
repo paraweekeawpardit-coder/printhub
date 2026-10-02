@@ -10,7 +10,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
-import NotificationBell from "@/component/NotificationBell"; // 👈 1. Import NotificationBell
+import NotificationBell from "@/component/NotificationBell";
 
 export default function ShopNavbar() {
   const pathname = usePathname();
@@ -52,11 +52,6 @@ export default function ShopNavbar() {
       return;
     }
 
-    if (path === "setting") {
-      router.push("/customer/setting");
-      return;
-    }
-
     router.push(`/shop/${path}/${shopId}`);
   };
 
@@ -75,7 +70,7 @@ export default function ShopNavbar() {
         {/* Logo / Home */}
         <button
           onClick={() => router.push("/shop")}
-          className="flex items-center gap-2 pl-1 cursor-pointer text-left focus:outline-none"
+          className="logout-btn flex items-center gap-2 pl-1 cursor-pointer text-left focus:outline-none"
         >
           <div className="w-10 h-10 rounded-full bg-[#0F2942] flex items-center justify-center">
             <Printer size={18} className="text-white" />
@@ -138,7 +133,7 @@ export default function ShopNavbar() {
 
         {/* Setting, Notification & Logout Section */}
         <div className="flex items-center gap-2">
-          {/* 👈 2. ใช้ NotificationBell แทนปุ่มเดิม */}
+          {/* NotificationBell */}
           {shopId && <NotificationBell userId={shopId} role="shop" />}
 
           {/* Setting / Profile Button */}
@@ -166,11 +161,11 @@ export default function ShopNavbar() {
           {/* เส้นคั่นแบ่งสัดส่วน */}
           <div className="h-5 w-[1px] bg-slate-200 my-auto" />
 
-          {/* ปุ่มออกจากระบบ (Logout Button) */}
+          {/* ปุ่มออกจากระบบ (Logout Button - ใส่ logout-btn เพิ่มที่นี่) */}
           <button
             onClick={handleLogout}
             title="ออกจากระบบ"
-            className="flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 transition-colors cursor-pointer focus:outline-none"
+            className="logout-btn flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 transition-colors cursor-pointer focus:outline-none"
           >
             <LogOut size={15} />
             <span className="hidden sm:inline">ออกจากระบบ</span>

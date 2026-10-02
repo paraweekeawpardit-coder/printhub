@@ -13,6 +13,10 @@ interface DashboardStats {
   totalCustomers: number;
   totalActiveShops: number;
   pendingReports: number;
+  pendingAppeals: number;
+  pendingRefunds?: number;
+  overdueAppeals: number;
+  totalPlatformIncome: number;
   dailyIncome?: ChartDataItem[];
 }
 
@@ -33,6 +37,10 @@ export default function AdminHomePage() {
         totalCustomers: data.totalCustomers ?? 0,
         totalActiveShops: data.totalActiveShops ?? 0,
         pendingReports: data.pendingReports ?? 0,
+        pendingAppeals: data.pendingAppeals ?? 0,
+        pendingRefunds: data.pendingRefunds ?? 0,
+        overdueAppeals: data.overdueAppeals ?? 0,
+        totalPlatformIncome: data.totalPlatformIncome ?? 0,
         dailyIncome: data.dailyIncome ?? [],
       });
     } catch (error) {
@@ -41,6 +49,10 @@ export default function AdminHomePage() {
         totalCustomers: 0,
         totalActiveShops: 0,
         pendingReports: 0,
+        pendingAppeals: 0,
+        pendingRefunds: 0,
+        overdueAppeals: 0,
+        totalPlatformIncome: 0,
         dailyIncome: [],
       });
     } finally {
@@ -61,10 +73,13 @@ export default function AdminHomePage() {
   }
 
   return (
-    <div className="admin-page-container">
-      <h2 className="section-title">ผลการดำเนินงานแพลตฟอร์ม</h2>
+    <div className="w-full max-w-[1600px] mx-auto text-slate-900 font-sans p-6">
+      <h2 className="text-xl font-bold text-slate-800 mb-5">
+        ผลการดำเนินงานแพลตฟอร์ม
+      </h2>
 
-      <section className="stats-grid">
+      {/* 💡 ปรับ grid-cols บังคับให้การ์ดเรียงแถวละ 5 ใบในจอใหญ่ (xl) */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
           title="จำนวนลูกค้าทั้งหมด"
           value={stats.totalCustomers?.toLocaleString()}
@@ -80,42 +95,40 @@ export default function AdminHomePage() {
           href="/admin/shops?tab=all"
         />
         <StatCard
+          title="คำร้องขอปลดระงับร้านค้า"
+          value={stats.pendingAppeals}
+          unit="รายการ"
+          subtitle={
+            stats.overdueAppeals > 0
+              ? `⚠️️ เกินกำหนด 3 วัน: ${stats.overdueAppeals} รายการ`
+              : "คำร้องขอปลดระงับที่รอตรวจสอบ"
+          }
+          href="/admin/shops?tab=appeals"
+          isAlert={stats.pendingAppeals > 0}
+        />
+        <StatCard
           title="ปัญหาที่รอตรวจสอบ"
           value={stats.pendingReports}
           unit="รายการ"
           subtitle="รายงานจากผู้ใช้และร้านค้า"
           href="/admin/reports"
-          isAlert={true}
+          isAlert={stats.pendingReports > 0}
+        />
+        <StatCard
+          title="รายการรอโอนเงินคืน"
+          value={stats.pendingRefunds ?? 0}
+          unit="รายการ"
+          subtitle="ออเดอร์ที่ยกเลิกและรอดำเนินการคืนเงิน"
+          href="/admin/refunds"
+          isAlert={(stats.pendingRefunds ?? 0) > 0}
         />
       </section>
 
-      <h2 className="section-title" style={{ marginTop: "40px" }}>
-        ปริมาณคำสั่งซื้อย้อนหลัง 7 วัน
+      <h2 className="text-xl font-bold text-slate-800 mt-10 mb-5">
+        รายได้แพลตฟอร์มย้อนหลัง 7 วัน (รวม: ฿{stats.totalPlatformIncome.toLocaleString()})
       </h2>
 
       <IncomeChart data={stats.dailyIncome || []} />
-
-      <style jsx>{`
-        .admin-page-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          font-family: 'Prompt', 'Kanit', sans-serif;
-          color: #0F172A;
-        }
-
-        .section-title {
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: #1E293B;
-          margin-bottom: 20px;
-        }
-
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-          gap: 20px;
-        }
-      `}</style>
     </div>
   );
 }
