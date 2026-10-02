@@ -14,6 +14,7 @@ import ReviewComplaintModal from "@/component/shop/review-complaint-modal";
 
 type Order = {
   id: string;
+  order_no?: string; // 👈 เพิ่ม order_no ใน Type
   customer_id: string;
   shop_id: string;
   description: string | null;
@@ -45,9 +46,7 @@ export default function ShopPage() {
   const [shopId, setShopId] = useState<string>("");
   const [isSuspended, setIsSuspended] = useState<boolean>(false);
 
-  const [activeView, setActiveView] = useState<
-    "orders" | "financial" | "reviews" | null
-  >(null);
+  const [activeView, setActiveView] = useState<"orders" | "financial" | "reviews" | null>(null);
 
   const [financialData, setFinancialData] = useState<{
     totalGross: number;
@@ -226,6 +225,7 @@ export default function ShopPage() {
     }
   }, [shopId, fetchDashboardData]);
 
+  // ส่ง orderId (UUID) ในการนำทาง
   const handleOrderClick = (orderId: string) => {
     if (isSuspended) {
       console.warn("[Action Blocked] Account is suspended. Cannot view order details.");
@@ -335,7 +335,7 @@ export default function ShopPage() {
 
         {/* รายการคำสั่งพิมพ์ล่าสุด */}
         <h2 className="mb-6 text-lg font-bold text-[#0F2942]">
-          รายการคำสั่งพิมพ์ล่าสุด
+          รายการคำสั่งพิมพ์วันนี้
         </h2>
 
         {loading ? (
@@ -356,7 +356,7 @@ export default function ShopPage() {
               ))
             ) : (
               <p className="col-span-full py-8 text-center text-slate-500">
-                ไม่มีรายการคำสั่งพิมพ์ล่าสุด
+                ไม่มีรายการคำสั่งพิมพ์วันนี้
               </p>
             )}
           </div>

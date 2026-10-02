@@ -21,11 +21,8 @@ import {
   Eye,
   ShieldCheck,
   X,
-  Image as ImageIcon, // ✅ เพิ่ม ImageIcon ตรงนี้
+  AlertTriangle,
 } from "lucide-react";
-
-// ต้องตรงกับค่าใน backend (detail.ts)
-const PAYMENT_VERIFIED_STATUS = "ตรวจสอบแล้ว";
 
 export default function OrderDetailPage() {
   const params = useParams();
@@ -39,19 +36,24 @@ export default function OrderDetailPage() {
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // ตรวจสอบสลิปโอนเงิน
   const [slipViewed, setSlipViewed] = useState<boolean>(false); // เปิดดูสลิปแล้วหรือยัง
-  const [slipVerified, setSlipVerified] = useState<boolean>(false); // กดยืนยันหลักฐานแล้วหรือยัง
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+  const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
+  const [showWarnModal, setShowWarnModal] = useState<boolean>(false);
 
-  const fetchOrder = async () => {
+  const fetchOrder = async (silent = false) => {
     if (!orderId) return;
 
     try {
-      setIsLoading(true);
-      setError(null);
+      // refresh หลังกดปุ่ม: ไม่ต้องสลับทั้งหน้าเป็น loading
+      if (!silent) {
+        setIsLoading(true);
+        setError(null);
+      }
 
       const res = await axios.get(
         `http://localhost:5000/shop/orders/${orderId}`
@@ -59,12 +61,6 @@ export default function OrderDetailPage() {
 
       if (res.data && res.data.order) {
         setOrder(res.data.order);
-
-        // ให้ server เป็นตัวตัดสินว่าตรวจสลิปแล้วหรือยัง (รีเฟรชแล้วไม่หาย)
-        const verified =
-          res.data.order.payment?.status === PAYMENT_VERIFIED_STATUS;
-        setSlipVerified(verified);
-        if (verified) setSlipViewed(true);
       } else {
         throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
       }
@@ -74,9 +70,10 @@ export default function OrderDetailPage() {
         err.response?.data?.error ||
         err.message ||
         "เกิดข้อผิดพลาดในการดึงข้อมูล";
-      setError(message);
+      if (silent) setActionError(message);
+      else setError(message);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -95,15 +92,7 @@ export default function OrderDetailPage() {
   const handleUpdateStatus = async (nextStatus: string) => {
     try {
       setIsUpdating(true);
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-      const headers: Record<string, string> = {
-        shop_id: String(shopId),
-      };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
+      setActionError(null);
 
       await axios.patch(
         `http://localhost:5000/shop/orders/${orderId}/status`,
@@ -111,10 +100,9 @@ export default function OrderDetailPage() {
         { headers }
       );
 
-      await fetchOrder();
+      await fetchOrder(true);
     } catch (err: any) {
-      const message = err.response?.data?.error || "อัปเดตสถานะไม่สำเร็จ";
-      alert(message);
+      setActionError(err.response?.data?.error || "อัปเดตสถานะไม่สำเร็จ");
     } finally {
       setIsUpdating(false);
     }
@@ -125,20 +113,29 @@ export default function OrderDetailPage() {
     setSlipViewed(true);
   };
 
-  const handleVerifySlip = async () => {
+  // ผลตรวจสลิป: true = ถูกต้อง, false = ไม่ถูกต้อง (บันทึกที่ payment.is_verified)
+  const handleVerifySlip = async (isVerified: boolean) => {
     if (!slipViewed) return;
 
     try {
       setIsUpdating(true);
+      setActionError(null);
       await axios.patch(
-        `http://localhost:5000/shop/orders/${orderId}/verify-payment`
+        `http://localhost:5000/shop/orders/${orderId}/verify-payment`,
+        { is_verified: isVerified }
       );
-      setSlipVerified(true);
+      await fetchOrder(true);
     } catch (err: any) {
-      alert(err.response?.data?.error || "ยืนยันหลักฐานการชำระเงินไม่สำเร็จ");
+      setActionError(err.response?.data?.error || "บันทึกผลตรวจสลิปไม่สำเร็จ");
+      await fetchOrder(true);
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const handleConfirmReject = async () => {
+    await handleUpdateStatus("ยกเลิกการพิมพ์");
+    setShowRejectModal(false);
   };
 
   const handleConfirmAccept = async () => {
@@ -240,6 +237,14 @@ export default function OrderDetailPage() {
     ยกเลิกการพิมพ์: "bg-red-50 text-red-700 ring-1 ring-red-200",
   };
 
+  const allFiles = order.files || [];
+
+  const payment = order.payment;
+  const slipUrl: string | null = payment?.slip_url || null;
+  const isPending = order.status_state === "รอการดำเนินงาน";
+  // null = ยังไม่ตรวจ, true = สลิปถูกต้อง, false = สลิปไม่ถูกต้อง
+  const slipVerdict: boolean | null = payment?.is_verified ?? null;
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">
       {/* Top Bar */}
@@ -286,7 +291,7 @@ export default function OrderDetailPage() {
             {order.status_state === "รอการดำเนินงาน" && (
               <>
                 <button
-                  onClick={() => handleUpdateStatus("ยกเลิกการพิมพ์")}
+                  onClick={() => setShowRejectModal(true)}
                   disabled={isUpdating}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-red-600 hover:bg-red-50 hover:border-red-200 text-sm font-medium transition-colors disabled:opacity-50"
                 >
@@ -295,14 +300,13 @@ export default function OrderDetailPage() {
                 </button>
 
                 <button
-                  onClick={() => setShowConfirmModal(true)}
-                  disabled={isUpdating || !slipVerified}
-                  title={
-                    !slipVerified
-                      ? "ต้องตรวจสอบและยืนยันหลักฐานการชำระเงินก่อน"
-                      : undefined
+                  onClick={() =>
+                    slipVerdict === true
+                      ? setShowConfirmModal(true)
+                      : setShowWarnModal(true)
                   }
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors shadow-xs shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isUpdating}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium transition-colors shadow-xs shadow-blue-600/20 disabled:opacity-50"
                 >
                   {isUpdating ? (
                     <Loader2 size={16} className="animate-spin" />
@@ -324,16 +328,30 @@ export default function OrderDetailPage() {
                   size={16}
                   className={isUpdating ? "animate-spin" : ""}
                 />
-                อัปเดตสถานะเป็น "พิมพ์เสร็จสิ้น"
+                อัปเดตสถานะเป็น &quot;พิมพ์เสร็จสิ้น&quot;
               </button>
             )}
           </div>
         </div>
 
+        {actionError && (
+          <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-6 text-sm">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <p className="flex-1">{actionError}</p>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="text-red-400 hover:text-red-600"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Side: Sub-Orders & Files */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 flex flex-col gap-6">
             <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs">
               <div className="flex items-center justify-between mb-5 pb-3 border-b border-gray-100">
                 <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
@@ -508,10 +526,38 @@ export default function OrderDetailPage() {
                 </div>
               </div>
             </div>
+
+            {/* Schedule Info */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs flex-1">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 mb-5 pb-3 border-b border-gray-100">
+                <Clock size={18} className="text-blue-600" />
+                เวลานัดหมาย
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-slate-50/70 border border-slate-200/90 rounded-xl p-4">
+                  <p className="text-xs text-gray-400 mb-1">วันที่สั่งซื้อ</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {order.order_date
+                      ? new Date(order.order_date).toLocaleString("th-TH")
+                      : "-"}
+                  </p>
+                </div>
+
+                <div className="bg-slate-50/70 border border-slate-200/90 rounded-xl p-4">
+                  <p className="text-xs text-gray-400 mb-1">เวลานัดรับงาน</p>
+                  <p className="text-sm font-semibold text-blue-700">
+                    {order.receive_date
+                      ? new Date(order.receive_date).toLocaleString("th-TH")
+                      : "-"}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Right Side: Customer & Schedule Info */}
-          <div className="space-y-6">
+          {/* Right Side: Customer & Payment */}
+          <div className="flex flex-col gap-6">
             {/* Customer Info */}
             <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs">
               <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -555,94 +601,160 @@ export default function OrderDetailPage() {
             </div>
 
             {/* Payment Slip */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs">
-              <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Receipt size={17} className="text-blue-600" />
-                หลักฐานการชำระเงิน
-              </h2>
-
-              <div className="space-y-3.5 text-sm">
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">ยอดที่ชำระ</p>
-                  <p className="font-medium text-gray-800">
-                    ฿{Number(payment?.amount ?? order.total_amount ?? 0).toLocaleString()}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">เวลาที่ชำระ</p>
-                  <p className="font-medium text-gray-700">
-                    {payment?.payment_date
-                      ? new Date(payment.payment_date).toLocaleString("th-TH")
-                      : "-"}
-                  </p>
-                </div>
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden flex flex-col flex-1">
+              {/* Header: ยอดเงิน */}
+              <div className="bg-[#12356b] px-5 sm:px-6 py-4 text-white">
+                <p className="text-xs text-blue-100/80 flex items-center gap-1.5">
+                  <Receipt size={14} />
+                  หลักฐานการชำระเงิน
+                </p>
+                <p className="text-2xl font-bold mt-1">
+                  ฿{Number(payment?.amount ?? order.total_amount ?? 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-blue-100/70 mt-1">
+                  {payment?.payment_date
+                    ? new Date(payment.payment_date).toLocaleString("th-TH")
+                    : "ยังไม่มีเวลาที่ชำระ"}
+                </p>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-gray-100 space-y-2.5">
-                <button
-                  type="button"
-                  onClick={handleViewSlip}
-                  disabled={!slipUrl}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors text-blue-600 bg-blue-50/80 border border-blue-200 hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
-                >
-                  <Eye size={15} />
-                  {slipUrl ? "ดูสลิปโอนเงิน" : "ยังไม่มีสลิปโอนเงิน"}
-                </button>
-
-                {slipVerified ? (
-                  <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
-                    <ShieldCheck size={15} />
-                    ตรวจสอบหลักฐานแล้ว
-                    <Lock size={12} className="opacity-60" />
-                  </div>
-                ) : (
-                  isPending && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleVerifySlip}
-                        disabled={!slipViewed || !slipUrl || isUpdating}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors bg-[#12356b] text-white hover:bg-[#0e2b57] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-                      >
-                        <ShieldCheck size={15} />
-                        ยืนยันหลักฐานการชำระเงิน
-                      </button>
-                      {slipUrl && !slipViewed && (
-                        <p className="text-[11px] text-amber-600 text-center flex items-center justify-center gap-1">
-                          <Lock size={12} />
-                          ต้องเปิดดูสลิปก่อนจึงจะยืนยันได้
+              <div className="p-5 sm:p-6 flex-1">
+                {isPending || slipVerdict !== null ? (
+                  <ol>
+                    {/* Step 1: ดูสลิป */}
+                    <li className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <span
+                          className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-semibold ${
+                            slipViewed || slipVerdict !== null
+                              ? "bg-emerald-500 text-white"
+                              : "bg-blue-600 text-white"
+                          }`}
+                        >
+                          {slipViewed || slipVerdict !== null ? (
+                            <CheckCircle size={15} />
+                          ) : (
+                            "1"
+                          )}
+                        </span>
+                        <span
+                          className={`w-px flex-1 my-1 ${
+                            slipViewed || slipVerdict !== null
+                              ? "bg-emerald-300"
+                              : "bg-gray-200"
+                          }`}
+                        />
+                      </div>
+                      <div className="flex-1 pb-5">
+                        <p className="text-sm font-medium text-gray-900">
+                          ตรวจสอบสลิปโอนเงิน
                         </p>
-                      )}
-                    </>
-                  )
+                        <p className="text-xs text-gray-400 mt-0.5 mb-2.5">
+                          เปิดดูสลิปและเทียบยอดกับออเดอร์
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleViewSlip}
+                          disabled={!slipUrl}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors text-blue-600 bg-blue-50/80 border border-blue-200 hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
+                        >
+                          <Eye size={15} />
+                          {slipUrl ? "ดูสลิปโอนเงิน" : "ยังไม่มีสลิปโอนเงิน"}
+                        </button>
+                      </div>
+                    </li>
+
+                    {/* Step 2: ผลการตรวจสลิป */}
+                    <li className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <span
+                          className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-xs font-semibold ${
+                            slipVerdict === true
+                              ? "bg-emerald-500 text-white"
+                              : slipVerdict === false
+                              ? "bg-red-500 text-white"
+                              : slipViewed
+                              ? "bg-blue-600 text-white"
+                              : "bg-gray-100 text-gray-400"
+                          }`}
+                        >
+                          {slipVerdict === true ? (
+                            <CheckCircle size={15} />
+                          ) : slipVerdict === false ? (
+                            <X size={15} />
+                          ) : (
+                            "2"
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <p
+                          className={`text-sm font-medium ${
+                            slipViewed || slipVerdict !== null
+                              ? "text-gray-900"
+                              : "text-gray-400"
+                          }`}
+                        >
+                          ผลการตรวจสอบสลิป
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5 mb-2.5">
+                          {slipVerdict === true
+                            ? "ตรวจสอบแล้ว ไม่สามารถแก้ไขผลได้"
+                            : slipVerdict === false
+                            ? "ตรวจสอบแล้ว ไม่สามารถแก้ไขผลได้ จนกว่าลูกค้าจะส่งสลิปใหม่"
+                            : slipViewed
+                            ? "สลิปถูกต้องหรือไม่? เลือกผลการตรวจสอบ (เลือกแล้วแก้ไม่ได้)"
+                            : "ต้องเปิดดูสลิปก่อนจึงจะเลือกผลการตรวจสอบได้"}
+                        </p>
+
+                        {slipVerdict === true ? (
+                          <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                            <ShieldCheck size={15} />
+                            สลิปถูกต้อง
+                            <Lock size={12} className="opacity-60" />
+                          </div>
+                        ) : slipVerdict === false ? (
+                          <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-red-50 text-red-700 ring-1 ring-red-200">
+                            <XCircle size={15} />
+                            สลิปไม่ถูกต้อง
+                            <Lock size={12} className="opacity-60" />
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => handleVerifySlip(false)}
+                              disabled={!slipViewed || !slipUrl || isUpdating}
+                              className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-gray-200 bg-white text-red-600 hover:bg-red-50 hover:border-red-200 text-sm font-medium transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:hover:bg-gray-100 disabled:cursor-not-allowed"
+                            >
+                              <XCircle size={15} />
+                              ไม่ถูกต้อง
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleVerifySlip(true)}
+                              disabled={!slipViewed || !slipUrl || isUpdating}
+                              className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-colors bg-[#12356b] text-white hover:bg-[#0e2b57] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                            >
+                              <ShieldCheck size={15} />
+                              ถูกต้อง
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  </ol>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleViewSlip}
+                    disabled={!slipUrl}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors text-blue-600 bg-blue-50/80 border border-blue-200 hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
+                  >
+                    <Eye size={15} />
+                    {slipUrl ? "ดูสลิปโอนเงิน" : "ยังไม่มีสลิปโอนเงิน"}
+                  </button>
                 )}
-              </div>
-            </div>
-
-            {/* Schedule Info */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs space-y-3">
-              <h2 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
-                <Clock size={17} className="text-blue-600" />
-                เวลานัดหมาย
-              </h2>
-
-              <div className="flex justify-between items-center text-sm py-1.5">
-                <span className="text-gray-400 text-xs">วันที่สั่งซื้อ</span>
-                <span className="font-medium text-gray-700 text-xs">
-                  {order.order_date
-                    ? new Date(order.order_date).toLocaleString("th-TH")
-                    : "-"}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center text-sm py-1.5 border-t border-gray-100">
-                <span className="text-gray-400 text-xs">เวลานัดรับงาน</span>
-                <span className="font-semibold text-blue-700 text-xs">
-                  {order.receive_date
-                    ? new Date(order.receive_date).toLocaleString("th-TH")
-                    : "-"}
-                </span>
               </div>
             </div>
           </div>
@@ -711,6 +823,113 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      {/* Modal: ยืนยันการปฏิเสธออเดอร์ */}
+      {showRejectModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => !isUpdating && setShowRejectModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+              <XCircle className="text-red-600" size={22} />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">
+              ยืนยันการปฏิเสธรายการ
+            </h3>
+            <p className="text-sm text-gray-500 mb-6">
+              คุณต้องการปฏิเสธรายการนี้จริงหรือไม่?
+              <br />
+              หากยืนยันการยกเลิก
+              จะไม่สามารถย้อนกลับได้
+            </p>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowRejectModal(false)}
+                disabled={isUpdating}
+                className="py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReject}
+                disabled={isUpdating}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-600 text-white hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {isUpdating ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <XCircle size={16} />
+                )}
+                ปฏิเสธออเดอร์
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: เตือนให้ตรวจสลิปก่อนยืนยันออเดอร์ */}
+      {showWarnModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setShowWarnModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="text-amber-600" size={22} />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">
+              ยังไม่สามารถยืนยันออเดอร์ได้
+            </h3>
+            <p className="text-sm text-gray-500 mb-6">
+              {slipVerdict === false
+                ? "สลิปถูกทำเครื่องหมายว่าไม่ถูกต้อง จึงยืนยันออเดอร์ไม่ได้ ต้องรอลูกค้าส่งสลิปใหม่ หรือปฏิเสธออเดอร์"
+                : "คุณยังไม่ได้ตรวจสอบสลิปโอนเงิน กรุณาเปิดดูสลิปและเลือกผลการตรวจสอบก่อน"}
+            </p>
+
+            {slipVerdict === false ? (
+              <button
+                type="button"
+                onClick={() => setShowWarnModal(false)}
+                className="w-full py-2.5 rounded-xl bg-[#12356b] text-white hover:bg-[#0e2b57] text-sm font-medium transition-colors"
+              >
+                รับทราบ
+              </button>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowWarnModal(false)}
+                  className="py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
+                >
+                  ปิด
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowWarnModal(false);
+                    handleViewSlip();
+                  }}
+                  disabled={!slipUrl}
+                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[#12356b] text-white hover:bg-[#0e2b57] text-sm font-medium transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  <Eye size={15} />
+                  ไปดูสลิป
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Modal: ยืนยันการรับงาน */}
       {showConfirmModal && (
         <div
@@ -730,8 +949,6 @@ export default function OrderDetailPage() {
             <p className="text-sm text-gray-500 mb-6">
               คุณได้ตรวจสอบหลักฐานการชำระเงินว่าถูกต้องแล้ว
               ยืนยันหรือไม่?
-              <br />
-              หากยืนยัน สถานะจะเปลี่ยนเป็น &quot;กำลังพิมพ์&quot;
             </p>
 
             <div className="grid grid-cols-2 gap-2.5">

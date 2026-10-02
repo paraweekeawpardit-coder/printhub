@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck, Store } from "lucide-react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 
@@ -22,43 +22,80 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
     password: "",
   });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function doLogin() {
     setMessage("");
     setLoading(true);
-
-    console.log("login information ",logindata)
 
     try {
       const res = await axios.post(`${API_URL}/auth/login`, logindata);
 
-      if (res.data.token) {
-        if (res.data.role === "shop") {
-          localStorage.setItem("token", res.data.token);
+      if (!res.data.token) return;
+
+      localStorage.setItem("token", res.data.token);
+
+      switch (res.data.role) {
+        case "admin":
+          localStorage.setItem("id", res.data.id);
+          localStorage.setItem("username", res.data.name);
+          router.push("/admin");
+          break;
+        case "owner":
+          localStorage.setItem("id", res.data.id);
+          localStorage.setItem("username", res.data.name);
+          router.push("/owner");
+          break;
+        case "shop":
           localStorage.setItem("shop_id", res.data.shop_id);
           localStorage.setItem("shop_name", res.data.shop_name);
           router.push("/shop");
-          return;
-        } else {
-          localStorage.setItem("token", res.data.token);
+          break;
+        default:
           localStorage.setItem("id", res.data.id);
           localStorage.setItem("username", res.data.name);
           router.push("/customer");
-          return;
-        }
       }
     } catch (err: any) {
       console.error(err);
-      const errorMessage =
-        err.response?.data?.error || "เกิดข้อผิดพลาด ไม่สามารถเข้าสู่ระบบได้";
-      setMessage(errorMessage);
+      setMessage(
+        err.response?.data?.error || "เกิดข้อผิดพลาด ไม่สามารถเข้าสู่ระบบได้"
+      );
     } finally {
       setLoading(false);
     }
   }
 
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    doLogin();
+  }
+
   return (
-    <section className="w-full bg-white px-8 py-10">
+    <section className="relative flex min-h-screen w-full items-center bg-white px-8 py-10">
+      {/* Admin / Owner — ปรับให้ชิดขอบมุมขวาบน และกดเปลี่ยนหน้าได้ทันที ไม่ผ่าน API */}
+      <div className="absolute top-6 right-6 flex items-center gap-1 rounded-full border border-gray-200 bg-white/80 p-1 shadow-sm backdrop-blur z-10">
+        <span className="pl-3 pr-1 text-[11px] text-gray-400">เข้าสู่ระบบด้วย</span>
+
+        <button
+          type="button"
+          onClick={() => router.push("/admin")}
+          title="ไปที่หน้า Admin"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-navy transition hover:bg-primary hover:text-white"
+        >
+          <ShieldCheck size={14} />
+          Admin
+        </button>
+
+        <button
+          type="button"
+          onClick={() => router.push("/owner")}
+          title="ไปที่หน้า Owner"
+          className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium text-navy transition hover:bg-navy hover:text-white"
+        >
+          <Store size={14} />
+          Owner
+        </button>
+      </div>
+
       <div className="w-full max-w-sm mx-auto">
         <h2 className="mb-7 text-center text-2xl font-semibold tracking-tight text-navy">
           เข้าสู่ระบบ

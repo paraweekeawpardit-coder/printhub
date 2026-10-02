@@ -15,6 +15,12 @@ export interface OrderItemDetail {
   page_count: number | null;
 }
 
+export interface PaymentDetail {
+  id: string;
+  slip_url: string | null;
+  is_verified: boolean | null;
+}
+
 export interface ResultOrder {
   order_id: string;
   order_no: number;
@@ -23,6 +29,7 @@ export interface ResultOrder {
   status: string;
   amount: number;
   items: OrderItemDetail[];
+  payment: PaymentDetail | null;
 }
 
 // ==========================================
@@ -53,6 +60,7 @@ export const getOrdersByStatus = async (
         appointment_time,
         receive_date,
         total_amount,
+        payment_id,
 
         customer:customer_id (
           first_name,
@@ -61,6 +69,12 @@ export const getOrdersByStatus = async (
 
         current_status:current_status_id (
           state
+        ),
+
+        payment:payment_id (
+          id,
+          slip_url,
+          is_verified
         ),
 
         print_order_item (
@@ -85,7 +99,7 @@ export const getOrdersByStatus = async (
     }
 
     const now = new Date().getTime();
-    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000; // 24 ชั่วโมงในหน่วยมิลลิวินาที
 
     // 1. กรองสถานะ "รอการชำระเงิน" ออก
     const filteredOrders = (orders || []).filter((order: any) => {
@@ -106,28 +120,40 @@ export const getOrdersByStatus = async (
           ? order.current_status[0]
           : order.current_status;
 
+        const payment = Array.isArray(order.payment)
+          ? order.payment[0]
+          : order.payment;
+
         let computedStatus = currentStatus?.state || "รอการดำเนินงาน";
 
-        // ตรวจสอบเวลาเพื่อนัดรับ/ประมวลผลเปลี่ยนสถานะ
+        // -------------------------------------------------------------
+        // เงื่อนไขเวลาเพิ่มเติม:
+        // -------------------------------------------------------------
+        const orderTime = new Date(order.order_date).getTime();
+        const isPending =
+          computedStatus === "รอการดำเนินการ" ||
+          computedStatus === "รอการดำเนินงาน";
+
+        // เงื่อนไขพิเศษ: ถ้ารอดำเนินการอยู่ แล้วร้านไม่ยืนยันภายใน 24 ชม. (นับจาก order_date) -> เปลี่ยนเป็น "ยกเลิกการพิมพ์"
+        if (isPending && now > orderTime + ONE_DAY_MS) {
+          computedStatus = "ยกเลิกการพิมพ์";
+        }
+
+        // เช็คเวลานัดรับ (appointment_time) เดิม
         const appointmentTimeStr =
-          order.appointment_time || order.receive_date || order.order_date;
+          order.appointment_time || order.receive_date;
 
         if (appointmentTimeStr) {
           const appointmentTime = new Date(appointmentTimeStr).getTime();
 
-          // เงื่อนไข 1: รอดำเนินการ/กำลังพิมพ์ แล้วเลยเวลานัดรับ -> เปลี่ยนเป็น "ยกเลิกการพิมพ์"
-          const isPending =
-            computedStatus === "รอการดำเนินการ" ||
-            computedStatus === "รอการดำเนินงาน" ||
-            computedStatus === "กำลังพิมพ์";
-
-          if (isPending && now > appointmentTime) {
+          // ถ้ารอดำเนินการ หรือ กำลังพิมพ์ แล้วเลยเวลานัดรับ -> เปลี่ยนเป็น "ยกเลิกการพิมพ์"
+          const isPendingOrPrinting = isPending || computedStatus === "กำลังพิมพ์";
+          if (isPendingOrPrinting && now > appointmentTime) {
             computedStatus = "ยกเลิกการพิมพ์";
           }
 
-          // เงื่อนไข 2: พิมพ์เสร็จสิ้น แล้วเลยเวลานัดรับมาเกิน 1 วัน (24 ชม.) -> เปลี่ยนเป็น "รายการเสร็จสิ้น"
+          // ถ้าพิมพ์เสร็จสิ้น แล้วเลยเวลานัดรับเกิน 24 ชม. -> เปลี่ยนเป็น "รายการเสร็จสิ้น"
           const isCompletedPrint = computedStatus === "พิมพ์เสร็จสิ้น";
-
           if (isCompletedPrint && now > appointmentTime + ONE_DAY_MS) {
             computedStatus = "รายการเสร็จสิ้น";
           }
@@ -157,11 +183,18 @@ export const getOrdersByStatus = async (
           status: computedStatus,
           amount: Number(order.total_amount || 0),
           items,
+          payment: payment
+            ? {
+                id: payment.id,
+                slip_url: payment.slip_url || null,
+                is_verified: payment.is_verified ?? null,
+              }
+            : null,
         };
       })
       .filter((order) => status === "ทั้งหมด" || order.status === status);
 
-    // 3. กำหนดลำดับความสำคัญของสถานะ (ตัวเลขอันดับน้อยกว่า = แสดงก่อน)
+    // 3. กำหนดลำดับความสำคัญของสถานะ
     const STATUS_PRIORITY: Record<string, number> = {
       รอการดำเนินการ: 1,
       รอการดำเนินงาน: 1,
@@ -176,12 +209,10 @@ export const getOrdersByStatus = async (
       const priorityA = STATUS_PRIORITY[a.status] ?? 99;
       const priorityB = STATUS_PRIORITY[b.status] ?? 99;
 
-      // ถ้าสถานะต่างกัน ให้เรียงตามลำดับความสำคัญของสถานะ
       if (priorityA !== priorityB) {
         return priorityA - priorityB;
       }
 
-      // ถ้าสถานะเหมือนกัน ให้เรียงตามเวลาสั่งซื้อล่าสุด -> เก่าสุด (Newest First)
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
       return dateB - dateA;
