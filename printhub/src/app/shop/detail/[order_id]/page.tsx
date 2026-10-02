@@ -11,7 +11,6 @@ import {
   Clock,
   FileText,
   User,
-  MapPin,
   ChevronLeft,
   RefreshCw,
   Loader2,
@@ -22,6 +21,7 @@ import {
   Eye,
   ShieldCheck,
   X,
+  Image as ImageIcon, // ✅ เพิ่ม ImageIcon ตรงนี้
 } from "lucide-react";
 
 // ต้องตรงกับค่าใน backend (detail.ts)
@@ -214,8 +214,10 @@ export default function OrderDetailPage() {
     );
   }
 
-  // รวม Logic ประกาศตัวแปรสลิปไว้จุดเดียว (ป้องกันชื่อซ้ำ)
-  const slipUrl =
+  // ✅ รวม Logic ตัวแปรสลิปและการชำระเงินไว้จุดเดียว
+  const payment = order.payment;
+  const slipUrl: string | null =
+    payment?.slip_url ||
     order.slip_url ||
     order.payment_slip ||
     order.slipUrl ||
@@ -229,18 +231,14 @@ export default function OrderDetailPage() {
     order.status_state !== "รอการดำเนินงาน" &&
     order.status_state !== "ยกเลิกการพิมพ์";
 
+  const isPending = order.status_state === "รอการดำเนินงาน";
+
   const statusStyles: Record<string, string> = {
     รอการดำเนินงาน: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
     กำลังพิมพ์: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
     พิมพ์เสร็จสิ้น: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
     ยกเลิกการพิมพ์: "bg-red-50 text-red-700 ring-1 ring-red-200",
   };
-
-  const allFiles = order.files || [];
-
-  const payment = order.payment;
-  const slipUrl: string | null = payment?.slip_url || null;
-  const isPending = order.status_state === "รอการดำเนินงาน";
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">
@@ -536,7 +534,6 @@ export default function OrderDetailPage() {
                     {order.customer?.contact || "-"}
                   </p>
                 </div>
-
               </div>
 
               <div className="mt-5 pt-4 border-t border-gray-100">
@@ -648,42 +645,6 @@ export default function OrderDetailPage() {
                 </span>
               </div>
             </div>
-
-            {/* Payment Slip Section */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-3">
-              <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <ImageIcon size={17} className="text-blue-600" />
-                หลักฐานการชำระเงิน (สลิป)
-              </h2>
-
-              {slipUrl ? (
-                <div className="space-y-3">
-                  <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center p-2">
-                    <img
-                      src={slipUrl}
-                      alt="สลิปการโอนเงิน"
-                      className="max-h-72 w-auto object-contain rounded-lg"
-                    />
-                  </div>
-
-                  <a
-                    href={slipUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-center gap-1.5 w-full py-2 bg-blue-50 text-blue-600 border border-blue-100 rounded-xl text-xs font-semibold hover:bg-blue-100 transition-colors"
-                  >
-                    <Download size={14} />
-                    ดูรูปขนาดใหญ่ / ดาวน์โหลด
-                  </a>
-                </div>
-              ) : (
-                <div className="py-6 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                  <p className="text-xs text-gray-400">
-                    ยังไม่มีหลักฐานการชำระเงิน
-                  </p>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
@@ -713,20 +674,35 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="p-5 overflow-y-auto">
-              {slipUrl && (
+              {slipUrl ? (
                 <img
                   src={slipUrl}
                   alt="สลิปโอนเงิน"
                   className="w-full h-auto rounded-xl border border-slate-200/80"
                 />
+              ) : (
+                <p className="text-center text-sm text-gray-400 py-8">
+                  ไม่พบรูปภาพสลิป
+                </p>
               )}
             </div>
 
-            <div className="p-5 border-t border-gray-100">
+            <div className="p-5 border-t border-gray-100 flex gap-2">
+              {slipUrl && (
+                <a
+                  href={slipUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 text-sm font-medium transition-colors"
+                >
+                  <Download size={15} />
+                  เปิดรูปเต็ม/โหลด
+                </a>
+              )}
               <button
                 type="button"
                 onClick={() => setShowSlipModal(false)}
-                className="w-full py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
               >
                 ปิด
               </button>

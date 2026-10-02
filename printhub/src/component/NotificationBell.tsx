@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 
@@ -10,15 +11,56 @@ interface NotificationBellProps {
 }
 
 export default function NotificationBell({ userId, role }: NotificationBellProps) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const { notifications, unreadCount, loading, markAsRead } = useNotifications(
     userId,
     role
   );
 
+  // ฟังก์ชันเมื่อคลิกที่การแจ้งเตือน
+  const handleNotificationClick = async (noti: any) => {
+    // 1. มาร์กสถานะเป็นอ่านแล้ว
+    await markAsRead(noti.id);
+
+    // 2. ปิด Dropdown
+    setIsOpen(false);
+
+    // 3. ดึง order_id จากก้อนข้อมูลการแจ้งเตือน
+    const orderId = noti.order_id;
+
+    if (orderId) {
+      if (role === "shop") {
+        // ฝั่งร้านค้า: ลิ้งก์ไปยังโฟลเดอร์ /shop/detail/[order_id]
+        router.push(`/shop/detail/${orderId}`);
+      } else {
+        // 🟢 ฝั่งลูกค้า: สั่ง Scroll ไปหาการ์ดออเดอร์นั้นให้อยู่กลางจอ
+        // 1. นำทางไปหน้ารายการคำสั่งซื้อฝั่งลูกค้าก่อน (กรณีอยู่นอกหน้า)
+        router.push("/customer/orders");
+
+        // 2. ค้นหา Element ของการ์ดออเดอร์ แล้วสั่ง Scroll ไปตรงกลางจอ
+        setTimeout(() => {
+          const element = document.getElementById(`order-${orderId}`);
+          if (element) {
+            element.scrollIntoView({
+              behavior: "smooth",
+              block: "center", // จัดตำแหน่งให้อยู่ตรงกลางจอพอดี
+            });
+
+            // ใส่เอฟเฟกต์กรอบสีฟ้าไฮไลต์ 2.5 วินาที
+            element.classList.add("ring-2", "ring-blue-500", "shadow-lg");
+            setTimeout(() => {
+              element.classList.remove("ring-2", "ring-blue-500", "shadow-lg");
+            }, 2500);
+          }
+        }, 300);
+      }
+    }
+  };
+
   return (
     <div className="relative">
-      {/* ปุ่มกระดิ่ง: ปรับสีให้เข้มขึ้นชัดเจน (text-slate-700) + ใส่ Hover BG */}
+      {/* ปุ่มกระดิ่ง */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 text-slate-700 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-all cursor-pointer focus:outline-none"
@@ -32,7 +74,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
         )}
       </button>
 
-      {/* กล่อง Dropdown แสดงรายการแจ้งเตือน */}
+      {/* Dropdown แสดงรายการแจ้งเตือน */}
       {isOpen && (
         <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 text-slate-800 overflow-hidden">
           <div className="p-3.5 border-b border-slate-100 font-bold text-sm flex justify-between items-center bg-slate-50/80">
@@ -55,7 +97,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
               notifications.map((noti) => (
                 <div
                   key={noti.id}
-                  onClick={() => markAsRead(noti.id)}
+                  onClick={() => handleNotificationClick(noti)}
                   className={`p-3.5 cursor-pointer text-xs hover:bg-slate-50 transition-colors ${
                     !noti.is_read ? "bg-blue-50/60" : "bg-white"
                   }`}
