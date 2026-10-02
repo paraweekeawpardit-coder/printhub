@@ -19,6 +19,8 @@ router.get("/getComplaintsAndReviews", Home.getComplaintsAndReviews);
 // ==================== Orders ====================
 router.get("/getOrderByStatus", Order.getOrdersByStatus);
 router.get("/orders/:id", Detail.getOrder);
+router.patch("/orders/:id/status", Detail.updateOrderStatus);
+router.patch("/orders/:id/paymentstatus", Detail.verifyPayment)
 
 // 🟢 สลับมาใช้ Order.updateOrderStatus ที่มีระบบตรวจสอบสถานะร้านค้า (suspended check)
 router.patch("/orders/:orderId/status", Order.updateOrderStatus);
