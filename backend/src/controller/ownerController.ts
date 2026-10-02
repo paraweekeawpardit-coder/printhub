@@ -1,16 +1,12 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { Request, Response } from 'express';
+import supabase from '../config/supabase.js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-export async function GET(request: Request) {
+// GET: /api/owner/stats
+export const getOwnerStats = async (req: Request, res: Response) => {
   try {
-    const { searchParams } = new URL(request.url);
-    const timeRange = searchParams.get('timeRange') || 'all';
-    const selectedDate = searchParams.get('date'); // รูปแบบ YYYY-MM-DD
-    const selectedMonth = searchParams.get('month'); // รูปแบบ YYYY-MM
+    const timeRange = (req.query.timeRange as string) || 'all';
+    const selectedDate = req.query.date as string; // รูปแบบ YYYY-MM-DD
+    const selectedMonth = req.query.month as string; // รูปแบบ YYYY-MM
 
     // 1. ดึงข้อมูลรายการชำระเงินทั้งหมด
     const { data: payments, error: paymentErr } = await supabase
@@ -84,7 +80,7 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({
+    return res.status(200).json({
       success: true,
       data: {
         finance: {
@@ -98,9 +94,31 @@ export async function GET(request: Request) {
 
   } catch (error: any) {
     console.error('Owner Stats API Error:', error);
-    return NextResponse.json(
-      { success: false, message: error.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล' },
-      { status: 500 }
-    );
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล',
+    });
   }
-}
+};
+
+// POST: /api/owner/verify-pin
+export const verifyOwnerPin = async (req: Request, res: Response) => {
+  try {
+    const { pin } = req.body;
+    const SERVER_OWNER_PIN = process.env.OWNER_PIN || '8888';
+
+    if (pin === SERVER_OWNER_PIN) {
+      return res.status(200).json({ success: true });
+    }
+
+    return res.status(401).json({
+      success: false,
+      message: 'รหัส PIN ไม่ถูกต้อง',
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในระบบ',
+    });
+  }
+};

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import OwnerDashboard from "../../component/owner/OwnerDashboard";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
 export default function OwnerDashboardPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [pin, setPin] = useState<string>("");
@@ -15,7 +17,7 @@ export default function OwnerDashboardPage() {
     setVerifying(true);
 
     try {
-      const res = await fetch("/api/owner/verify-pin", {
+      const res = await fetch(`${API_BASE_URL}/api/owner/verify-pin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pin }),
@@ -29,7 +31,7 @@ export default function OwnerDashboardPage() {
         setError(result.message || "รหัส PIN สำหรับเจ้าของระบบไม่ถูกต้อง");
       }
     } catch (err) {
-      setError("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้");
+      setError("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ Backend ได้");
     } finally {
       setVerifying(false);
     }

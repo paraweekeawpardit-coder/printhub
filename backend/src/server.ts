@@ -1,8 +1,10 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express, { Request, Response } from "express";
 import http from "http";
 import { Server } from "socket.io";
 import cors from "cors";
-import dotenv from "dotenv";
 import morgan from "morgan";
 import path from "path";
 import mongoose, { Schema } from "mongoose";
@@ -17,9 +19,7 @@ import ShopRoute from "./route/Shop.js";
 import adminRoutes from "./route/Admin.js";
 import customerRoute from "./route/customerRoute.js";
 import notificationRoute from "./route/notificationRoute.js";
-
-
-dotenv.config();
+import ownerRoute from './route/owner.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -82,6 +82,9 @@ app.use("/customer", customerRoute);
 
 // Notifications
 app.use("/api/notifications", notificationRoute);
+
+//owner
+app.use('/api/owner', ownerRoute);
 
 // ==========================================
 // 4. Socket.io & MongoDB Real-time Chat

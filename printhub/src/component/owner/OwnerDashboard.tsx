@@ -23,11 +23,12 @@ interface OwnerDashboardProps {
   onLogout?: () => void;
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
 export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
   const [loading, setLoading] = useState<boolean>(true);
   const [timeRange, setTimeRange] = useState<"today" | "month" | "all">("all");
 
-  // ค่า Default ใช้วันและเดือนปัจจุบัน
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
@@ -35,7 +36,6 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
     new Date().toISOString().slice(0, 7)
   );
   
-  // State สำหรับกรองร้านค้า
   const [selectedShopId, setSelectedShopId] = useState<string>("all");
 
   const [finance, setFinance] = useState<FinanceStats>({
@@ -55,7 +55,7 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
     ) => {
       setLoading(true);
       try {
-        let queryUrl = `/api/owner/stats?timeRange=${overrideRange}&t=${Date.now()}`;
+        let queryUrl = `${API_BASE_URL}/api/owner/stats?timeRange=${overrideRange}&t=${Date.now()}`;
         if (overrideRange === "today" && overrideDate) {
           queryUrl += `&date=${overrideDate}`;
         } else if (overrideRange === "month" && overrideMonth) {
@@ -80,12 +80,10 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
     [timeRange, selectedDate, selectedMonth]
   );
 
-  // ดึงข้อมูลอัตโนมัติเมื่อมีการเปลี่ยนประเภทช่วงเวลา, วันที่ หรือ เดือน
   useEffect(() => {
     fetchOwnerFinanceData(timeRange, selectedDate, selectedMonth);
   }, [timeRange, selectedDate, selectedMonth, fetchOwnerFinanceData]);
 
-  // ฟังก์ชัน Reset ล้างค่าตัวกรองทั้งหมด
   const handleResetFilters = () => {
     const todayStr = new Date().toISOString().split("T")[0];
     const monthStr = new Date().toISOString().slice(0, 7);
@@ -97,13 +95,11 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
     fetchOwnerFinanceData("all", todayStr, monthStr);
   };
 
-  // กรองรายชื่อร้านค้าตาม Dropdown ที่เลือก
   const filteredShopRevenues = useMemo(() => {
     if (selectedShopId === "all") return shopRevenues;
     return shopRevenues.filter((shop) => shop.id === selectedShopId);
   }, [shopRevenues, selectedShopId]);
 
-  // คำนวณยอดใน StatCard ใหม่ตามร้านที่เลือกกรอง
   const displayFinance = useMemo(() => {
     if (selectedShopId === "all") return finance;
 
@@ -136,7 +132,6 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
 
         {/* ปุ่มควบคุมช่วงเวลา, Refresh, Reset, Logout */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Input เลือกวัน/เดือน */}
           {timeRange === "today" && (
             <input
               type="date"
@@ -161,7 +156,6 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
             />
           )}
 
-          {/* ตัวกรองช่วงเวลา */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-semibold">
             <button
               onClick={() => {
@@ -198,7 +192,6 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
             </button>
           </div>
 
-          {/* ปุ่ม รีเฟรช (ดึงข้อมูลล่าสุด) */}
           <button
             onClick={() => fetchOwnerFinanceData(timeRange, selectedDate, selectedMonth)}
             disabled={loading}
@@ -211,7 +204,6 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
             รีเฟรช
           </button>
 
-          {/* ปุ่ม ล้างค่าตัวกรอง (Reset) */}
           <button
             onClick={handleResetFilters}
             disabled={loading}
@@ -224,7 +216,6 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
             ล้างตัวกรอง
           </button>
 
-          {/* ปุ่ม Logout */}
           {onLogout && (
             <button
               onClick={onLogout}
@@ -275,7 +266,6 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
                 <p className="text-xs text-slate-500 mt-0.5">ยอดขายรวม ส่วนแบ่งระบบ และยอดสุทธิที่ต้องโอนให้แต่ละร้าน</p>
               </div>
 
-              {/* ย้ายตัวกรองเลือกร้านค้ามาไว้หัวตาราง */}
               <div className="flex items-center gap-3">
                 <div className="relative flex items-center">
                   <svg className="w-4 h-4 text-slate-500 absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
