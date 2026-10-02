@@ -1,8 +1,6 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
-// ค่า payment.status เมื่อร้านตรวจสอบสลิปแล้ว (ปรับให้ตรงกับข้อมูลจริงในตาราง payment)
-const PAYMENT_VERIFIED_STATUS = "ตรวจสอบแล้ว";
 const ORDER_PENDING_STATE = "รอการดำเนินงาน";
 
 export const getOrder = async (
@@ -108,7 +106,7 @@ export const getOrder = async (
       order.payment_id
         ? supabase
             .from("payment")
-            .select("amount, slip_url, payment_date, status")
+            .select("amount, slip_url, payment_date, status, is_verified")
             .eq("id", order.payment_id)
             .single()
         : Promise.resolve({ data: null, error: null }),
@@ -126,7 +124,7 @@ export const getOrder = async (
     if (paymentError) console.error("Get payment error:", paymentError);
     if (reviewError) console.error("Get review error:", reviewError);
 
-    const statusState = statusRow?.state || "รอการดำเนินงาน";
+    const statusState = statusRow?.state || ORDER_PENDING_STATE;
 
     // ==========================================
     // Customer
@@ -222,7 +220,7 @@ export const updateOrderStatus = async (
 
     const { data: order, error: orderError } = await supabase
       .from("print_order")
-      .select("id, shop_id, payment_id")
+      .select("id, shop_id, payment_id, current_status_id")
       .eq("id", id)
       .single();
 
@@ -236,8 +234,29 @@ export const updateOrderStatus = async (
         .json({ error: "This order does not belong to this shop" });
     }
 
-    // การรับงาน (กำลังพิมพ์) ต้องผ่านการตรวจสอบสลิปก่อนเสมอ
+    // การรับงาน (กำลังพิมพ์) ต้องตรวจสลิปแล้วและผลต้องเป็น "ถูกต้อง" (is_verified = true)
+    // การปฏิเสธออเดอร์ (ยกเลิกการพิมพ์) ทำได้เสมอ
     if (status_name === "กำลังพิมพ์") {
+      // รับงานได้เฉพาะออเดอร์ที่ยังรอการดำเนินงาน (กันรับซ้ำ / กู้ออเดอร์ที่ยกเลิกแล้ว)
+      if (order.current_status_id) {
+        const { data: currentStatus, error: currentStatusError } =
+          await supabase
+            .from("status")
+            .select("state")
+            .eq("id", order.current_status_id)
+            .single();
+
+        if (currentStatusError || !currentStatus) {
+          return res.status(500).json({ error: "Cannot resolve order status" });
+        }
+
+        if (currentStatus.state !== ORDER_PENDING_STATE) {
+          return res.status(409).json({
+            error: "ออเดอร์นี้ดำเนินการไปแล้ว ไม่สามารถรับงานได้",
+          });
+        }
+      }
+
       if (!order.payment_id) {
         return res
           .status(400)
@@ -246,13 +265,23 @@ export const updateOrderStatus = async (
 
       const { data: paymentRow, error: paymentError } = await supabase
         .from("payment")
-        .select("status")
+        .select("is_verified")
         .eq("id", order.payment_id)
         .single();
 
-      if (paymentError || paymentRow?.status !== PAYMENT_VERIFIED_STATUS) {
+      if (paymentError || !paymentRow) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+
+      if (paymentRow.is_verified === null || paymentRow.is_verified === undefined) {
         return res.status(400).json({
-          error: "ต้องตรวจสอบและยืนยันหลักฐานการชำระเงินก่อน",
+          error: "ยังไม่ได้ตรวจสอบสลิป กรุณาตรวจสอบหลักฐานการชำระเงินก่อน",
+        });
+      }
+
+      if (paymentRow.is_verified === false) {
+        return res.status(400).json({
+          error: "สลิปถูกทำเครื่องหมายว่าไม่ถูกต้อง ไม่สามารถยืนยันออเดอร์ได้",
         });
       }
     }
@@ -300,6 +329,9 @@ export const updateOrderStatus = async (
         "Update print_order current_status error:",
         updateOrderError
       );
+      return res
+        .status(500)
+        .json({ error: "อัปเดตสถานะออเดอร์ไม่สำเร็จ" });
     }
 
     return res.status(200).json({
@@ -316,18 +348,29 @@ export const updateOrderStatus = async (
 };
 
 // VERIFY PAYMENT SLIP
+// body: { is_verified: true | false }
+// - ตรวจได้ครั้งเดียว: ถ้า payment.is_verified ไม่ใช่ null แล้วจะเปลี่ยนไม่ได้
+// - ผลเป็น false ออเดอร์ยังคงสถานะ "รอการดำเนินงาน"
+// - จะตรวจใหม่ได้เมื่อ is_verified ถูกรีเซ็ตเป็น null (เช่น ลูกค้าส่งสลิปใหม่)
 export const verifyPayment = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
     const { id } = req.params;
+    const { is_verified } = req.body;
     const shop_id = (req.query.shop_id || req.headers.shop_id) as
       | string
       | undefined;
 
     if (!id) {
       return res.status(400).json({ error: "order_id is required" });
+    }
+
+    if (typeof is_verified !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: "is_verified must be true or false" });
     }
 
     const { data: order, error: orderError } = await supabase
@@ -346,8 +389,7 @@ export const verifyPayment = async (
         .json({ error: "This order does not belong to this shop" });
     }
 
-    // ตรวจสอบสลิปได้เฉพาะออเดอร์ที่ยังรอการดำเนินงาน
-    // หลังรับงาน/ปฏิเสธไปแล้ว (สถานะเปลี่ยน) จะแก้ผลการตรวจสลิปไม่ได้อีก
+    // ตรวจสลิปได้เฉพาะออเดอร์ที่ยังรอการดำเนินงาน
     if (order.current_status_id) {
       const { data: statusRow, error: statusError } = await supabase
         .from("status")
@@ -361,7 +403,7 @@ export const verifyPayment = async (
 
       if (statusRow.state !== ORDER_PENDING_STATE) {
         return res.status(409).json({
-          error: "ออเดอร์นี้ดำเนินการไปแล้ว ไม่สามารถเปลี่ยนผลการตรวจสลิปได้",
+          error: "ออเดอร์นี้ดำเนินการไปแล้ว ไม่สามารถตรวจสลิปได้",
         });
       }
     }
@@ -374,7 +416,7 @@ export const verifyPayment = async (
 
     const { data: payment, error: paymentError } = await supabase
       .from("payment")
-      .select("id, slip_url, status")
+      .select("id, slip_url, is_verified")
       .eq("id", order.payment_id)
       .single();
 
@@ -386,29 +428,37 @@ export const verifyPayment = async (
       return res.status(400).json({ error: "ยังไม่มีสลิปโอนเงิน" });
     }
 
-    // กดซ้ำได้ ไม่ error
-    if (payment.status === PAYMENT_VERIFIED_STATUS) {
-      return res.status(200).json({
-        message: "Payment already verified",
-        data: { payment_id: payment.id, status: payment.status },
+    // ตรวจไปแล้ว (true/false) จะเปลี่ยนผลไม่ได้
+    if (payment.is_verified !== null) {
+      return res.status(409).json({
+        error: "ตรวจสอบสลิปไปแล้ว ไม่สามารถเปลี่ยนผลการตรวจสอบได้",
+        data: { payment_id: payment.id, is_verified: payment.is_verified },
       });
     }
 
+    // อัปเดตเฉพาะตอนที่ยังเป็น null (กันกดซ้อน/เขียนทับ)
     const { data: updated, error: updateError } = await supabase
       .from("payment")
-      .update({ status: PAYMENT_VERIFIED_STATUS })
+      .update({ is_verified })
       .eq("id", payment.id)
-      .select("id, status")
-      .single();
+      .is("is_verified", null)
+      .select("id, is_verified")
+      .maybeSingle();
 
     if (updateError) {
       console.error("Verify payment error:", updateError);
       return res.status(400).json({ error: updateError.message });
     }
 
+    if (!updated) {
+      return res.status(409).json({
+        error: "ตรวจสอบสลิปไปแล้ว ไม่สามารถเปลี่ยนผลการตรวจสอบได้",
+      });
+    }
+
     return res.status(200).json({
-      message: "Payment verified successfully",
-      data: { payment_id: updated.id, status: updated.status },
+      message: "Payment slip checked successfully",
+      data: { payment_id: updated.id, is_verified: updated.is_verified },
     });
   } catch (err) {
     console.error("Verify Payment Error:", err);

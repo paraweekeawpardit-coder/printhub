@@ -14,6 +14,7 @@ import ReviewComplaintModal from "@/src/component/shop/review-complaint-modal";
 
 type Order = {
   id: string;
+  order_no?: string; // 👈 เพิ่ม order_no ใน Type
   customer_id: string;
   shop_id: string;
   description: string | null;
@@ -44,10 +45,8 @@ export default function ShopPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [shopId, setShopId] = useState<string>("");
 
-  // Control View สำหรับสลับรายละเอียดของทั้ง 3 Cards
   const [activeView, setActiveView] = useState<"orders" | "financial" | "reviews" | null>(null);
 
-  // Financial Data State (เพิ่ม financialTrend สำหรับกราฟการเงิน)
   const [financialData, setFinancialData] = useState<{
     totalGross: number;
     totalFee: number;
@@ -67,7 +66,6 @@ export default function ShopPage() {
     financialTrend: { daily: [], weekly: [], monthly: [], yearly: [] },
   });
 
-  // Order Breakdown State
   const [breakdownData, setBreakdownData] = useState<{
     total: number;
     counts: Record<string, number>;
@@ -85,7 +83,6 @@ export default function ShopPage() {
     trendData: { daily: [], weekly: [], monthly: [], yearly: [] },
   });
 
-  // Review & Complaint State
   const [reviewData, setReviewData] = useState<{
     reviews: any[];
     complaints: any[];
@@ -195,6 +192,7 @@ export default function ShopPage() {
     };
   }, [fetchDashboardData]);
 
+  // ส่ง orderId (UUID) ในการนำทาง
   const handleOrderClick = (orderId: string) => {
     router.push(`/shop/detail/${orderId}`);
   };
@@ -242,7 +240,7 @@ export default function ShopPage() {
           />
         </div>
 
-        {/* Dynamic Detail Section เมื่อกดคลิกแต่ละ Card */}
+        {/* Dynamic Detail Section */}
         {activeView === "orders" && (
           <div className="mb-10">
             <OrderBreakdownModal
@@ -279,7 +277,7 @@ export default function ShopPage() {
 
         {/* รายการคำสั่งพิมพ์ล่าสุด */}
         <h2 className="mb-6 text-lg font-bold text-[#0F2942]">
-          รายการคำสั่งพิมพ์ล่าสุด
+          รายการคำสั่งพิมพ์วันนี้
         </h2>
 
         {loading ? (
@@ -299,7 +297,7 @@ export default function ShopPage() {
               ))
             ) : (
               <p className="col-span-full py-8 text-center text-slate-500">
-                ไม่มีรายการคำสั่งพิมพ์ล่าสุด
+                ไม่มีรายการคำสั่งพิมพ์วันนี้
               </p>
             )}
           </div>

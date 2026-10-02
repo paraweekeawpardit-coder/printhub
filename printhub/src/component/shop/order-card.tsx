@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, X, Printer, Loader2 } from "lucide-react";
+import { Check, X, Printer, Loader2, Eye } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
 
 type Order = {
   id: string;
+  order_no?: string;
   customer_id: string;
   shop_id: string;
   description: string | null;
@@ -20,6 +21,11 @@ type Order = {
     id: string;
     state: string;
   };
+  payment?: {
+    id?: string;
+    slip_url?: string | null;
+    is_verified?: boolean | null;
+  } | null;
 };
 
 type Props = {
@@ -38,7 +44,6 @@ const STATUS = {
   CANCELLED: "ยกเลิกการพิมพ์",
 } as const;
 
-// สีของสถานะ: ป้ายพื้นอ่อน + จุดสีเข้ม
 const STATUS_STYLE: Record<string, { badge: string; dot: string }> = {
   [STATUS.PENDING]: {
     badge: "bg-amber-50 text-amber-700 border-amber-200",
@@ -72,9 +77,16 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
     order.latest_status || order.current_status?.state || STATUS.PENDING;
 
   const [currentState, setCurrentState] = useState<string>(initialStatus);
-  // เก็บว่ากำลังกดปุ่มไหนอยู่ เพื่อให้หมุนเฉพาะปุ่มที่กด
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [isVerified, setIsVerified] = useState<boolean | null>(
+    order.payment?.is_verified ?? null
+  );
+  const [verifyingSlip, setVerifyingSlip] = useState<boolean>(false);
+
+  // State สำหรับเปิด/ปิด Pop-up แสดงรูปสลิป
+  const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
 
   const updating = pendingAction !== null;
 
@@ -82,6 +94,7 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
     setCurrentState(
       order.latest_status || order.current_status?.state || STATUS.PENDING
     );
+    setIsVerified(order.payment?.is_verified ?? null);
   }, [order]);
 
   async function updateState(newStatus: string) {
@@ -101,11 +114,39 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
 
       setCurrentState(newStatus);
       onUpdateStatus?.(order.id, newStatus);
-    } catch (err) {
+    } catch (err: any) {
       console.error("[OrderCard] request failed:", err);
-      setErrorMsg("ไม่สามารถเปลี่ยนสถานะได้ กรุณาลองใหม่อีกครั้ง");
+      const backendMessage =
+        err.response?.data?.error || "ไม่สามารถเปลี่ยนสถานะได้ กรุณาลองใหม่อีกครั้ง";
+      setErrorMsg(backendMessage);
     } finally {
       setPendingAction(null);
+    }
+  }
+
+  async function handleVerifySlip(isApproved: boolean) {
+    if (verifyingSlip) return;
+
+    setVerifyingSlip(true);
+    setErrorMsg(null);
+
+    try {
+      const url = `${API_BASE}/shop/orders/${order.id}/verify-payment`;
+      await axios.patch(
+        url,
+        { is_verified: isApproved },
+        { params: { shop_id: order.shop_id } }
+      );
+
+      setIsVerified(isApproved);
+      setShowSlipModal(false); // ปิด Pop-up หลังตรวจสลิปเสร็จสิ้น
+    } catch (err: any) {
+      console.error("[OrderCard] slip verification failed:", err);
+      const backendMessage =
+        err.response?.data?.error || "ไม่สามารถตรวจสอบสลิปได้";
+      setErrorMsg(backendMessage);
+    } finally {
+      setVerifyingSlip(false);
     }
   }
 
@@ -117,123 +158,240 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
   const style = STATUS_STYLE[currentState] ?? FALLBACK_STYLE;
 
   return (
-    <div
-      onClick={onClick}
-      className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer flex flex-col justify-between"
-    >
-      <div>
-        {/* Header: Order ID + สถานะ */}
-        <div className="flex justify-between items-start gap-3">
-          <div className="min-w-0">
-            <h3 className="font-semibold text-slate-900 text-base tracking-tight">
-              Order #{order.id.slice(0, 8)}
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {new Date(order.order_date).toLocaleDateString("th-TH")}
+    <>
+      <div
+        onClick={onClick}
+        className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer flex flex-col justify-between"
+      >
+        <div>
+          {/* Header */}
+          <div className="flex justify-between items-start gap-3">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-slate-900 text-base tracking-tight">
+                Order #{order.order_no || order.id.slice(0, 8)}
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {new Date(order.order_date).toLocaleDateString("th-TH")}
+              </p>
+            </div>
+
+            <span
+              className={`inline-flex shrink-0 items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full border ${style.badge}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+              {currentState}
+            </span>
+          </div>
+
+          {/* Info */}
+          <div className="mt-6 mb-6 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 font-medium text-slate-600 text-sm">
+                {initialLetter}
+              </div>
+
+              <div className="min-w-0">
+                <p className="font-medium text-slate-900 text-sm truncate">
+                  {customerName}
+                </p>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  {order.description || "ไม่มีรายละเอียดเพิ่มเติม"}
+                </p>
+              </div>
+            </div>
+
+            <p className="shrink-0 text-slate-900 font-semibold text-base tabular-nums">
+              {Number(order.total_price || 0).toLocaleString()}
+              <span className="ml-1 text-xs font-normal text-slate-400">บาท</span>
             </p>
           </div>
-
-          <span
-            className={`inline-flex shrink-0 items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full border ${style.badge}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-            {currentState}
-          </span>
         </div>
 
-        {/* Info: ลูกค้า + รายละเอียด + ยอดชำระ */}
-        <div className="mt-6 mb-6 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 font-medium text-slate-600 text-sm">
-              {initialLetter}
-            </div>
-
-            <div className="min-w-0">
-              <p className="font-medium text-slate-900 text-sm truncate">
-                {customerName}
-              </p>
-              <p className="text-xs text-slate-400 truncate mt-0.5">
-                {order.description || "ไม่มีรายละเอียดเพิ่มเติม"}
-              </p>
-            </div>
-          </div>
-
-          <p className="shrink-0 text-slate-900 font-semibold text-base tabular-nums">
-            {Number(order.total_price || 0).toLocaleString()}
-            <span className="ml-1 text-xs font-normal text-slate-400">บาท</span>
+        {/* Error Message */}
+        {errorMsg && (
+          <p role="alert" className="mb-3 text-xs text-rose-600 font-medium">
+            {errorMsg}
           </p>
+        )}
+
+        {/* Footer */}
+        <div onClick={(e) => e.stopPropagation()}>
+          {currentState === STATUS.PENDING && (
+            <div className="space-y-3">
+              {/* แถบสถานะสลิป */}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                <span className="text-slate-600 font-medium">
+                  สลิปชำระเงิน:{" "}
+                  {isVerified === true && (
+                    <span className="text-emerald-600 font-semibold">ถูกต้องแล้ว</span>
+                  )}
+                  {isVerified === false && (
+                    <span className="text-rose-600 font-semibold">สลิปไม่ถูกต้อง</span>
+                  )}
+                  {isVerified === null && (
+                    <span className="text-amber-600 font-semibold">ยังไม่ได้ตรวจสอบ</span>
+                  )}
+                </span>
+
+                {/* ปุ่มเปิด Pop-up ดูสลิป */}
+                {order.payment?.slip_url ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowSlipModal(true)}
+                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium hover:underline"
+                  >
+                    <Eye size={14} /> ตรวจสอบสลิป
+                  </button>
+                ) : (
+                  <span className="text-slate-400">ไม่มีสลิป</span>
+                )}
+              </div>
+
+              {/* ปุ่มปฏิเสธ / ยืนยัน */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateState(STATUS.CANCELLED)}
+                  disabled={updating}
+                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-rose-200 bg-white text-rose-600 text-sm font-medium hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {pendingAction === STATUS.CANCELLED ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <X size={15} />
+                  )}
+                  ปฏิเสธ
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => updateState(STATUS.PRINTING)}
+                  disabled={updating || isVerified !== true}
+                  title={
+                    isVerified !== true
+                      ? "กรุณาตรวจสอบและยืนยันสลิปชำระเงินก่อนยืนยันออเดอร์"
+                      : ""
+                  }
+                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {pendingAction === STATUS.PRINTING ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Check size={15} />
+                  )}
+                  ยืนยัน
+                </button>
+              </div>
+            </div>
+          )}
+
+          {currentState === STATUS.PRINTING && (
+            <button
+              type="button"
+              onClick={() => updateState(STATUS.DONE)}
+              disabled={updating}
+              className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {pendingAction === STATUS.DONE ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <Printer size={15} />
+              )}
+              พิมพ์เสร็จสิ้น
+            </button>
+          )}
+
+          {(currentState === STATUS.DONE ||
+            currentState === STATUS.COMPLETED) && (
+            <p className="text-sm text-emerald-600 font-medium text-center">
+              เสร็จสิ้นเรียบร้อยแล้ว
+            </p>
+          )}
+
+          {currentState === STATUS.CANCELLED && (
+            <p className="text-sm text-rose-500 font-medium text-center">
+              ยกเลิกแล้ว
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Error Message */}
-      {errorMsg && (
-        <p role="alert" className="mb-3 text-xs text-rose-600">
-          {errorMsg}
-        </p>
+      {/* Pop-up Modal แสดงรูปภาพสลิป */}
+      {showSlipModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setShowSlipModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl relative flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h4 className="font-semibold text-slate-800 text-base">
+                หลักฐานการชำระเงิน (Order #{order.order_no || order.id.slice(0, 8)})
+              </h4>
+              <button
+                type="button"
+                onClick={() => setShowSlipModal(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body: รูปภาพสลิป */}
+            <div className="p-4 flex items-center justify-center bg-slate-50 max-h-[60vh] overflow-auto">
+              {order.payment?.slip_url ? (
+                <img
+                  src={order.payment.slip_url}
+                  alt="สลิปชำระเงิน"
+                  className="max-h-[55vh] w-auto object-contain rounded-lg shadow-md"
+                />
+              ) : (
+                <p className="text-slate-400 text-sm py-10">ไม่พบรูปภาพสลิป</p>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 flex items-center justify-between gap-3 bg-white">
+              <button
+                type="button"
+                onClick={() => setShowSlipModal(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                ปิด
+              </button>
+
+              {isVerified === null && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleVerifySlip(false)}
+                    disabled={verifyingSlip}
+                    className="px-3 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    สลิปไม่ถูกต้อง
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleVerifySlip(true)}
+                    disabled={verifyingSlip}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    {verifyingSlip ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Check size={16} />
+                    )}
+                    ยืนยันสลิปถูกต้อง
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
-
-      {/* Footer: ปุ่มดำเนินการ */}
-      <div onClick={(e) => e.stopPropagation()}>
-        {currentState === STATUS.PENDING && (
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => updateState(STATUS.CANCELLED)}
-              disabled={updating}
-              className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-rose-200 bg-white text-rose-600 text-sm font-medium hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {pendingAction === STATUS.CANCELLED ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <X size={15} />
-              )}
-              ปฏิเสธ
-            </button>
-            <button
-              type="button"
-              onClick={() => updateState(STATUS.PRINTING)}
-              disabled={updating}
-              className="flex items-center justify-center gap-1.5 h-10 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {pendingAction === STATUS.PRINTING ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <Check size={15} />
-              )}
-              ยืนยัน
-            </button>
-          </div>
-        )}
-
-        {currentState === STATUS.PRINTING && (
-          <button
-            type="button"
-            onClick={() => updateState(STATUS.DONE)}
-            disabled={updating}
-            className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {pendingAction === STATUS.DONE ? (
-              <Loader2 size={15} className="animate-spin" />
-            ) : (
-              <Printer size={15} />
-            )}
-            พิมพ์เสร็จสิ้น
-          </button>
-        )}
-
-        {(currentState === STATUS.DONE ||
-          currentState === STATUS.COMPLETED) && (
-          <p className="text-sm text-emerald-600 font-medium text-center">
-            เสร็จสิ้นเรียบร้อยแล้ว
-          </p>
-        )}
-
-        {currentState === STATUS.CANCELLED && (
-          <p className="text-sm text-rose-500 font-medium text-center">
-            ยกเลิกแล้ว
-          </p>
-        )}
-      </div>
-    </div>
+    </>
   );
 }

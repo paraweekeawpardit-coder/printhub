@@ -8,16 +8,20 @@ export type OrderStatus =
 
 type Props = {
   status?: OrderStatus | string;
+  isVerified?: boolean | null; // 👈 เพิ่มพร็อพรับค่าการตรวจสลิป
   onUpdateStatus?: (newStatus: OrderStatus) => void;
   disabled?: boolean;
 };
 
 export default function OrderActions({
   status,
+  isVerified,
   onUpdateStatus,
   disabled,
 }: Props) {
   if (status === "รอการดำเนินงาน") {
+    const canAccept = isVerified === true; // รับงานได้เมื่อสลิปถูกต้องแล้วเท่านั้น
+
     return (
       <div className="flex gap-2">
         <button
@@ -32,8 +36,9 @@ export default function OrderActions({
         <button
           type="button"
           onClick={() => onUpdateStatus?.("กำลังพิมพ์")}
-          disabled={disabled}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+          disabled={disabled || !canAccept} // 👈 Disabled ถ้าสลิปยังไม่ถูกตรวจ
+          title={!canAccept ? "กรุณาตรวจสอบสลิปชำระเงินก่อนยืนยันออเดอร์" : ""}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Check size={14} />
           รับออเดอร์
