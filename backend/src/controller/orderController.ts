@@ -105,7 +105,7 @@ export const createOrder = async (req: Request, res: Response) => {
           total_price: pricing.net_total,
         },
       ])
-      .select("id, expires_at")
+      .select("id, order_no, expires_at")
       .single();
 
     if (orderError) throw orderError;
@@ -182,7 +182,7 @@ export const createOrder = async (req: Request, res: Response) => {
         shop_id: cart.shop_id,
         order_id: newOrder.id,
         title: "มีคำสั่งซื้อใหม่!",
-        message: `คุณมีออเดอร์ใหม่ #${newOrder.id.slice(0, 8)} รอการตอบรับ`,
+        message: `คุณมีออเดอร์ใหม่ #ORD-${newOrder.order_no} รอการตอบรับ`,
         is_read: false,
       },
     ]);
@@ -268,7 +268,7 @@ export const updateWorkStatus = async (req: Request, res: Response) => {
 
     const { data: orderData } = await supabase
       .from("print_order")
-      .select("customer_id")
+      .select("customer_id, order_no")
       .eq("id", orderId)
       .single();
 
@@ -284,7 +284,7 @@ export const updateWorkStatus = async (req: Request, res: Response) => {
           customer_id: orderData.customer_id,
           order_id: orderId,
           title: "อัปเดตสถานะออเดอร์",
-          message: `ออเดอร์ #${orderId.slice(0, 8)} เปลี่ยนสถานะเป็น "${statusData?.state || 'อัปเดตแล้ว'}"`,
+          message: `ออเดอร์ #ORD-\({orderData.order_no} เปลี่ยนสถานะเป็น "\){statusData?.state || 'อัปเดตแล้ว'}"`,
           is_read: false,
         },
       ]);

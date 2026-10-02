@@ -1,7 +1,9 @@
+"use client";
+
 import { MessageCircle, ExternalLink, Download } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
 export type OrderItemDetail = {
   id: string;
@@ -89,6 +91,9 @@ export default function OrderDetailCard({
   disabled = false,
 }: Props) {
   const router = useRouter();
+  const params = useParams();
+  const shopId = params?.shop_id; // ดึง shop_id จาก URL ปัจจุบัน
+
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
 
@@ -118,6 +123,17 @@ export default function OrderDetailCard({
     } catch (error) {
       console.error("Download failed, fallbacking to direct URL:", error);
       window.open(fileUrl, "_self");
+    }
+  };
+
+  const handleGoToChat = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (disabled) return;
+
+    if (onChatClick) {
+      onChatClick(order.order_id);
+    } else {
+      router.push(`/shop/order/${shopId}/chat?orderId=${order.order_id}`);
     }
   };
 

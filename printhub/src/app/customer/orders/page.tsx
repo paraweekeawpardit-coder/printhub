@@ -258,7 +258,6 @@ export default function CustomerOrdersPage() {
           <span className="text-xs text-slate-400 font-medium">เรียงตามเวลาล่าสุด</span>
         </div>
 
-        {/* 🌟 1. Component Filter จาก Dashboard */}
         <DashboardStatusFilter
           filters={FILTER_TABS}
           selectedFilter={selectedStatus}
@@ -288,19 +287,20 @@ export default function CustomerOrdersPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {/* 🌟 2. ใช้ CustomerOrderCard โดยตรง พร้อมเปิด showOrderDate={true} */}
             {filteredOrders.map((order) => (
-              <CustomerOrderCard
-                key={order.id}
-                order={order}
-                showOrderDate={true} // 👈 สั่งให้แสดงวันและเวลาที่สั่งซื้ออยู่ข้างๆ วันนัดรับ
-                isExpanded={expandedOrderId === order.id}
-                onToggleExpand={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
-                onCancelClick={(orderId, orderNo) => setConfirmModal({ isOpen: true, type: 'cancel', orderId, orderNo })}
-                onReceivedClick={(orderId, orderNo) => setConfirmModal({ isOpen: true, type: 'received', orderId, orderNo })}
-                onReportClick={(ord) => { setSelectedOrderForReport(ord); setIsReportModalOpen(true); }}
-                onShowToast={showToast}
-              />
+              /* 🟢 เพิ่ม id="order-${order.id}" ตรงนี้ */
+              <div key={order.id} id={`order-${order.id}`} className="transition-all duration-500 rounded-2xl">
+                <CustomerOrderCard
+                  order={order}
+                  showOrderDate={true}
+                  isExpanded={expandedOrderId === order.id}
+                  onToggleExpand={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+                  onCancelClick={(orderId, orderNo) => setConfirmModal({ isOpen: true, type: 'cancel', orderId, orderNo })}
+                  onReceivedClick={(orderId, orderNo) => setConfirmModal({ isOpen: true, type: 'received', orderId, orderNo })}
+                  onReportClick={(ord) => { setSelectedOrderForReport(ord); setIsReportModalOpen(true); }}
+                  onShowToast={showToast}
+                />
+              </div>
             ))}
           </div>
         )}

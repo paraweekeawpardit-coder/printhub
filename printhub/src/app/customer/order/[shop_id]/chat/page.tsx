@@ -19,7 +19,11 @@ export default function CustomerOrderChatPage() {
   const orderId = rawOrderId !== "undefined" ? rawOrderId : "";
 
   const [statusName, setStatusName] = useState("กำลังโหลดสถานะ...");
+  const [orderNo, setOrderNo] = useState<string>(""); // 🟢 เพิ่ม State เก็บเลข Order No
   const [isChatDisabled, setIsChatDisabled] = useState(false);
+  // 🟢 แปลง orderNo และ orderId เป็น String ป้องกัน Runtime TypeError
+  const strOrderNo = orderNo ? String(orderNo) : "";
+  const strOrderId = orderId ? String(orderId) : "";
 
   // ฟังก์ชันสไตล์สีตามสถานะ
   const getStatusBadgeClass = (status: string) => {
@@ -62,9 +66,11 @@ export default function CustomerOrderChatPage() {
 
     const fetchOrderStatus = async () => {
       try {
+        // 🟢 ดึง order_no เพิ่มเข้ามาด้วย
         const { data, error } = await supabase
           .from("print_order")
           .select(`
+            order_no,
             current_status_id,
             status:current_status_id ( state )
           `)
@@ -72,16 +78,24 @@ export default function CustomerOrderChatPage() {
           .single();
 
         if (error || !data || !data.status) {
-          // หากไม่มีการดึงผ่าน relation ให้ดึงคอลัมน์ status โดยตรงเป็น fallback
+          // หากไม่มีการดึงผ่าน relation ให้ดึงคอลัมน์ status และ order_no โดยตรงเป็น fallback
           const { data: fallbackData } = await supabase
             .from("print_order")
-            .select("status")
+            .select("order_no, status")
             .eq("id", orderId)
             .single();
+
+          if (fallbackData?.order_no) {
+            setOrderNo(fallbackData.order_no);
+          }
 
           const state = fallbackData?.status || "กำลังดำเนินการ";
           updateStatusUI(state);
           return;
+        }
+
+        if (data.order_no) {
+          setOrderNo(data.order_no);
         }
 
         const stateName = (data.status as any)?.state || "กำลังดำเนินการ";
@@ -132,10 +146,15 @@ export default function CustomerOrderChatPage() {
     };
   }, [orderId]);
 
+  // 🟢 ฟังก์ชันแปลงกรณีไม่มี order_no ในฐานข้อมูล ให้ตัดแสดงสั้นๆ เช่น #ORD-783414
+  const displayOrderNo = strOrderNo
+    ? (strOrderNo.startsWith("#") ? strOrderNo : `#${strOrderNo}`)
+    : strOrderId
+    ? `#ORD-${strOrderId.substring(0, 6).toUpperCase()}`
+    : "ไม่พบรหัสออเดอร์";
+
   return (
-    // 1. ล็อกความสูงเท่าหน้าจอพอดี (h-screen) และซ่อน Scrollbar นอกสุด (overflow-hidden)
     <div className="h-screen w-full bg-[#F4F6F9] flex flex-col font-sans overflow-hidden">
-      {/* 2. Header ล็อกขนาด ไม่ให้โดนบีบย่อ (shrink-0) */}
       <header className="bg-[#001B3A] text-white px-6 py-4 flex items-center shadow-md shrink-0">
         <div className="flex items-center gap-4">
           <button
@@ -163,17 +182,16 @@ export default function CustomerOrderChatPage() {
         </div>
       </header>
 
-      {/* 3. Main ใช้ flex-1 min-h-0 overflow-hidden บังคับให้ขยายกินพื้นที่ที่เหลือในหน้าจอโดยไม่ล้น */}
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col min-h-0 overflow-hidden">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Header ด้านในกล่องแชต ล็อกขนาดคงที่ (shrink-0) */}
           <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
             <div>
               <h2 className="font-bold text-slate-800 text-sm">
                 PrintHub Official Store
               </h2>
+              {/* 🟢 แสดงเลข order_no แทน UUID */}
               <p className="text-xs text-slate-400">
-                ออเดอร์: {orderId || "ไม่พบรหัสออเดอร์"}
+                ออเดอร์: <span className="font-medium text-slate-600">{displayOrderNo}</span>
               </p>
             </div>
 
@@ -188,7 +206,6 @@ export default function CustomerOrderChatPage() {
             </div>
           </div>
 
-          {/* 4. กล่องส่วน ChatBox ที่จะ Scroll เฉพาะภายใน */}
           {orderId ? (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
               <ChatBox
