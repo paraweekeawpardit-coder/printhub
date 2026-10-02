@@ -52,6 +52,11 @@ export default function ShopNavbar() {
       return;
     }
 
+    if (path === "setting") {
+      router.push("/customer/setting");
+      return;
+    }
+
     router.push(`/shop/${path}/${shopId}`);
   };
 

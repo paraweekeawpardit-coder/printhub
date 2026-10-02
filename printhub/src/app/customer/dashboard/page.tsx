@@ -105,7 +105,18 @@ export default function CustomerDashboardPage() {
     fetchDashboardData(cid);
   }, [router, fetchDashboardData]);
 
-  // คำนวณจำนวนออเดอร์ในแต่ละสถานะสำหรับ Badge ตัวเลข
+  // ฟังก์ชันแปลงเวลาแบบปลอดภัย ป้องกัน Timezone เพี้ยน
+  const parseSafeTime = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    let cleaned = dateStr.trim();
+    if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
+      cleaned = `${cleaned.replace(" ", "T")}Z`;
+    }
+    const parsed = new Date(cleaned).getTime();
+    return isNaN(parsed) ? null : parsed;
+  };
+
+  // 🌟 คำนวณจำนวนออเดอร์ในแต่ละสถานะสำหรับ Badge ตัวเลข
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       ทั้งหมด: orders.length,
@@ -117,11 +128,28 @@ export default function CustomerDashboardPage() {
       ยกเลิกการพิมพ์: 0,
     };
 
-    orders.forEach((o) => {
-      let state = o.current_status?.state || o.status?.state || (typeof o.status === "string" ? o.status : "รอการดำเนินงาน");
-      
-      if (state === "รอการชำระเงิน" && isOrderExpired(o.order_date)) {
-        state = "ยกเลิกการพิมพ์";
+    const now = Date.now();
+
+    orders.forEach((o: any) => {
+      let state =
+        o.current_status?.state ||
+        o.status?.state ||
+        (typeof o.status === "string" ? o.status : "รอการดำเนินงาน");
+
+      // ตรวจสอบการหมดเวลาโดยอิง expires_at เป็นหลัก
+      if (state === "รอการชำระเงิน") {
+        let isExpired = false;
+        if (o.expires_at) {
+          const expTime = parseSafeTime(o.expires_at);
+          if (expTime && expTime < now) isExpired = true;
+        } else if (o.order_date) {
+          const createTime = parseSafeTime(o.order_date);
+          if (createTime && now > createTime + 10 * 60 * 1000) isExpired = true;
+        }
+
+        if (isExpired) {
+          state = "ยกเลิกการพิมพ์";
+        }
       }
 
       if (state === "รับงานแล้ว" || state === "รายการเสร็จสิ้น") {
@@ -134,13 +162,30 @@ export default function CustomerDashboardPage() {
     return counts;
   }, [orders]);
 
-  // กรองรายการคำสั่งซื้อตามแท็บสถานะที่เลือก
+  // 🌟 กรองรายการคำสั่งซื้อตามแท็บสถานะที่เลือก
   const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      let state = o.current_status?.state || o.status?.state || (typeof o.status === "string" ? o.status : "รอการดำเนินงาน");
-      
-      if (state === "รอการชำระเงิน" && isOrderExpired(o.order_date)) {
-        state = "ยกเลิกการพิมพ์";
+    const now = Date.now();
+
+    return orders.filter((o: any) => {
+      let state =
+        o.current_status?.state ||
+        o.status?.state ||
+        (typeof o.status === "string" ? o.status : "รอการดำเนินงาน");
+
+      // ตรวจสอบการหมดเวลาโดยอิง expires_at เป็นหลัก
+      if (state === "รอการชำระเงิน") {
+        let isExpired = false;
+        if (o.expires_at) {
+          const expTime = parseSafeTime(o.expires_at);
+          if (expTime && expTime < now) isExpired = true;
+        } else if (o.order_date) {
+          const createTime = parseSafeTime(o.order_date);
+          if (createTime && now > createTime + 10 * 60 * 1000) isExpired = true;
+        }
+
+        if (isExpired) {
+          state = "ยกเลิกการพิมพ์";
+        }
       }
 
       if (selectedStatusFilter === "ทั้งหมด") return true;

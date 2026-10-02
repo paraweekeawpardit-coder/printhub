@@ -345,9 +345,30 @@ export const getShopServices = async (req: Request, res: Response) => {
   try {
     const { shopId } = req.params;
 
+    // ✅ ปรับแก้ตรงนี้: ดึง phone, email และ join ตาราง address ให้ครบถ้วน
     const { data: shop, error: shopError } = await supabase
       .from("print_shop")
-      .select("id, shop_name, profile_image, open_time, close_time, rating")
+      .select(`
+        id, 
+        shop_name, 
+        profile_image, 
+        open_time, 
+        close_time, 
+        rating,
+        phone,
+        email,
+        is_open,
+        address:address_id (
+          id,
+          detail,
+          subdistrict,
+          district,
+          province,
+          postcode,
+          latitude,
+          longitude
+        )
+      `)
       .eq("id", shopId)
       .maybeSingle();
 
