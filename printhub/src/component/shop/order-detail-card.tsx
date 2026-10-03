@@ -1,11 +1,7 @@
 "use client";
 
-<<<<<<< HEAD
-import { MessageCircle, ExternalLink, FileText } from "lucide-react";
-=======
 import { useState } from "react";
 import { MessageCircle, ExternalLink, Download, Eye, X, Check, Loader2 } from "lucide-react";
->>>>>>> origin/main
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
 import { useRouter, useParams } from "next/navigation";
@@ -109,9 +105,6 @@ export default function OrderDetailCard({
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
 
-<<<<<<< HEAD
-  const handleGoToChat = (e: React.MouseEvent) => {
-=======
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
   const [verifyingSlip, setVerifyingSlip] = useState<boolean>(false);
 
@@ -126,7 +119,6 @@ export default function OrderDetailCard({
     fileUrl: string,
     fileName: string
   ) => {
->>>>>>> origin/main
     e.stopPropagation();
     if (disabled) return;
 
@@ -157,39 +149,6 @@ export default function OrderDetailCard({
   };
 
   return (
-<<<<<<< HEAD
-    <div
-      onClick={() => {
-        if (disabled) return;
-        onClick?.();
-      }}
-      className={`group relative flex w-full flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 ${
-        disabled
-          ? "opacity-60 cursor-not-allowed"
-          : "cursor-pointer hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200"
-      }`}
-    >
-      <div>
-        {/* Header: Status & Date */}
-        <div className="flex items-center justify-between">
-          <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
-          >
-            <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`} />
-            {order.status || "ไม่ทราบสถานะ"}
-          </span>
-
-          <span className="text-[11px] font-medium text-slate-400 tracking-wider">
-            {formatDate(order.date)}
-          </span>
-        </div>
-
-        {/* Order ID & Customer */}
-        <div className="mt-4 flex items-center justify-between gap-2">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              ORDER
-=======
     <>
       <div
         onClick={onClick}
@@ -203,7 +162,6 @@ export default function OrderDetailCard({
             >
               <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`} />
               {order.status || "ไม่ทราบสถานะ"}
->>>>>>> origin/main
             </span>
 
             <span className="text-[11px] font-medium text-slate-400 tracking-wider">
@@ -321,33 +279,6 @@ export default function OrderDetailCard({
                       )}
                     </div>
                   </div>
-<<<<<<< HEAD
-
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span className="text-sm font-bold text-slate-900">
-                      ฿{item.subtotal.toLocaleString()}
-                    </span>
-                    {item.file_url && (
-                      <a
-                        href={item.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline"
-                      >
-                        <FileText size={12} />
-                        ไฟล์
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-slate-400 py-3 text-center">
-                ไม่มีรายการสินค้า
-              </p>
-            )}
-=======
                 ))
               ) : (
                 <p className="text-xs text-slate-400 py-3 text-center">
@@ -355,7 +286,6 @@ export default function OrderDetailCard({
                 </p>
               )}
             </div>
->>>>>>> origin/main
           </div>
 
           {/* Chat Action */}
