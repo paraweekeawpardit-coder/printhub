@@ -33,7 +33,7 @@ export default function AdminSlipsPage() {
       setTransactions([
         {
           id: "tx-101",
-          order_id: "ORD-2026-9901",
+          order_id: "#162",
           amount: 450.0,
           net_amount: 427.5,
           platform_fee: 22.5,
@@ -44,7 +44,7 @@ export default function AdminSlipsPage() {
         },
         {
           id: "tx-102",
-          order_id: "ORD-2026-8812",
+          order_id: "#161",
           amount: 1200.0,
           net_amount: 1140.0,
           platform_fee: 60.0,
@@ -63,12 +63,18 @@ export default function AdminSlipsPage() {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  const filteredTransactions = transactions.filter((tx) => {
+  const filteredTransactions = transactions.filter((tx: any) => {
     const searchLower = search.toLowerCase();
+    const orderNo = String(tx.order_no || tx.order?.order_no || "").toLowerCase();
+    const orderId = String(tx.order_id || "").toLowerCase();
+    const txId = String(tx.id || "").toLowerCase();
+    const method = String(tx.payment_method || "").toLowerCase();
+
     return (
-      (tx.order_id?.toLowerCase() || "").includes(searchLower) ||
-      (tx.id?.toLowerCase() || "").includes(searchLower) ||
-      (tx.payment_method?.toLowerCase() || "").includes(searchLower)
+      orderNo.includes(searchLower) ||
+      orderId.includes(searchLower) ||
+      txId.includes(searchLower) ||
+      method.includes(searchLower)
     );
   });
 

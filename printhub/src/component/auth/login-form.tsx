@@ -28,11 +28,6 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
     setMessage("");
     setLoading(true);
 
-<<<<<<< HEAD
-    console.log("login information ", logindata);
-
-=======
->>>>>>> origin/main
     try {
       // 🟢 แก้จาก /auth/login เป็น /api/auth/login ให้ตรงกับ Express Backend
       const res = await axios.post(`${API_URL}/api/auth/login`, logindata);

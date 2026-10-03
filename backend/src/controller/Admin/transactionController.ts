@@ -57,20 +57,35 @@ export const getAllTransactions = async (req: Request, res: Response): Promise<R
       });
     }
 
-    const formattedTransactions = (transactions ?? []).map((tx: any) => {
-      const amount = Number(tx.amount || 0);
-      const platformFee = tx.platform_fee ?? Number((amount * 0.05).toFixed(2));
-      const shopIncome = tx.shop_income ?? Number((amount - platformFee).toFixed(2));
+    const formattedTransactions = (transactions || []).map((tx: any) => {
+      const amount = Number(tx.amount || tx.order?.total_price || 0);
+
+      const dbSmallFee = Number(tx.order?.small_order_fee || 0);
+      const dbPlatformFee = Number(tx.order?.platform_fee || 0);
+
+      let platformFee = 0;
+
+      if (dbSmallFee > 0) {
+        platformFee = dbSmallFee;
+      } else if (dbPlatformFee > 0) {
+        platformFee = dbPlatformFee;
+      } else {
+        platformFee = amount < 50 ? 20 : Number((amount * 0.08).toFixed(2));
+      }
+
+      const shopIncome = Number((amount - platformFee).toFixed(2));
 
       return {
         ...tx,
+        amount: amount,
         platform_fee: platformFee,
         shop_income: shopIncome,
         customer_name: tx.sender_customer 
           ? `${tx.sender_customer.first_name || ""} ${tx.sender_customer.last_name || ""}`.trim()
           : "-",
         shop_name: tx.receiver_shop?.shop_name || "-",
-        order_no: tx.order?.order_no || "-",
+        order_no: tx.order?.order_no ? `#${tx.order.order_no}` : "-",
+        order_id: tx.order?.order_no ? `#${tx.order.order_no}` : (tx.order_id || "-"),
       };
     });
 
@@ -78,7 +93,7 @@ export const getAllTransactions = async (req: Request, res: Response): Promise<R
       data: formattedTransactions,
       currentPage: page,
       totalPages: count ? Math.ceil(count / limit) : 0,
-      totalCount: count ?? 0,
+      totalCount: count || 0,
     });
   } catch (err: any) {
     console.error("GetAllTransactions Exception:", err.message || err);
@@ -97,7 +112,6 @@ export const getAllTransactions = async (req: Request, res: Response): Promise<R
  */
 export const getPendingRefunds = async (req: Request, res: Response): Promise<Response> => {
   try {
-    // 1. หา status_id ของคำว่า "ยกเลิกการพิมพ์" จากตาราง status ก่อน
     const { data: statusObj } = await supabase
       .from("status")
       .select("id")
@@ -108,7 +122,6 @@ export const getPendingRefunds = async (req: Request, res: Response): Promise<Re
       return res.status(200).json([]);
     }
 
-    // 2. Query ดึงออเดอร์จาก print_order ด้วย status_id ตรงๆ
     const { data: refunds, error } = await supabase
       .from("print_order")
       .select(`
@@ -143,8 +156,7 @@ export const getPendingRefunds = async (req: Request, res: Response): Promise<Re
       return res.status(200).json([]);
     }
 
-    // 3. กรองเฉพาะรายการที่ยังไม่ได้ถูกเปลี่ยนสถานะเป็นโอนคืนแล้ว (REFUNDED)
-    const pendingRefunds = (refunds ?? []).filter((item: any) => {
+    const pendingRefunds = (refunds || []).filter((item: any) => {
       const payList = Array.isArray(item.payment) ? item.payment : (item.payment ? [item.payment] : []);
       const isAlreadyRefunded = payList.some((p: any) => p.status === "REFUNDED");
       return !isAlreadyRefunded;
@@ -223,7 +235,6 @@ export const processRefund = async (req: Request, res: Response): Promise<Respon
         .eq("id", order_id);
     }
 
-    // แจ้งเตือนไปยังลูกค้า
     const { data: order } = await supabase
       .from("print_order")
       .select("customer_id, order_no")

@@ -218,14 +218,6 @@ export const getTopOrder = async (
       return res.status(200).json([]);
     }
 
-<<<<<<< HEAD
-    const sortedOrders = orders.sort((a: any, b: any) => {
-      const stateA = a.current_status?.state || "";
-      const stateB = b.current_status?.state || "";
-
-      const isPendingA = stateA === "รอการดำเนินการ" || stateA === "กำลังพิมพ์";
-      const isPendingB = stateB === "รอการดำเนินการ" || stateB === "กำลังพิมพ์";
-=======
     const filteredOrders = orders.filter((order: any) => {
       const state = order.current_status?.state;
       return state !== "รอการชำระเงิน";
@@ -282,7 +274,6 @@ export const getTopOrder = async (
 
       const isPendingA = isPendingStatus(stateA);
       const isPendingB = isPendingStatus(stateB);
->>>>>>> origin/main
 
       if (isPendingA && !isPendingB) return -1;
       if (!isPendingA && isPendingB) return 1;
