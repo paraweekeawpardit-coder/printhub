@@ -2,8 +2,10 @@
 
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
+import { ArrowLeft, Store, ShieldAlert } from "lucide-react";
 import { supabase } from "@/config/supabase";
 import ChatBox from "../../../../../component/ChatBox";
+import CustomerNavBar from "@/component/customer/NavBar";
 
 export default function CustomerOrderChatPage() {
   const router = useRouter();
@@ -19,9 +21,10 @@ export default function CustomerOrderChatPage() {
   const orderId = rawOrderId !== "undefined" ? rawOrderId : "";
 
   const [statusName, setStatusName] = useState("กำลังโหลดสถานะ...");
-  const [orderNo, setOrderNo] = useState<string>(""); // 🟢 เพิ่ม State เก็บเลข Order No
+  const [orderNo, setOrderNo] = useState<string>(""); 
+  const [shopName, setShopName] = useState<string>("กำลังโหลดชื่อร้านค้า..."); // 🟢 State เก็บชื่อร้าน
   const [isChatDisabled, setIsChatDisabled] = useState(false);
-  // 🟢 แปลง orderNo และ orderId เป็น String ป้องกัน Runtime TypeError
+  
   const strOrderNo = orderNo ? String(orderNo) : "";
   const strOrderId = orderId ? String(orderId) : "";
 
@@ -29,59 +32,56 @@ export default function CustomerOrderChatPage() {
   const getStatusBadgeClass = (status: string) => {
     const s = status.trim().toLowerCase();
     
-    // 1. พิมพ์เสร็จสิ้น -> สีเขียว
     if (s.includes("พิมพ์เสร็จสิ้น")) {
-      return "bg-emerald-50 text-emerald-600 border border-emerald-200";
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
     }
 
-    // 2. กำลังพิมพ์ -> สีฟ้า
     if (s.includes("กำลังพิมพ์") || s.includes("printing")) {
-      return "bg-blue-50 text-blue-600 border border-blue-200";
+      return "bg-blue-50 text-blue-700 border-blue-200";
     }
 
-    // 3. รอการดำเนินงาน -> สีส้ม
     if (s.includes("รอการดำเนินงาน") || s.includes("pending")) {
-      return "bg-amber-50 text-amber-600 border border-amber-200";
+      return "bg-amber-50 text-amber-700 border-amber-200";
     }
 
-    // 4. รายการเสร็จสิ้น / completed -> สีเทา
     if (s.includes("รายการเสร็จสิ้น") || s.includes("เสร็จสิ้น") || s.includes("completed")) {
-      return "bg-slate-100 text-slate-600 border border-slate-300";
+      return "bg-slate-100 text-slate-600 border-slate-300";
     }
 
-    // 5. ยกเลิก -> สีแดง
     if (s.includes("ยกเลิก") || s.includes("cancel")) {
-      return "bg-rose-50 text-rose-600 border border-rose-200";
+      return "bg-rose-50 text-rose-700 border-rose-200";
     }
     
-    return "bg-emerald-50 text-emerald-600 border border-emerald-200";
+    return "bg-slate-100 text-slate-600 border-slate-200";
   };
 
   useEffect(() => {
     if (!orderId) {
       setStatusName("ไม่พบรหัสออเดอร์");
+      setShopName("ไม่พบร้านค้า");
       setIsChatDisabled(true);
       return;
     }
 
-    const fetchOrderStatus = async () => {
+    const fetchOrderDetails = async () => {
       try {
-        // 🟢 ดึง order_no เพิ่มเข้ามาด้วย
+        // 🟢 Join ตาราง print_shop ผ่าน shop_id เพื่อดึง shop_name มาโดยตรง[span_2](start_span)[span_2](end_span)[span_3](start_span)[span_3](end_span)
         const { data, error } = await supabase
           .from("print_order")
           .select(`
             order_no,
             current_status_id,
-            status:current_status_id ( state )
+            status:current_status_id ( state ),
+            print_shop:shop_id ( shop_name )
           `)
           .eq("id", orderId)
           .single();
 
-        if (error || !data || !data.status) {
-          // หากไม่มีการดึงผ่าน relation ให้ดึงคอลัมน์ status และ order_no โดยตรงเป็น fallback
+        if (error || !data) {
+          // Fallback กรณี Join มีปัญหา
           const { data: fallbackData } = await supabase
             .from("print_order")
-            .select("order_no, status")
+            .select("order_no, status, shop_id")
             .eq("id", orderId)
             .single();
 
@@ -89,20 +89,40 @@ export default function CustomerOrderChatPage() {
             setOrderNo(fallbackData.order_no);
           }
 
+          // ยิง Query ดึงชื่อร้านค้าจาก print_shop โดยตรง[span_4](start_span)[span_4](end_span)
+          if (fallbackData?.shop_id) {
+            const { data: shopData } = await supabase
+              .from("print_shop")
+              .select("shop_name")
+              .eq("id", fallbackData.shop_id)
+              .single();
+
+            if (shopData?.shop_name) {
+              setShopName(shopData.shop_name);
+            }
+          }
+
           const state = fallbackData?.status || "กำลังดำเนินการ";
           updateStatusUI(state);
           return;
         }
 
+        // ตั้งค่าเลขคำสั่งซื้อ
         if (data.order_no) {
           setOrderNo(data.order_no);
         }
 
+        // 🟢 ตั้งค่าชื่อร้านค้าที่ได้จาก print_shop[span_5](start_span)[span_5](end_span)
+        const fetchedShopName = (data.print_shop as any)?.shop_name || "ร้านค้า";
+        setShopName(fetchedShopName);
+
+        // ตั้งค่าสถานะ
         const stateName = (data.status as any)?.state || "กำลังดำเนินการ";
         updateStatusUI(stateName);
       } catch (error) {
-        console.error("Fetch status error:", error);
+        console.error("Fetch order detail error:", error);
         setStatusName("เชื่อมต่อผิดพลาด");
+        setShopName("ร้านค้า");
       }
     };
 
@@ -124,9 +144,8 @@ export default function CustomerOrderChatPage() {
       );
     };
 
-    fetchOrderStatus();
+    fetchOrderDetails();
 
-    // Subscribe สด เมื่อมีการเปลี่ยนสถานะ
     const channel = supabase
       .channel(`cust_order_status_${orderId}`)
       .on(
@@ -137,7 +156,7 @@ export default function CustomerOrderChatPage() {
           table: "print_order",
           filter: `id=eq.${orderId}`,
         },
-        () => fetchOrderStatus()
+        () => fetchOrderDetails()
       )
       .subscribe();
 
@@ -146,7 +165,6 @@ export default function CustomerOrderChatPage() {
     };
   }, [orderId]);
 
-  // 🟢 ฟังก์ชันแปลงกรณีไม่มี order_no ในฐานข้อมูล ให้ตัดแสดงสั้นๆ เช่น #ORD-783414
   const displayOrderNo = strOrderNo
     ? (strOrderNo.startsWith("#") ? strOrderNo : `#${strOrderNo}`)
     : strOrderId
@@ -155,49 +173,45 @@ export default function CustomerOrderChatPage() {
 
   return (
     <div className="h-screen w-full bg-[#F4F6F9] flex flex-col font-sans overflow-hidden">
-      <header className="bg-[#001B3A] text-white px-6 py-4 flex items-center shadow-md shrink-0">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-              className="w-5 h-5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
-              />
-            </svg>
-            <span>ย้อนกลับ</span>
-          </button>
-          <div className="h-5 w-[1px] bg-slate-600" />
-          <span className="font-bold text-xl tracking-tight">PrintHub</span>
-        </div>
-      </header>
+      {/* Navbar ของลูกค้า */}
+      <CustomerNavBar />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col min-h-0 overflow-hidden">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-            <div>
-              <h2 className="font-bold text-slate-800 text-sm">
-                PrintHub Official Store
-              </h2>
-              {/* 🟢 แสดงเลข order_no แทน UUID */}
-              <p className="text-xs text-slate-400">
-                ออเดอร์: <span className="font-medium text-slate-600">{displayOrderNo}</span>
-              </p>
+      {/* Main Container */}
+      <main className="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-6 flex flex-col min-h-0 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 flex-1 flex flex-col min-h-0 overflow-hidden">
+          
+          {/* Header ภายในห้องแชต */}
+          <div className="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+            <div className="flex items-center gap-3">
+              {/* ปุ่มย้อนกลับ */}
+              <button
+                onClick={() => router.back()}
+                className="w-9 h-9 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-200/60 text-slate-600 flex items-center justify-center transition-all cursor-pointer"
+                title="ย้อนกลับ"
+              >
+                <ArrowLeft size={18} />
+              </button>
+
+              {/* Icon ร้านค้า */}
+              <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-xs">
+                <Store size={20} />
+              </div>
+
+              {/* ข้อมูลร้านค้าจริง & เลขออเดอร์ */}
+              <div>
+                <h2 className="font-bold text-slate-800 text-sm md:text-base leading-tight">
+                  {shopName} {/* 🟢 แสดงชื่อร้านค้าแบบ Dynamic จาก print_shop[span_6](start_span)[span_6](end_span) */}
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  ออเดอร์ <span className="font-semibold text-slate-600">{displayOrderNo}</span>
+                </p>
+              </div>
             </div>
 
+            {/* Badge สถานะ */}
             <div className="flex items-center gap-2">
               <span
-                className={`text-xs px-3 py-1.5 rounded-lg font-medium ${getStatusBadgeClass(
+                className={`text-xs px-3 py-1.5 rounded-full font-bold border ${getStatusBadgeClass(
                   statusName
                 )}`}
               >
@@ -206,8 +220,9 @@ export default function CustomerOrderChatPage() {
             </div>
           </div>
 
+          {/* พื้นที่กล่องข้อความ (ChatBox) */}
           {orderId ? (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-slate-50/50">
               <ChatBox
                 orderId={orderId}
                 role="customer"
@@ -215,8 +230,9 @@ export default function CustomerOrderChatPage() {
               />
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
-              ไม่พบรหัสออเดอร์
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-2 p-6">
+              <ShieldAlert size={40} className="text-slate-300" />
+              <p className="text-sm font-medium text-slate-500">ไม่พบรหัสออเดอร์สำหรับห้องแชตนี้</p>
             </div>
           )}
         </div>

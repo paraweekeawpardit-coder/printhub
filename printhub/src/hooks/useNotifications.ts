@@ -69,6 +69,30 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
     }
   };
 
+  // 🟢 ฟังก์ชันอัปเดตสถานะเป็น "อ่านแล้วทั้งหมด" ใน Supabase
+  const markAllAsRead = async () => {
+    if (!userId || unreadCount === 0) return;
+
+    try {
+      const columnCheck = role === "customer" ? "customer_id" : "shop_id";
+
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq(columnCheck, userId)
+        .eq("is_read", false);
+
+      if (!error) {
+        setNotifications((prev) =>
+          prev.map((n) => ({ ...n, is_read: true }))
+        );
+        setUnreadCount(0);
+      }
+    } catch (err) {
+      console.error("Error marking all as read:", err);
+    }
+  };
+
   useEffect(() => {
     if (!userId || userId === "undefined" || userId === "null") return;
 
@@ -100,5 +124,12 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
     };
   }, [userId, role, fetchNotifications]);
 
-  return { notifications, unreadCount, loading, markAsRead, fetchNotifications };
+  return {
+    notifications,
+    unreadCount,
+    loading,
+    markAsRead,
+    markAllAsRead, // 🟢 ส่งฟังก์ชันให้ออกไปใช้งาน
+    fetchNotifications,
+  };
 }
