@@ -21,6 +21,8 @@ import {
   cancelOrder, 
   confirmReceivedOrder,
   uploadPaymentSlip, // 
+  cancelOrderTimeout,
+  rejectPaymentSlip,
   upload as slipUpload
 } from '../controller/orderController.js';
 
@@ -60,6 +62,12 @@ router.patch('/order/:orderId/status', updateWorkStatus);
 
 // Route สำหรับอัปโหลดสลิปชำระเงิน
 router.post('/payment/upload-slip', slipUpload.single('slip'), uploadPaymentSlip);
+
+// เส้นทางสำหรับยกเลิกอัตโนมัติเมื่อหมดเวลาชำระเงิน (10 นาที)
+router.put('/order/:orderId/cancel-timeout', cancelOrderTimeout);
+
+// เส้นทางสำหรับร้านค้ากดปฏิเสธสลิป (ให้ลูกค้าแนบใหม่โดยนับเวลาเดิมต่อ)
+router.put('/order/:orderId/reject-slip', rejectPaymentSlip);
 
 // ==========================================
 // 4. รีวิวและรายงานปัญหา (Review & Report)
