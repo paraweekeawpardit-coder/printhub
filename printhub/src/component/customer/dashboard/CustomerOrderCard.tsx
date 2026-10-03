@@ -29,7 +29,7 @@ import {
 
 interface CustomerOrderCardProps {
   order: any;
-  showOrderDate?: boolean; // 🌟 เพิ่ม prop เพื่อเลือกว่าจะแสดงวันเวลาสั่งซื้อหรือไม่
+  showOrderDate?: boolean;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   onCancelClick?: (orderId: string, orderNo: string) => void;
@@ -53,7 +53,6 @@ export default function CustomerOrderCard({
   const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
   const toggleExpand = controlledToggle || (() => setInternalExpanded(!internalExpanded));
 
-  // Safe Guard ป้องกันกรณี order เป็น null หรือ undefined
   if (!order) return null;
 
   // ฟังก์ชันตรวจเช็คเวลาหมดอายุ 10 นาที
@@ -70,13 +69,11 @@ export default function CustomerOrderCard({
 
     const now = Date.now();
 
-    // 1. ถ้ามี expires_at จากฐานข้อมูล ให้เทียบตรงๆ
     if (expiresAtStr) {
       const expTime = parseSafeTime(expiresAtStr);
       if (expTime) return now > expTime;
     }
 
-    // 2. ถ้าไม่มี ให้ใช้ order_date + 10 นาที
     if (orderDateStr) {
       const createTime = parseSafeTime(orderDateStr);
       if (createTime) return now > (createTime + 10 * 60 * 1000);
@@ -90,12 +87,14 @@ export default function CustomerOrderCard({
     order?.current_status?.state || 
     (typeof order?.status === "string" ? order.status : "รอการชำระเงิน");
 
-  // ตรวจสอบว่าหมดอายุจริงหรือไม่จาก expires_at
   const expired = isOrderExpired(order?.expires_at, order?.order_date);
 
   if (state === "รอการชำระเงิน" && expired) {
     state = "ยกเลิกการพิมพ์";
   }
+
+  // 🌟 เช็คว่าสลิปถูกร้านค้าปฏิเสธหรือไม่
+  const isSlipRejected = order?.payment?.is_verified === false;
 
   const isPendingPayment = state === "รอการชำระเงิน" && !expired;
   const isPending = state === "รอการดำเนินงาน";
@@ -117,7 +116,6 @@ export default function CustomerOrderCard({
       ? "bg-blue-50 text-blue-700 border-blue-200/80"
       : "bg-slate-50 text-slate-600 border-slate-200";
 
-  // 🌟 จัดรูปแบบ "วันที่และเวลาที่สั่งซื้อ"
   const formattedOrderDate = order?.order_date
     ? new Date(order.order_date).toLocaleDateString("th-TH", {
         day: "numeric",
@@ -133,7 +131,6 @@ export default function CustomerOrderCard({
       }) + " น."
     : "";
 
-  // จัดรูปแบบ "วันเวลานัดรับ"
   const formattedDate = order?.receive_date
     ? new Date(order.receive_date).toLocaleDateString("th-TH", {
         day: "numeric",
@@ -151,7 +148,6 @@ export default function CustomerOrderCard({
 
   const items = order?.print_order_item || order?.order_items || order?.items || [];
   
-  // รวมประเภทงานพิมพ์หลักพร้อมจำนวนชุด
   const itemCategorySummary = (() => {
     if (!items || items.length === 0) return "เอกสาร x1 ชุด";
 
@@ -175,7 +171,7 @@ export default function CustomerOrderCard({
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all overflow-hidden">
       
-      {/* 1. Header บาร์บน: #ORD-125 | ชื่อร้านค้า + ปุ่มแชท และ สถานะอยู่ขวาสุด */}
+      {/* 1. Header บาร์บน */}
       <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="font-extrabold text-slate-900 text-sm sm:text-base tracking-tight shrink-0">
@@ -207,7 +203,6 @@ export default function CustomerOrderCard({
           )}
         </div>
 
-        {/* ป้ายสถานะอยู่ขวาสุดด้านบน */}
         <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border shrink-0 ${stateBadgeStyle}`}>
           {state}
         </span>
@@ -216,10 +211,7 @@ export default function CustomerOrderCard({
       {/* 2. เนื้อหาการ์ด */}
       <div className="p-4 sm:px-5 space-y-3">
         
-        {/* 🌟 แถววันเวลาสั่งซื้อ (ถ้าเปิดใช้งาน) & วันเวลานัดรับแบบ Pill */}
         <div className="flex items-center gap-2.5 flex-wrap text-xs text-slate-500">
-          
-          {/* วันที่และเวลาสั่งซื้อ (แสดงเฉพาะเมื่อส่ง prop showOrderDate={true}) */}
           {showOrderDate && order?.order_date && (
             <>
               <div className="inline-flex items-center gap-1.5 text-slate-500">
@@ -237,7 +229,6 @@ export default function CustomerOrderCard({
             </>
           )}
 
-          {/* แถววันเวลานัดรับเดิม ใส่ Pill เรียบร้อย */}
           <div className="inline-flex items-center gap-2 bg-slate-50 text-slate-600 px-3 py-1 rounded-full border border-slate-200/80 text-xs">
             <div className="flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -254,13 +245,9 @@ export default function CustomerOrderCard({
               </>
             )}
           </div>
-
         </div>
 
-        {/* แถวล่าง: [ปุ่มรายละเอียด + ประเภทงานพิมพ์ตัวบาง] VS [ปุ่ม Action + ยอดเงินสุทธิขวาสุด] */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1 border-t border-slate-100/80">
-          
-          {/* ฝั่งซ้าย: ปุ่มรายละเอียดอยู่ซ้ายสุด ตามด้วยประเภทงานพิมพ์หลัก (ตัวบาง ไม่ใส่ Pill) */}
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
               type="button"
@@ -280,11 +267,18 @@ export default function CustomerOrderCard({
             </span>
           </div>
 
-          {/* ฝั่งขวา: ปุ่ม Action ต่างๆ และ ยอดชำระสุทธิอยู่ขวาสุด */}
           <div className="flex items-center justify-between md:justify-end gap-3.5">
-            
             {/* กลุ่มปุ่ม Action */}
             <div className="flex items-center gap-2 flex-wrap">
+              
+              {/* 🌟 แสดงป้ายแจ้งเตือนเมื่อสลิปไม่ถูกต้อง */}
+              {isSlipRejected && isPendingPayment && (
+                <span className="text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 px-2 py-1 rounded-xl flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 text-rose-500" />
+                  สลิปไม่ถูกต้อง แนบใหม่ก่อนหมดเวลา
+                </span>
+              )}
+
               {/* 1. ปุ่มชำระเงินนับถอยหลัง */}
               <PaymentActionButton order={order} />
 
@@ -336,21 +330,17 @@ export default function CustomerOrderCard({
               )}
             </div>
 
-            {/* ยอดชำระสุทธิ วางไว้ขวาสุด */}
             <div className="text-right pl-3.5 border-l border-slate-200/80 shrink-0">
               <span className="text-[10px] text-slate-400 block font-medium">ยอดชำระสุทธิ</span>
               <span className="text-base font-extrabold text-blue-600">
                 ฿{orderPrice.toLocaleString("th-TH", { minimumFractionDigits: 2 })}
               </span>
             </div>
-
           </div>
-
         </div>
-
       </div>
 
-      {/* 3. รายละเอียดใน Dropdown เมื่อกดเปิด */}
+      {/* 3. รายละเอียดใน Dropdown */}
       {isExpanded && (
         <div className="border-t border-slate-100 bg-[#F9FAFB] p-4 text-xs space-y-3">
           <div className="space-y-2">
@@ -394,7 +384,6 @@ export default function CustomerOrderCard({
             })}
           </div>
 
-          {/* สรุปราคาท้ายใบเสร็จ */}
           <div className="bg-white p-3 rounded-xl border border-slate-200/70 space-y-1 text-slate-600 text-[11px]">
             <div className="flex justify-between">
               <span>ค่างานพิมพ์รวม</span>

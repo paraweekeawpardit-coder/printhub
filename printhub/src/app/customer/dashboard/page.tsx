@@ -69,18 +69,51 @@ export default function CustomerDashboardPage() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // ฟังก์ชันตรวจสอบว่าออเดอร์นี้สั่งมาเกิน 10 นาทีแล้วหรือยัง
-  const isOrderExpired = (orderDateStr: string) => {
-    if (!orderDateStr) return false;
-    const orderTime = new Date(orderDateStr).getTime();
-    const now = Date.now();
-    return now - orderTime > 10 * 60 * 1000;
+  // ฟังก์ชันแปลงเวลาแบบปลอดภัย ป้องกัน Timezone เพี้ยน
+  const parseSafeTime = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    let cleaned = dateStr.trim();
+    if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
+      cleaned = `${cleaned.replace(" ", "T")}Z`;
+    }
+    const parsed = new Date(cleaned).getTime();
+    return isNaN(parsed) ? null : parsed;
+  };
+
+  // 🌟 ฟังก์ชันกลางสำหรับอ่านสถานะจริงของออเดอร์ให้ตรงกับ Supabase 100%
+  const getRealOrderState = (o: any) => {
+    let state =
+      o.current_status?.state ||
+      o.status?.state ||
+      (typeof o.current_status === "string" ? o.current_status : null) ||
+      (typeof o.status === "string" ? o.status : null) ||
+      "รอการชำระเงิน";
+
+    // ตรวจสอบการหมดเวลาโดยอิง expires_at เป็นหลัก (ไม่ตัดเวลาด้วย order_date มั่ว)
+    if (state === "รอการชำระเงิน") {
+      const now = Date.now();
+      let isExpired = false;
+
+      if (o.expires_at) {
+        const expTime = parseSafeTime(o.expires_at);
+        if (expTime && expTime < now) isExpired = true;
+      }
+
+      if (isExpired) {
+        state = "ยกเลิกการพิมพ์";
+      }
+    }
+
+    return state;
   };
 
   const fetchDashboardData = useCallback(async (cid: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:5000/api/customer/dashboard?customer_id=${cid}`);
+      // ใส่ cache: 'no-store' เพื่อบังคับดึงข้อมูลสดจากเซิร์ฟเวอร์เสมอ
+      const res = await fetch(`http://localhost:5000/api/customer/dashboard?customer_id=${cid}`, {
+        cache: "no-store",
+      });
       const json = await res.json();
 
       if (json.success && json.data) {
@@ -105,17 +138,6 @@ export default function CustomerDashboardPage() {
     fetchDashboardData(cid);
   }, [router, fetchDashboardData]);
 
-  // ฟังก์ชันแปลงเวลาแบบปลอดภัย ป้องกัน Timezone เพี้ยน
-  const parseSafeTime = (dateStr?: string | null) => {
-    if (!dateStr) return null;
-    let cleaned = dateStr.trim();
-    if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
-      cleaned = `${cleaned.replace(" ", "T")}Z`;
-    }
-    const parsed = new Date(cleaned).getTime();
-    return isNaN(parsed) ? null : parsed;
-  };
-
   // 🌟 คำนวณจำนวนออเดอร์ในแต่ละสถานะสำหรับ Badge ตัวเลข
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
@@ -128,29 +150,8 @@ export default function CustomerDashboardPage() {
       ยกเลิกการพิมพ์: 0,
     };
 
-    const now = Date.now();
-
     orders.forEach((o: any) => {
-      let state =
-        o.current_status?.state ||
-        o.status?.state ||
-        (typeof o.status === "string" ? o.status : "รอการดำเนินงาน");
-
-      // ตรวจสอบการหมดเวลาโดยอิง expires_at เป็นหลัก
-      if (state === "รอการชำระเงิน") {
-        let isExpired = false;
-        if (o.expires_at) {
-          const expTime = parseSafeTime(o.expires_at);
-          if (expTime && expTime < now) isExpired = true;
-        } else if (o.order_date) {
-          const createTime = parseSafeTime(o.order_date);
-          if (createTime && now > createTime + 10 * 60 * 1000) isExpired = true;
-        }
-
-        if (isExpired) {
-          state = "ยกเลิกการพิมพ์";
-        }
-      }
+      const state = getRealOrderState(o);
 
       if (state === "รับงานแล้ว" || state === "รายการเสร็จสิ้น") {
         counts["รายการเสร็จสิ้น"] = (counts["รายการเสร็จสิ้น"] || 0) + 1;
@@ -164,29 +165,8 @@ export default function CustomerDashboardPage() {
 
   // 🌟 กรองรายการคำสั่งซื้อตามแท็บสถานะที่เลือก
   const filteredOrders = useMemo(() => {
-    const now = Date.now();
-
     return orders.filter((o: any) => {
-      let state =
-        o.current_status?.state ||
-        o.status?.state ||
-        (typeof o.status === "string" ? o.status : "รอการดำเนินงาน");
-
-      // ตรวจสอบการหมดเวลาโดยอิง expires_at เป็นหลัก
-      if (state === "รอการชำระเงิน") {
-        let isExpired = false;
-        if (o.expires_at) {
-          const expTime = parseSafeTime(o.expires_at);
-          if (expTime && expTime < now) isExpired = true;
-        } else if (o.order_date) {
-          const createTime = parseSafeTime(o.order_date);
-          if (createTime && now > createTime + 10 * 60 * 1000) isExpired = true;
-        }
-
-        if (isExpired) {
-          state = "ยกเลิกการพิมพ์";
-        }
-      }
+      const state = getRealOrderState(o);
 
       if (selectedStatusFilter === "ทั้งหมด") return true;
       if (selectedStatusFilter === "รายการเสร็จสิ้น") {
