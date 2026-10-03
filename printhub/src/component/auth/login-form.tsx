@@ -10,7 +10,9 @@ type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+// 🟢 ปรับ Fallback หรือลบ Slash ท้าย URL ป้องกัน URL ซ้ำซ้อน
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_URL = rawApiUrl.replace(/\/+$/, "");
 
 export default function LoginForm({ setRegis }: RegisFormProps) {
   const router = useRouter();
@@ -27,10 +29,11 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
     setMessage("");
     setLoading(true);
 
-    console.log("login information ",logindata)
+    console.log("login information ", logindata);
 
     try {
-      const res = await axios.post(`${API_URL}/auth/login`, logindata);
+      // 🟢 แก้จาก /auth/login เป็น /api/auth/login ให้ตรงกับ Express Backend
+      const res = await axios.post(`${API_URL}/api/auth/login`, logindata);
 
       if (res.data.token) {
         if (res.data.role === "shop") {
