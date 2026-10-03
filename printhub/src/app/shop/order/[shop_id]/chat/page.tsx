@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
-import { ArrowLeft, MessageSquare, Lock } from "lucide-react";
+import { MessageSquare, Lock } from "lucide-react";
 import axios from "axios";
 import ChatBox from "@/component/ChatBox";
+import ShopNavbar from "@/component/shop/navbar";
 import { supabase } from "@/config/supabase";
 
 const API_BASE = "http://localhost:5000";
@@ -202,18 +203,8 @@ export default function ShopChatPage() {
 
   return (
     <div className="h-screen w-full bg-[#F4F6F9] flex flex-col font-sans overflow-hidden">
-      {/* Header หลักด้านบน */}
-      <header className="bg-[#001B3A] text-white h-14 px-6 flex items-center justify-between shadow-md shrink-0">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors cursor-pointer"
-        >
-          <ArrowLeft size={18} />
-          ย้อนกลับ
-        </button>
-        <div className="font-bold text-lg tracking-tight">PrintHub Management</div>
-        <div className="w-16"></div>
-      </header>
+      {/* Navbar ของร้านค้า */}
+      <ShopNavbar />
 
       {/* แถบแจ้งเตือนเมื่อร้านถูกระงับการใช้งาน */}
       {isSuspended && (

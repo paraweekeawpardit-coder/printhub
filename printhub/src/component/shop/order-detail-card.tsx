@@ -297,6 +297,15 @@ export default function OrderDetailCard({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              
+              // Path ที่ถูกต้องตาม Folder Structure
+              const targetPath = shopId
+                ? `/shop/order/${shopId}/chat?orderId=${order.order_id}`
+                : `/shop/order/chat?orderId=${order.order_id}`;
+                
+              router.push(targetPath);
+              
+              // เรียก prop เดิมไว้ด้วยกรณีมี logic อื่นผูกอยู่
               onChatClick?.(order.order_id);
             }}
             className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"

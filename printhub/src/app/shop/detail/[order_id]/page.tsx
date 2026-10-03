@@ -97,7 +97,10 @@ export default function OrderDetailPage() {
       await axios.patch(
         `http://localhost:5000/shop/orders/${orderId}/status`,
         { status_name: nextStatus },
-        { headers }
+        { headers: {
+            "Content-Type": "application/json",
+          },
+        }
       );
 
       await fetchOrder(true);
@@ -229,6 +232,7 @@ export default function OrderDetailPage() {
     order.status_state !== "ยกเลิกการพิมพ์";
 
   const isPending = order.status_state === "รอการดำเนินงาน";
+  const slipVerdict: boolean | null = payment?.is_verified ?? null;
 
   const statusStyles: Record<string, string> = {
     รอการดำเนินงาน: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
@@ -236,14 +240,6 @@ export default function OrderDetailPage() {
     พิมพ์เสร็จสิ้น: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
     ยกเลิกการพิมพ์: "bg-red-50 text-red-700 ring-1 ring-red-200",
   };
-
-  const allFiles = order.files || [];
-
-  const payment = order.payment;
-  const slipUrl: string | null = payment?.slip_url || null;
-  const isPending = order.status_state === "รอการดำเนินงาน";
-  // null = ยังไม่ตรวจ, true = สลิปถูกต้อง, false = สลิปไม่ถูกต้อง
-  const slipVerdict: boolean | null = payment?.is_verified ?? null;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">
