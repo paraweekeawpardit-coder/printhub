@@ -35,6 +35,12 @@ export const calculateOrderPricing = (items: Array<any>) => {
   };
 };
 
+// Helper สำหรับดึงเลข ORD- ให้ถูกต้อง
+const formatOrderNo = (orderNo: any, orderId: string) => {
+  if (!orderNo) return orderId.slice(0, 8);
+  return String(orderNo).startsWith("ORD-") ? orderNo : `ORD-${orderNo}`;
+};
+
 // ==========================================
 // 1. สั่งพิมพ์งาน (Checkout)
 // ==========================================
@@ -105,12 +111,12 @@ export const createOrder = async (req: Request, res: Response) => {
           total_price: pricing.net_total,
         },
       ])
-      .select("id, expires_at")
+      .select("id, order_no, expires_at")
       .single();
 
     if (orderError) throw orderError;
 
-    // บันทึกลง work_status รอบเดียวตรงนี้
+    // บันทึกลง work_status
     try {
       await supabase.from("work_status").insert([
         {
@@ -119,7 +125,7 @@ export const createOrder = async (req: Request, res: Response) => {
         },
       ]);
     } catch (wsErr) {
-      console.warn("work_status trigger warning:", wsErr);
+      console.warn("work_status insert warning:", wsErr);
     }
 
     // Insert รายการพิมพ์
@@ -177,12 +183,13 @@ export const createOrder = async (req: Request, res: Response) => {
     await supabase.from("cart").delete().eq("id", cart.id);
 
     // แจ้งเตือนร้านค้า
+    const displayNo = formatOrderNo(newOrder.order_no, newOrder.id);
     await supabase.from("notifications").insert([
       {
         shop_id: cart.shop_id,
         order_id: newOrder.id,
-        title: "มีคำสั่งซื้อใหม่!",
-        message: `คุณมีออเดอร์ใหม่ #${newOrder.id.slice(0, 8)} รอการตอบรับ`,
+        title: "คำสั่งพิมพ์ใหม่!",
+        message: `คุณมีออเดอร์ใหม่ #${displayNo} รอลูกค้าชำระเงิน`,
         is_read: false,
       },
     ]);
@@ -246,49 +253,22 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
 // ==========================================
 // 3. อัปเดตสถานะงานพิมพ์
 // ==========================================
+// ในฟังก์ชัน updateWorkStatus
 export const updateWorkStatus = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const { status_id } = req.body;
 
-    const { error: logError } = await supabase.from("work_status").insert([
-      {
-        order_id: orderId,
-        status_id,
-      },
-    ]);
-    if (logError) throw logError;
+    // 1. บันทึกเข้า work_status (Trigger ใน Supabase จะส่ง Notification ให้เอง)
+    await supabase.from("work_status").insert([{ order_id: orderId, status_id }]);
 
-    const { error: orderError } = await supabase
-      .from("print_order")
-      .update({ current_status_id: status_id })
-      .eq("id", orderId);
+    // 2. อัปเดตสถานะใน print_order
+    await supabase.from("print_order").update({ current_status_id: status_id }).eq("id", orderId);
 
-    if (orderError) throw orderError;
-
-    const { data: orderData } = await supabase
-      .from("print_order")
-      .select("customer_id")
-      .eq("id", orderId)
-      .single();
-
-    const { data: statusData } = await supabase
-      .from("status")
-      .select("state")
-      .eq("id", status_id)
-      .single();
-
-    if (orderData?.customer_id) {
-      await supabase.from("notifications").insert([
-        {
-          customer_id: orderData.customer_id,
-          order_id: orderId,
-          title: "อัปเดตสถานะออเดอร์",
-          message: `ออเดอร์ #${orderId.slice(0, 8)} เปลี่ยนสถานะเป็น "${statusData?.state || 'อัปเดตแล้ว'}"`,
-          is_read: false,
-        },
-      ]);
-    }
+    // ❌ ลบหรือปิด (Comment) บล็อก notifications.insert(...) ตรงนี้ออกทั้งหมด
+    /* 
+    await supabase.from("notifications").insert([ ... ]);
+    */
 
     return res.status(200).json({ success: true, message: "อัปเดตสถานะเรียบร้อยแล้ว" });
   } catch (error: any) {
@@ -307,6 +287,9 @@ export const cancelOrder = async (req: Request, res: Response) => {
       .from("print_order")
       .select(`
         id,
+        order_no,
+        shop_id,
+        customer_id,
         current_status:current_status_id (
           id,
           state
@@ -342,7 +325,21 @@ export const cancelOrder = async (req: Request, res: Response) => {
         status_id: cancelStatusId,
       });
     } catch (wsErr) {
-      console.warn("work_status trigger warning (ignored):", wsErr);
+      console.warn("work_status insert warning (ignored):", wsErr);
+    }
+
+    // 🟢 แจ้งเตือนร้านค้าว่าลูกค้าได้กดยกเลิก
+    const displayNo = formatOrderNo(order.order_no, id as string);
+    if (order.shop_id) {
+      await supabase.from("notifications").insert([
+        {
+          shop_id: order.shop_id,
+          order_id: id,
+          title: "คำสั่งซื้อถูกยกเลิก",
+          message: `ลูกค้าได้กดยกเลิกคำสั่งซื้อ #${displayNo}`,
+          is_read: false,
+        },
+      ]);
     }
 
     return res.status(200).json({
@@ -389,7 +386,27 @@ export const confirmReceivedOrder = async (req: Request, res: Response) => {
         status_id: doneStatus.id,
       });
     } catch (wsErr) {
-      console.warn("work_status trigger warning (ignored):", wsErr);
+      console.warn("work_status insert warning (ignored):", wsErr);
+    }
+
+    // 🟢 แจ้งเตือนร้านค้าว่าลูกค้ารับงานเรียบร้อยแล้ว
+    const { data: orderData } = await supabase
+      .from("print_order")
+      .select("shop_id, order_no")
+      .eq("id", id)
+      .single();
+
+    if (orderData?.shop_id) {
+      const displayNo = formatOrderNo(orderData.order_no, id as string);
+      await supabase.from("notifications").insert([
+        {
+          shop_id: orderData.shop_id,
+          order_id: id,
+          title: "ลูกค้ารับงานเรียบร้อย",
+          message: `ออเดอร์ #${displayNo} ได้รับการยืนยันรับงานเสร็จสิ้นแล้ว`,
+          is_read: false,
+        },
+      ]);
     }
 
     return res.status(200).json({
@@ -416,7 +433,7 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
 
     const { data: orderData, error: orderErr } = await supabase
       .from("print_order")
-      .select("id, customer_id, shop_id, total_price")
+      .select("id, order_no, customer_id, shop_id, total_price")
       .eq("id", order_id)
       .single();
 
@@ -458,10 +475,9 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
 
     if (payErr) throw payErr;
 
-    // รหัสสถานะ "รอดำเนินงาน" (เมื่อลูกค้าส่งสลิปชำระเงินแล้ว)
+    // รหัสสถานะ "รอดำเนินงาน"
     const inProgressStatusId = "8c416cf8-140c-4563-a912-6a4a6c0a4d9f";
 
-    // อัปเดตสถานะเป็น "รอดำเนินงาน" และล้าง expires_at เพื่อหยุดการตัดหมดเวลา
     await supabase
       .from("print_order")
       .update({ 
@@ -482,6 +498,20 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
       console.warn("work_status insert warning:", wsErr);
     }
 
+    // 🟢 แจ้งเตือนร้านค้าว่ามีการชำระเงินแล้ว
+    const displayNo = formatOrderNo(orderData.order_no, order_id);
+    if (orderData.shop_id) {
+      await supabase.from("notifications").insert([
+        {
+          shop_id: orderData.shop_id,
+          order_id: order_id,
+          title: "แจ้งชำระเงินแล้ว",
+          message: `ออเดอร์ #${displayNo} ได้ทำการชำระเงินแล้ว กรุณาตรวจสอบและดำเนินการ`,
+          is_read: false,
+        },
+      ]);
+    }
+
     return res.status(200).json({
       success: true,
       message: "อัปโหลดสลิปชำระเงินเรียบร้อยแล้ว",
@@ -494,12 +524,18 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 7. ยกเลิกคำสั่งซื้ออัตโนมัติเมื่อหมดเวลาชำระเงิน (10 นาที)
+// 7. ยกเลิกคำสั่งซื้ออัตโนมัติเมื่อหมดเวลาชำระเงิน
 // ==========================================
 export const cancelOrderTimeout = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const cancelStatusId = "9aee439b-3d24-4b4e-8d68-d9b63081b80c";
+
+    const { data: orderData } = await supabase
+      .from("print_order")
+      .select("order_no, customer_id, shop_id")
+      .eq("id", orderId)
+      .single();
 
     const { error: orderError } = await supabase
       .from("print_order")
@@ -514,6 +550,20 @@ export const cancelOrderTimeout = async (req: Request, res: Response) => {
         status_id: cancelStatusId,
       },
     ]);
+
+    // 🟢 แจ้งเตือนลูกค้าเมื่อหมดเวลาชำระเงิน
+    if (orderData?.customer_id) {
+      const displayNo = formatOrderNo(orderData.order_no, orderId as string);
+      await supabase.from("notifications").insert([
+        {
+          customer_id: orderData.customer_id,
+          order_id: orderId,
+          title: "คำสั่งซื้อถูกยกเลิก",
+          message: `ออเดอร์ #${displayNo} ถูกยกเลิกอัตโนมัติเนื่องจากหมดเวลาชำระเงิน`,
+          is_read: false,
+        },
+      ]);
+    }
 
     return res.status(200).json({ success: true, message: "ยกเลิกคำสั่งซื้อเนื่องจากหมดเวลาแล้ว" });
   } catch (error: any) {

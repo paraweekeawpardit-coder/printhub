@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
-import { ArrowLeft, MessageSquare, Lock } from "lucide-react";
+import { MessageSquare, Lock } from "lucide-react";
 import axios from "axios";
 import ChatBox from "@/component/ChatBox";
+import ShopNavbar from "@/component/shop/navbar";
 import { supabase } from "@/config/supabase";
 
 const API_BASE = "http://localhost:5000";
@@ -46,12 +47,12 @@ export default function ShopChatPage() {
   const searchParams = useSearchParams();
   const params = useParams();
 
-  const isFromNavbar = searchParams.get("from") === "navbar";
-  
   // ดึง shop_id จาก URL Parameters
   const rawShopId = (params?.shop_id as string) || searchParams.get("shopId") || "";
 
+  // 💡 รองรับทั้ง orderId (camelCase) และ order_id (snake_case)
   const rawOrderId =
+    searchParams.get("orderId") ||
     searchParams.get("order_id") ||
     (params?.order_id as string) ||
     "";
@@ -124,12 +125,21 @@ export default function ShopChatPage() {
 
           setOrderChats(list);
 
-          const isExistInOrders = list.some((o) => o.id === rawOrderId);
+          // 💡 ตรวจสอบเงื่อนไข: หากกดมาจาก Navbar หรือไม่มี orderId ส่งมา ให้ว่างไว้
+          const isFromNavbar = searchParams.get("from") === "navbar";
 
-          if (!isFromNavbar && isExistInOrders) {
-            setSelectedOrderId(rawOrderId);
-          } else {
+          if (isFromNavbar || !rawOrderId) {
             setSelectedOrderId("");
+          } else {
+            // หากกดมาจาก Detail Card หรือระบุ orderId ให้เลือกออเดอร์นั้น
+            const targetOrder = list.find(
+              (o) => o.id === rawOrderId || String(o.order_no) === rawOrderId
+            );
+            if (targetOrder) {
+              setSelectedOrderId(targetOrder.id);
+            } else {
+              setSelectedOrderId("");
+            }
           }
         } else {
           console.error("Supabase fetch error:", error);
@@ -142,7 +152,7 @@ export default function ShopChatPage() {
     };
 
     fetchShopChats();
-  }, [rawOrderId, isFromNavbar]);
+  }, [rawOrderId, searchParams]);
 
   // 2. ดึงสถานะออเดอร์เพื่อเช็กการเปิด/ปิดช่องแชต
   useEffect(() => {
@@ -175,7 +185,6 @@ export default function ShopChatPage() {
         const cleanState = String(stateName).trim();
 
         // 🟢 เปิดให้แชตได้ทั้ง "กำลังพิมพ์" และ "พิมพ์เสร็จสิ้น"
-        // ล็อคแชตเฉพาะ "รอการดำเนินงาน", "รายการเสร็จสิ้น", และ "ยกเลิกการพิมพ์"
         const allowedToChatStates = ["กำลังพิมพ์", "พิมพ์เสร็จสิ้น"];
         
         setIsChatDisabled(!allowedToChatStates.includes(cleanState));
@@ -194,18 +203,8 @@ export default function ShopChatPage() {
 
   return (
     <div className="h-screen w-full bg-[#F4F6F9] flex flex-col font-sans overflow-hidden">
-      {/* Header หลักด้านบน */}
-      <header className="bg-[#001B3A] text-white h-14 px-6 flex items-center justify-between shadow-md shrink-0">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors cursor-pointer"
-        >
-          <ArrowLeft size={18} />
-          ย้อนกลับ
-        </button>
-        <div className="font-bold text-lg tracking-tight">PrintHub Management</div>
-        <div className="w-16"></div>
-      </header>
+      {/* Navbar ของร้านค้า */}
+      <ShopNavbar />
 
       {/* แถบแจ้งเตือนเมื่อร้านถูกระงับการใช้งาน */}
       {isSuspended && (

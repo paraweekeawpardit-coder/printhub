@@ -152,6 +152,9 @@ export const getNumOrderUnAccept = async (
 // ==========================================
 // Get Top Orders
 // ==========================================
+// ==========================================
+// Get Top Orders
+// ==========================================
 export const getTopOrder = async (
   req: Request,
   res: Response
@@ -163,11 +166,26 @@ export const getTopOrder = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(
         `
-        *,
+        id,
+        order_no,
+        order_date,
+        total_price,
+        description,
+        appointment_time,
+        receive_date,
+        shop_id,
+        current_status_id,
+        payment_id,
         customer (
           first_name,
           last_name,
@@ -177,12 +195,20 @@ export const getTopOrder = async (
           id,
           state
         ),
+        payment:payment_id (
+          id,
+          slip_url,
+          is_verified,
+          amount
+        ),
         print_order_item (
           *
         )
         `
       )
-      .eq("shop_id", shop_id);
+      .eq("shop_id", shop_id)
+      .gte("order_date", todayStart.toISOString())
+      .lte("order_date", todayEnd.toISOString());
 
     if (error) {
       return res.status(400).json({ error: error.message });
@@ -192,19 +218,82 @@ export const getTopOrder = async (
       return res.status(200).json([]);
     }
 
+<<<<<<< HEAD
     const sortedOrders = orders.sort((a: any, b: any) => {
       const stateA = a.current_status?.state || "";
       const stateB = b.current_status?.state || "";
 
       const isPendingA = stateA === "รอการดำเนินการ" || stateA === "กำลังพิมพ์";
       const isPendingB = stateB === "รอการดำเนินการ" || stateB === "กำลังพิมพ์";
+=======
+    const filteredOrders = orders.filter((order: any) => {
+      const state = order.current_status?.state;
+      return state !== "รอการชำระเงิน";
+    });
+
+    const now = new Date().getTime();
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+    // Helper เช็คว่าเป็นสถานะที่กำลังรอดำเนินการหรือกำลังพิมพ์อยู่หรือไม่
+    const isPendingStatus = (state: string) =>
+      state === "รอการดำเนินการ" ||
+      state === "รอการดำเนินงาน" ||
+      state === "กำลังพิมพ์";
+
+    const processedOrders = filteredOrders.map((order: any) => {
+      let state = order.current_status?.state || "";
+
+      const orderTime = new Date(order.order_date).getTime();
+      const isPending =
+        state === "รอการดำเนินการ" || state === "รอการดำเนินงาน";
+
+      // เงื่อนไข 1: หากรอดำเนินการ แล้วเกิน 24 ชั่วโมงนับจากเวลาสั่งซื้อ (order_date) -> ยกเลิกการพิมพ์
+      if (isPending && now > orderTime + ONE_DAY_MS) {
+        state = "ยกเลิกการพิมพ์";
+      }
+
+      // เงื่อนไข 2: ตรวจสอบเวลานัดรับ / รับสินค้า
+      const appointmentTimeStr = order.appointment_time || order.receive_date;
+
+      if (appointmentTimeStr) {
+        const appointmentTime = new Date(appointmentTimeStr).getTime();
+
+        // รอดำเนินการหรือกำลังพิมพ์ แล้วเลยเวลานัดรับ -> ยกเลิกการพิมพ์
+        if (isPendingStatus(state) && now > appointmentTime) {
+          state = "ยกเลิกการพิมพ์";
+        }
+
+        // พิมพ์เสร็จสิ้น แล้วเลยเวลานัดรับเกิน 24 ชั่วโมง -> รายการเสร็จสิ้น
+        const isCompletedPrint = state === "พิมพ์เสร็จสิ้น";
+        if (isCompletedPrint && now > appointmentTime + ONE_DAY_MS) {
+          state = "รายการเสร็จสิ้น";
+        }
+      }
+
+      return {
+        ...order,
+        latest_status: state || "ไม่ทราบสถานะ",
+      };
+    });
+
+    const sortedOrders = [...processedOrders].sort((a: any, b: any) => {
+      const stateA = a.latest_status;
+      const stateB = b.latest_status;
+
+      const isPendingA = isPendingStatus(stateA);
+      const isPendingB = isPendingStatus(stateB);
+>>>>>>> origin/main
 
       if (isPendingA && !isPendingB) return -1;
       if (!isPendingA && isPendingB) return 1;
 
       if (isPendingA && isPendingB) {
-        const timeA = new Date(a.appointment_time || a.receive_date || a.order_date).getTime();
-        const timeB = new Date(b.appointment_time || b.receive_date || b.order_date).getTime();
+        const timeA = new Date(
+          a.appointment_time || a.receive_date || a.order_date
+        ).getTime();
+        const timeB = new Date(
+          b.appointment_time || b.receive_date || b.order_date
+        ).getTime();
         return timeA - timeB;
       }
 

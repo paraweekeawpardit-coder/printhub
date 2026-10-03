@@ -537,8 +537,9 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$
 var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$printer$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Printer$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/printer.mjs [app-client] (ecmascript) <export default as Printer>");
 ;
 ;
-function OrderActions({ status, onUpdateStatus, disabled }) {
+function OrderActions({ status, isVerified, onUpdateStatus, disabled }) {
     if (status === "รอการดำเนินงาน") {
+        const canAccept = isVerified === true; // รับงานได้เมื่อสลิปถูกต้องแล้วเท่านั้น
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
             className: "flex gap-2",
             children: [
@@ -552,40 +553,41 @@ function OrderActions({ status, onUpdateStatus, disabled }) {
                             size: 14
                         }, void 0, false, {
                             fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-                            lineNumber: 29,
+                            lineNumber: 33,
                             columnNumber: 11
                         }, this),
                         "ปฏิเสธ"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-                    lineNumber: 23,
+                    lineNumber: 27,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                     type: "button",
                     onClick: ()=>onUpdateStatus?.("กำลังพิมพ์"),
-                    disabled: disabled,
-                    className: "flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50",
+                    disabled: disabled || !canAccept,
+                    title: !canAccept ? "กรุณาตรวจสอบสลิปชำระเงินก่อนยืนยันออเดอร์" : "",
+                    className: "flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed",
                     children: [
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$check$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Check$3e$__["Check"], {
                             size: 14
                         }, void 0, false, {
                             fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-                            lineNumber: 38,
+                            lineNumber: 43,
                             columnNumber: 11
                         }, this),
                         "รับออเดอร์"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-                    lineNumber: 32,
+                    lineNumber: 36,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-            lineNumber: 22,
+            lineNumber: 26,
             columnNumber: 7
         }, this);
     }
@@ -603,12 +605,12 @@ function OrderActions({ status, onUpdateStatus, disabled }) {
                         size: 14
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-                        lineNumber: 55,
+                        lineNumber: 60,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-                    lineNumber: 48,
+                    lineNumber: 53,
                     columnNumber: 9
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -621,20 +623,20 @@ function OrderActions({ status, onUpdateStatus, disabled }) {
                             size: 14
                         }, void 0, false, {
                             fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-                            lineNumber: 63,
+                            lineNumber: 68,
                             columnNumber: 11
                         }, this),
                         "พิมพ์เสร็จสิ้น"
                     ]
                 }, void 0, true, {
                     fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-                    lineNumber: 57,
+                    lineNumber: 62,
                     columnNumber: 9
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-            lineNumber: 47,
+            lineNumber: 52,
             columnNumber: 7
         }, this);
     }
@@ -644,7 +646,7 @@ function OrderActions({ status, onUpdateStatus, disabled }) {
             children: "✓ ดำเนินการเสร็จสิ้น"
         }, void 0, false, {
             fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-            lineNumber: 72,
+            lineNumber: 77,
             columnNumber: 7
         }, this);
     }
@@ -654,7 +656,7 @@ function OrderActions({ status, onUpdateStatus, disabled }) {
             children: "ยกเลิกออเดอร์แล้ว"
         }, void 0, false, {
             fileName: "[project]/printhub/src/component/shop/order-action.tsx",
-            lineNumber: 80,
+            lineNumber: 85,
             columnNumber: 7
         }, this);
     }
@@ -675,30 +677,38 @@ __turbopack_context__.s([
     ()=>OrderDetailCard
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/printhub/node_modules/next/dist/compiled/react/jsx-dev-runtime.js [app-client] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/printhub/node_modules/next/dist/compiled/react/index.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$message$2d$circle$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__MessageCircle$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/message-circle.mjs [app-client] (ecmascript) <export default as MessageCircle>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$external$2d$link$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ExternalLink$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/external-link.mjs [app-client] (ecmascript) <export default as ExternalLink>");
-var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$file$2d$text$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__FileText$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/file-text.mjs [app-client] (ecmascript) <export default as FileText>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$download$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Download$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/download.mjs [app-client] (ecmascript) <export default as Download>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$eye$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Eye$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/eye.mjs [app-client] (ecmascript) <export default as Eye>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$x$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__X$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/x.mjs [app-client] (ecmascript) <export default as X>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$check$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Check$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/check.mjs [app-client] (ecmascript) <export default as Check>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$loader$2d$circle$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Loader2$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/loader-circle.mjs [app-client] (ecmascript) <export default as Loader2>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$src$2f$component$2f$shop$2f$customer$2d$badge$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/printhub/src/component/shop/customer-badge.tsx [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$src$2f$component$2f$shop$2f$order$2d$action$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/printhub/src/component/shop/order-action.tsx [app-client] (ecmascript)");
+;
+var _s = __turbopack_context__.k.signature();
+"use client";
 ;
 ;
 ;
 ;
 const STATUS_CONFIG = {
-    รอการดำเนินการ: {
-        dot: "bg-amber-500 animate-pulse",
-        text: "text-amber-700",
-        bg: "bg-amber-500/10"
+    รอการดำเนินงาน: {
+        dot: "bg-yellow-500 animate-pulse",
+        text: "text-amber-800",
+        bg: "bg-amber-100"
     },
     กำลังพิมพ์: {
-        dot: "bg-blue-600 animate-pulse",
-        text: "text-blue-700",
-        bg: "bg-blue-500/10"
+        dot: "bg-blue-400 animate-pulse",
+        text: "text-blue-500 font-semibold",
+        bg: "bg-blue-50"
     },
     พิมพ์เสร็จสิ้น: {
-        dot: "bg-purple-500",
-        text: "text-purple-700",
-        bg: "bg-purple-500/10"
+        dot: "bg-blue-500",
+        text: "text-blue-700",
+        bg: "bg-blue-500/10"
     },
     รายการเสร็จสิ้น: {
         dot: "bg-emerald-500",
@@ -726,365 +736,626 @@ function formatDate(value) {
         minute: "2-digit"
     });
 }
-function OrderDetailCard({ order, onClick, onUpdateStatus, onChatClick }) {
+function OrderDetailCard({ order, onClick, onUpdateStatus, onVerifyPayment, onChatClick }) {
+    _s();
     const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
     const items = order.items ?? [];
-    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        onClick: onClick,
-        className: "group relative flex w-full cursor-pointer flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200",
+    const [showSlipModal, setShowSlipModal] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [verifyingSlip, setVerifyingSlip] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const isVerified = order.payment?.is_verified ?? null;
+    const isDisabledFile = order.status === "รอการดำเนินงาน" || order.status === "ยกเลิกการพิมพ์";
+    const handleDownloadFile = async (e, fileUrl, fileName)=>{
+        e.stopPropagation();
+        if (isDisabledFile) return;
+        try {
+            const response = await fetch(fileUrl);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName || "download-file";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error("Download failed, fallbacking to direct URL:", error);
+            window.open(fileUrl, "_self");
+        }
+    };
+    const handleVerify = async (isApproved)=>{
+        if (!onVerifyPayment || verifyingSlip) return;
+        setVerifyingSlip(true);
+        try {
+            await onVerifyPayment(order.order_id, isApproved);
+            setShowSlipModal(false);
+        } catch (err) {
+            console.error("Verify payment error:", err);
+        } finally{
+            setVerifyingSlip(false);
+        }
+    };
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                onClick: onClick,
+                className: "group relative flex w-full cursor-pointer flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "flex items-center justify-between",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: `inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`,
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: `h-1.5 w-1.5 rounded-full ${statusConfig.dot}`
-                                    }, void 0, false, {
-                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                        lineNumber: 102,
-                                        columnNumber: 13
-                                    }, this),
-                                    order.status || "ไม่ทราบสถานะ"
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 99,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-[11px] font-medium text-slate-400 tracking-wider",
-                                children: formatDate(order.date)
-                            }, void 0, false, {
-                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 106,
-                                columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                        lineNumber: 98,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "mt-4 flex items-center justify-between gap-2",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "flex items-center justify-between",
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
-                                        children: "ORDER"
-                                    }, void 0, false, {
-                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                        lineNumber: 114,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
-                                        className: "text-xl font-black text-slate-900 tracking-tight leading-none mt-0.5",
+                                        className: `inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${statusConfig.bg} ${statusConfig.text}`,
                                         children: [
-                                            "#",
-                                            order.order_no ?? order.order_id.slice(0, 8)
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: `h-1.5 w-1.5 rounded-full ${statusConfig.dot}`
+                                            }, void 0, false, {
+                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                lineNumber: 160,
+                                                columnNumber: 15
+                                            }, this),
+                                            order.status || "ไม่ทราบสถานะ"
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                        lineNumber: 117,
+                                        lineNumber: 157,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                        className: "text-[11px] font-medium text-slate-400 tracking-wider",
+                                        children: formatDate(order.date)
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 164,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 113,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$src$2f$component$2f$shop$2f$customer$2d$badge$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
-                                name: order.customer_name
-                            }, void 0, false, {
-                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 122,
-                                columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                        lineNumber: 112,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "mt-5",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center justify-between mb-2",
-                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                    className: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
-                                    children: [
-                                        "รายการ (",
-                                        items.length,
-                                        ")"
-                                    ]
-                                }, void 0, true, {
-                                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                    lineNumber: 130,
-                                    columnNumber: 13
-                                }, this)
-                            }, void 0, false, {
-                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 129,
+                                lineNumber: 156,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "space-y-2 max-h-56 overflow-y-auto pr-1",
-                                children: items.length > 0 ? items.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                        className: "flex items-center justify-between gap-3 bg-slate-50/80 rounded-2xl p-3 border border-slate-100/80",
+                                className: "mt-4 flex items-center justify-between gap-2",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                         children: [
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                className: "min-w-0 flex-1",
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
+                                                children: "ORDER"
+                                            }, void 0, false, {
+                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                lineNumber: 172,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                                className: "text-xl font-black text-slate-900 tracking-tight leading-none mt-0.5",
                                                 children: [
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                                        className: "font-bold text-slate-800 text-sm truncate",
-                                                        children: item.category
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                        lineNumber: 143,
-                                                        columnNumber: 21
-                                                    }, this),
-                                                    item.describe && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                                        className: "text-xs text-slate-400 truncate leading-relaxed",
-                                                        children: item.describe
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                        lineNumber: 147,
-                                                        columnNumber: 23
-                                                    }, this),
+                                                    "#",
+                                                    order.order_no ?? order.order_id.slice(0, 8)
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                lineNumber: 175,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 171,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$src$2f$component$2f$shop$2f$customer$2d$badge$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                        name: order.customer_name
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 180,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                lineNumber: 170,
+                                columnNumber: 11
+                            }, this),
+                            order.status === "รอการดำเนินงาน" && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                onClick: (e)=>e.stopPropagation(),
+                                className: "mt-4 flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                        className: "text-slate-600 font-medium",
+                                        children: [
+                                            "สลิปชำระเงิน:",
+                                            " ",
+                                            isVerified === true && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "text-emerald-600 font-semibold",
+                                                children: "ถูกต้องแล้ว"
+                                            }, void 0, false, {
+                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                lineNumber: 192,
+                                                columnNumber: 19
+                                            }, this),
+                                            isVerified === false && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "text-rose-600 font-semibold",
+                                                children: "สลิปไม่ถูกต้อง"
+                                            }, void 0, false, {
+                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                lineNumber: 195,
+                                                columnNumber: 19
+                                            }, this),
+                                            isVerified === null && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "text-amber-600 font-semibold",
+                                                children: "ยังไม่ได้ตรวจสอบ"
+                                            }, void 0, false, {
+                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                lineNumber: 198,
+                                                columnNumber: 19
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 189,
+                                        columnNumber: 15
+                                    }, this),
+                                    order.payment?.slip_url ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                        type: "button",
+                                        onClick: ()=>setShowSlipModal(true),
+                                        className: "inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-semibold hover:underline",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$eye$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Eye$3e$__["Eye"], {
+                                                size: 14
+                                            }, void 0, false, {
+                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                lineNumber: 208,
+                                                columnNumber: 19
+                                            }, this),
+                                            " ตรวจสอบสลิป"
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 203,
+                                        columnNumber: 17
+                                    }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                        className: "text-slate-400 font-medium",
+                                        children: "ไม่มีสลิป"
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 211,
+                                        columnNumber: 17
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                lineNumber: 185,
+                                columnNumber: 13
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "mt-5",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "flex items-center justify-between mb-2",
+                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                            className: "text-[10px] font-bold text-slate-400 uppercase tracking-widest",
+                                            children: [
+                                                "รายการ (",
+                                                items.length,
+                                                ")"
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                            lineNumber: 219,
+                                            columnNumber: 15
+                                        }, this)
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 218,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "space-y-2 max-h-56 overflow-y-auto pr-1",
+                                        children: items.length > 0 ? items.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "flex items-center justify-between gap-3 bg-slate-50/80 rounded-2xl p-3 border border-slate-100/80",
+                                                children: [
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                        className: "flex items-center gap-1 text-[11px] text-slate-500 mt-1 flex-wrap",
+                                                        className: "min-w-0 flex-1",
                                                         children: [
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                                children: [
-                                                                    item.quantity,
-                                                                    " ชิ้น"
-                                                                ]
-                                                            }, void 0, true, {
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                                className: "font-bold text-slate-800 text-sm truncate",
+                                                                children: item.category
+                                                            }, void 0, false, {
                                                                 fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                                lineNumber: 152,
+                                                                lineNumber: 232,
                                                                 columnNumber: 23
                                                             }, this),
-                                                            item.page_count && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                                children: [
-                                                                    "· ",
-                                                                    item.page_count,
-                                                                    " หน้า"
-                                                                ]
-                                                            }, void 0, true, {
+                                                            item.describe && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                                className: "text-xs text-slate-400 truncate leading-relaxed",
+                                                                children: item.describe
+                                                            }, void 0, false, {
                                                                 fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                                lineNumber: 153,
-                                                                columnNumber: 43
+                                                                lineNumber: 236,
+                                                                columnNumber: 25
                                                             }, this),
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                                className: "flex items-center gap-1 text-[11px] text-slate-500 mt-1 flex-wrap",
                                                                 children: [
-                                                                    "· ฿",
-                                                                    item.unit_price.toLocaleString(),
-                                                                    "/ชิ้น"
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        children: [
+                                                                            item.quantity,
+                                                                            " ชิ้น"
+                                                                        ]
+                                                                    }, void 0, true, {
+                                                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                                        lineNumber: 241,
+                                                                        columnNumber: 25
+                                                                    }, this),
+                                                                    item.page_count && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        children: [
+                                                                            "· ",
+                                                                            item.page_count,
+                                                                            " หน้า"
+                                                                        ]
+                                                                    }, void 0, true, {
+                                                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                                        lineNumber: 242,
+                                                                        columnNumber: 45
+                                                                    }, this),
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                        children: [
+                                                                            "· ฿",
+                                                                            item.unit_price.toLocaleString(),
+                                                                            "/ชิ้น"
+                                                                        ]
+                                                                    }, void 0, true, {
+                                                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                                        lineNumber: 243,
+                                                                        columnNumber: 25
+                                                                    }, this)
                                                                 ]
                                                             }, void 0, true, {
                                                                 fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                                lineNumber: 154,
+                                                                lineNumber: 240,
                                                                 columnNumber: 23
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                        lineNumber: 151,
-                                                        columnNumber: 21
-                                                    }, this)
-                                                ]
-                                            }, void 0, true, {
-                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                lineNumber: 142,
-                                                columnNumber: 19
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                                className: "flex flex-col items-end gap-1 shrink-0",
-                                                children: [
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                        className: "text-sm font-bold text-slate-900",
-                                                        children: [
-                                                            "฿",
-                                                            item.subtotal.toLocaleString()
-                                                        ]
-                                                    }, void 0, true, {
-                                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                        lineNumber: 159,
+                                                        lineNumber: 231,
                                                         columnNumber: 21
                                                     }, this),
-                                                    item.file_url && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
-                                                        href: item.file_url,
-                                                        target: "_blank",
-                                                        rel: "noreferrer",
-                                                        onClick: (e)=>e.stopPropagation(),
-                                                        className: "flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline",
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                        className: "flex flex-col items-end gap-1 shrink-0",
                                                         children: [
-                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$file$2d$text$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__FileText$3e$__["FileText"], {
-                                                                size: 12
-                                                            }, void 0, false, {
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                className: "text-sm font-bold text-slate-900",
+                                                                children: [
+                                                                    "฿",
+                                                                    item.subtotal.toLocaleString()
+                                                                ]
+                                                            }, void 0, true, {
                                                                 fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                                lineNumber: 170,
-                                                                columnNumber: 25
+                                                                lineNumber: 248,
+                                                                columnNumber: 23
                                                             }, this),
-                                                            "ไฟล์"
+                                                            item.file_url && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                                type: "button",
+                                                                disabled: isDisabledFile,
+                                                                onClick: (e)=>handleDownloadFile(e, item.file_url, `order-${order.order_no ?? "file"}-${item.category}`),
+                                                                className: `flex items-center gap-1 text-[11px] font-semibold transition-all ${isDisabledFile ? "text-slate-400 opacity-50 cursor-not-allowed" : "text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"}`,
+                                                                title: isDisabledFile ? "ไม่สามารถดาวน์โหลดไฟล์ในสถานะนี้ได้" : "ดาวน์โหลดไฟล์",
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$download$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Download$3e$__["Download"], {
+                                                                        size: 12
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                                        lineNumber: 273,
+                                                                        columnNumber: 27
+                                                                    }, this),
+                                                                    "ดาวน์โหลด"
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                                lineNumber: 252,
+                                                                columnNumber: 25
+                                                            }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                        lineNumber: 163,
-                                                        columnNumber: 23
+                                                        lineNumber: 247,
+                                                        columnNumber: 21
                                                     }, this)
                                                 ]
-                                            }, void 0, true, {
+                                            }, item.id, true, {
                                                 fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                                lineNumber: 158,
+                                                lineNumber: 227,
                                                 columnNumber: 19
-                                            }, this)
-                                        ]
-                                    }, item.id, true, {
-                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                        lineNumber: 138,
-                                        columnNumber: 17
-                                    }, this)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                    className: "text-xs text-slate-400 py-3 text-center",
-                                    children: "ไม่มีรายการสินค้า"
-                                }, void 0, false, {
-                                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                    lineNumber: 178,
-                                    columnNumber: 15
-                                }, this)
-                            }, void 0, false, {
-                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 135,
-                                columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                        lineNumber: 128,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                        type: "button",
-                        onClick: (e)=>{
-                            e.stopPropagation();
-                            onChatClick?.(order.order_id);
-                        },
-                        className: "mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$message$2d$circle$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__MessageCircle$3e$__["MessageCircle"], {
-                                size: 14
-                            }, void 0, false, {
-                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 194,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                children: "แชทกับลูกค้า"
-                            }, void 0, false, {
-                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 195,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$external$2d$link$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ExternalLink$3e$__["ExternalLink"], {
-                                size: 12,
-                                className: "opacity-60"
-                            }, void 0, false, {
-                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 196,
-                                columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                        lineNumber: 186,
-                        columnNumber: 9
-                    }, this)
-                ]
-            }, void 0, true, {
-                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                lineNumber: 96,
-                columnNumber: 7
-            }, this),
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "mt-6 pt-4 border-t border-slate-100",
-                children: [
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "flex items-baseline justify-between mb-4",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                className: "text-xs font-semibold text-slate-400 uppercase tracking-wider",
-                                children: "ยอดรวม"
-                            }, void 0, false, {
-                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 203,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "text-right",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-xs font-bold text-slate-900 mr-1",
-                                        children: "฿"
+                                            }, this)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                            className: "text-xs text-slate-400 py-3 text-center",
+                                            children: "ไม่มีรายการสินค้า"
+                                        }, void 0, false, {
+                                            fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                            lineNumber: 281,
+                                            columnNumber: 17
+                                        }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                        lineNumber: 207,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-3xl font-black tracking-tight text-slate-900",
-                                        children: order.amount.toLocaleString()
-                                    }, void 0, false, {
-                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                        lineNumber: 208,
+                                        lineNumber: 224,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                                lineNumber: 206,
+                                lineNumber: 217,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                type: "button",
+                                onClick: (e)=>{
+                                    e.stopPropagation();
+                                    onChatClick?.(order.order_id);
+                                },
+                                className: "mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$message$2d$circle$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__MessageCircle$3e$__["MessageCircle"], {
+                                        size: 14
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 297,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                        children: "แชทกับลูกค้า"
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 298,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$external$2d$link$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ExternalLink$3e$__["ExternalLink"], {
+                                        size: 12,
+                                        className: "opacity-60"
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 299,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                lineNumber: 289,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                        lineNumber: 202,
+                        lineNumber: 154,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        onClick: (e)=>e.stopPropagation(),
-                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$src$2f$component$2f$shop$2f$order$2d$action$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
-                            status: order.status,
-                            onUpdateStatus: (newStatus)=>onUpdateStatus?.(order.order_id, newStatus)
-                        }, void 0, false, {
-                            fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                            lineNumber: 215,
-                            columnNumber: 11
-                        }, this)
-                    }, void 0, false, {
+                        className: "mt-6 pt-4 border-t border-slate-100",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "flex items-baseline justify-between mb-4",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                        className: "text-xs font-semibold text-slate-400 uppercase tracking-wider",
+                                        children: "ยอดรวม"
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 306,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "text-right",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "text-xs font-bold text-slate-900 mr-1",
+                                                children: "฿"
+                                            }, void 0, false, {
+                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                lineNumber: 310,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                className: "text-3xl font-black tracking-tight text-slate-900",
+                                                children: order.amount.toLocaleString()
+                                            }, void 0, false, {
+                                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                lineNumber: 311,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 309,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                lineNumber: 305,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                onClick: (e)=>e.stopPropagation(),
+                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$src$2f$component$2f$shop$2f$order$2d$action$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
+                                    status: order.status,
+                                    isVerified: isVerified,
+                                    onUpdateStatus: (newStatus)=>onUpdateStatus?.(order.order_id, newStatus)
+                                }, void 0, false, {
+                                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                    lineNumber: 318,
+                                    columnNumber: 13
+                                }, this)
+                            }, void 0, false, {
+                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                lineNumber: 317,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
                         fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                        lineNumber: 214,
+                        lineNumber: 304,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-                lineNumber: 201,
+                lineNumber: 150,
                 columnNumber: 7
+            }, this),
+            showSlipModal && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200",
+                onClick: ()=>setShowSlipModal(false),
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                    className: "bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl relative flex flex-col",
+                    onClick: (e)=>e.stopPropagation(),
+                    children: [
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "flex items-center justify-between px-6 py-4 border-b border-slate-100",
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
+                                    className: "font-bold text-slate-900 text-base",
+                                    children: [
+                                        "หลักฐานการชำระเงิน (Order #",
+                                        order.order_no ?? order.order_id.slice(0, 8),
+                                        ")"
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                    lineNumber: 341,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                    type: "button",
+                                    onClick: ()=>setShowSlipModal(false),
+                                    className: "w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors",
+                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$x$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__X$3e$__["X"], {
+                                        size: 18
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                        lineNumber: 349,
+                                        columnNumber: 17
+                                    }, this)
+                                }, void 0, false, {
+                                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                    lineNumber: 344,
+                                    columnNumber: 15
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                            lineNumber: 340,
+                            columnNumber: 13
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "p-4 flex items-center justify-center bg-slate-50 max-h-[60vh] overflow-auto",
+                            children: order.payment?.slip_url ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("img", {
+                                src: order.payment.slip_url,
+                                alt: "สลิปชำระเงิน",
+                                className: "max-h-[55vh] w-auto object-contain rounded-2xl shadow-md"
+                            }, void 0, false, {
+                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                lineNumber: 356,
+                                columnNumber: 17
+                            }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                className: "text-slate-400 text-sm py-10 font-medium",
+                                children: "ไม่พบรูปภาพสลิป"
+                            }, void 0, false, {
+                                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                lineNumber: 362,
+                                columnNumber: 17
+                            }, this)
+                        }, void 0, false, {
+                            fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                            lineNumber: 354,
+                            columnNumber: 13
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "p-4 border-t border-slate-100 flex items-center justify-between gap-3 bg-white",
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                    type: "button",
+                                    onClick: ()=>setShowSlipModal(false),
+                                    className: "px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors",
+                                    children: "ปิด"
+                                }, void 0, false, {
+                                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                    lineNumber: 370,
+                                    columnNumber: 15
+                                }, this),
+                                isVerified === null && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    className: "flex gap-2",
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                            type: "button",
+                                            onClick: ()=>handleVerify(false),
+                                            disabled: verifyingSlip,
+                                            className: "px-3 py-2.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors disabled:opacity-50",
+                                            children: "สลิปไม่ถูกต้อง"
+                                        }, void 0, false, {
+                                            fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                            lineNumber: 380,
+                                            columnNumber: 19
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                            type: "button",
+                                            onClick: ()=>handleVerify(true),
+                                            disabled: verifyingSlip,
+                                            className: "inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors disabled:opacity-50",
+                                            children: [
+                                                verifyingSlip ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$loader$2d$circle$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Loader2$3e$__["Loader2"], {
+                                                    size: 16,
+                                                    className: "animate-spin"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                    lineNumber: 395,
+                                                    columnNumber: 23
+                                                }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$check$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Check$3e$__["Check"], {
+                                                    size: 16
+                                                }, void 0, false, {
+                                                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                                    lineNumber: 397,
+                                                    columnNumber: 23
+                                                }, this),
+                                                "ยืนยันสลิปถูกต้อง"
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                            lineNumber: 388,
+                                            columnNumber: 19
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                                    lineNumber: 379,
+                                    columnNumber: 17
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                            lineNumber: 369,
+                            columnNumber: 13
+                        }, this)
+                    ]
+                }, void 0, true, {
+                    fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                    lineNumber: 335,
+                    columnNumber: 11
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
+                lineNumber: 331,
+                columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/printhub/src/component/shop/order-detail-card.tsx",
-        lineNumber: 92,
+        lineNumber: 149,
         columnNumber: 5
     }, this);
 }
+_s(OrderDetailCard, "vgmhOrXyPAaaBAEhsyPSclabq50=");
 _c = OrderDetailCard;
 var _c;
 __turbopack_context__.k.register(_c, "OrderDetailCard");
