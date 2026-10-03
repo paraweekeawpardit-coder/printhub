@@ -302,3 +302,136 @@ export const updateOrderStatus = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
+
+// ==========================================
+// Get Single Order By ID (for shop detail page)
+// ==========================================
+
+export const getOrderById = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({
+        error: "orderId is required",
+      });
+    }
+
+    // 1. ดึงข้อมูลออเดอร์รายชิ้นจาก print_order
+    const { data: order, error } = await supabase
+      .from("print_order")
+      .select(
+        `
+        id,
+        order_no,
+        order_date,
+        receive_date,
+        appointment_time,
+        total_price,
+        total_amount,
+        payment_id,
+
+        customer:customer_id (
+          first_name,
+          last_name,
+          contact
+        ),
+
+        current_status:current_status_id (
+          id,
+          state
+        ),
+
+        payment:payment_id (
+          id,
+          slip_url,
+          is_verified,
+          amount,
+          payment_date
+        ),
+
+        print_order_item (
+          id,
+          category,
+          describe,
+          file_url,
+          quantity,
+          unit_price,
+          subtotal,
+          page_count
+        )
+        `
+      )
+      .eq("id", orderId)
+      .single();
+
+    if (error || !order) {
+      console.error("Get order detail error:", error);
+      return res.status(404).json({
+        error: "ไม่พบข้อมูลรายการสั่งซื้อ",
+      });
+    }
+
+    const customer = Array.isArray(order.customer)
+      ? order.customer[0]
+      : order.customer;
+
+    const currentStatus = Array.isArray(order.current_status)
+      ? order.current_status[0]
+      : order.current_status;
+
+    const payment = Array.isArray(order.payment)
+      ? order.payment[0]
+      : order.payment;
+
+    // Sub-orders (items)
+    const items: OrderItemDetail[] = (order.print_order_item || []).map(
+      (item: any) => ({
+        id: item.id,
+        category: item.category || "รายการพิมพ์",
+        describe: item.describe || "",
+        file_url: item.file_url || null,
+        quantity: item.quantity,
+        unit_price: Number(item.unit_price || 0),
+        subtotal: Number(item.subtotal || 0),
+        page_count: item.page_count ?? null,
+      })
+    );
+
+    // 2. จัดโครงสร้างข้อมูลส่งกลับให้ตรงกับที่ Frontend page.tsx คาดหวัง
+    const resultOrder = {
+      order_id: order.id,
+      order_no: order.order_no,
+      date: order.order_date,
+      appointment_time: order.appointment_time || order.receive_date,
+      customer_name: `${customer?.first_name ?? ""} ${
+        customer?.last_name ?? ""
+      }`.trim(),
+      customer_contact: customer?.contact || "",
+      status: currentStatus?.state || "รอการดำเนินการ",
+      amount: Number(order.total_amount || order.total_price || 0),
+      items,
+      payment: payment
+        ? {
+            id: payment.id,
+            slip_url: payment.slip_url || null,
+            is_verified: payment.is_verified ?? null,
+            amount: Number(payment.amount || 0),
+            payment_date: payment.payment_date || null,
+          }
+        : null,
+    };
+
+    return res.status(200).json({
+      order: resultOrder,
+    });
+  } catch (err) {
+    console.error("Get order by ID server error:", err);
+    return res.status(500).json({
+      error: "Server Error",
+    });
+  }
+};
