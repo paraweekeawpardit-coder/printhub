@@ -13,7 +13,9 @@ import OrderDetailCard, {
   OrderDetail,
 } from "@/component/shop/order-detail-card";
 
-const API_BASE = "http://localhost:5000";
+// 🟢 ปรับ API_BASE ให้มี /api นำหน้าเสมอ และรองรับ Environment Variable
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE = `${rawApiUrl.replace(/\/+$/, "")}/api`;
 
 export default function OrderPage() {
   const router = useRouter();
@@ -48,7 +50,8 @@ export default function OrderPage() {
   const checkShopStatus = useCallback(async () => {
     if (!shopId) return;
     try {
-      const response = await axios.get(`${API_BASE}/api/shop/profile/${shopId}`);
+      // 🟢 ชี้ไปที่ /api/shop/profile/
+      const response = await axios.get(`${API_BASE}/shop/profile/${shopId}`);
       const shopData = response.data?.data ?? response.data;
       if (shopData?.status === "suspended") {
         setIsSuspended(true);
@@ -70,6 +73,7 @@ export default function OrderPage() {
 
     try {
       setLoading(true);
+      // 🟢 ชี้ไปที่ /api/shop/getOrderByStatus
       const response = await axios.get(`${API_BASE}/shop/getOrderByStatus`, {
         headers: { shop_id: shopId },
         params: { status: activeFilter },
@@ -97,6 +101,7 @@ export default function OrderPage() {
       }
 
       try {
+        // 🟢 ชี้ไปที่ /api/shop/orders/.../status
         await axios.patch(
           `${API_BASE}/shop/orders/${orderId}/status`,
           { status_name: newStatus },

@@ -4,13 +4,15 @@ import { useState, useEffect, useCallback } from "react";
 import ReportStats from "../../../component/admin/ReportStats";
 import ReportTable, { ReportItem } from "../../../component/admin/ReportTable";
 import ReportImageModal from "../../../component/admin/ReportImageModal";
+import ReportDetailModal, { ReportDetailItem } from "../../../component/admin/ReportDetailModal";
 
 export default function ReportsAdminPage() {
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [filter, setFilter] = useState<"all" | "pending" | "verified">("all");
   const [search, setSearch] = useState("");
-  const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
+  const [selectedImageReport, setSelectedImageReport] = useState<ReportItem | null>(null);
+  const [selectedDetailReport, setSelectedDetailReport] = useState<ReportDetailItem | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
 
@@ -39,17 +41,6 @@ export default function ReportsAdminPage() {
           image_url: "https://via.placeholder.com/400x300",
           is_verified: false,
           created_at: new Date().toISOString(),
-        },
-        {
-          id: "rep-002",
-          customer_id: "cust-02",
-          shop_id: "shop-02",
-          admin_id: "admin-01",
-          order_id: "ORD-2026-8812",
-          description: "กระดาษยับและส่งล่าช้ากว่ากำหนด 2 วัน",
-          image_url: null,
-          is_verified: true,
-          created_at: new Date(Date.now() - 86400000).toISOString(),
         },
       ]);
     } finally {
@@ -80,6 +71,34 @@ export default function ReportsAdminPage() {
       if (!res.ok) throw new Error("Update failed");
     } catch (error) {
       console.warn("Error updating verification status via API (UI updated locally):", error);
+    }
+  };
+
+  const handleResolveReport = async (
+    reportId: string,
+    decision: "approved" | "rejected",
+    adminNote: string,
+    refundAmount: number
+  ) => {
+    try {
+      const res = await fetch(`${API_URL}/reports/resolve`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          report_id: reportId,
+          decision,
+          admin_note: adminNote,
+          refund_amount: refundAmount,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Resolve report failed");
+
+      alert("บันทึกการตัดสินเรียบร้อยแล้ว");
+      fetchReports();
+    } catch (err) {
+      console.error("Error resolving report:", err);
+      alert("เกิดข้อผิดพลาดในการบันทึกการตัดสิน");
     }
   };
 
@@ -169,14 +188,21 @@ export default function ReportsAdminPage() {
         <ReportTable
           reports={filteredReports}
           loading={loading}
-          onSelectReport={(report) => setSelectedReport(report)}
+          onSelectReport={(report) => setSelectedDetailReport(report as unknown as ReportDetailItem)}
           onToggleVerify={toggleVerify}
         />
 
         {/* Image Preview Modal Component */}
         <ReportImageModal
-          report={selectedReport}
-          onClose={() => setSelectedReport(null)}
+          report={selectedImageReport}
+          onClose={() => setSelectedImageReport(null)}
+        />
+
+        {/* Report Detail & Decision Modal */}
+        <ReportDetailModal
+          report={selectedDetailReport}
+          onClose={() => setSelectedDetailReport(null)}
+          onResolve={handleResolveReport}
         />
 
       </div>

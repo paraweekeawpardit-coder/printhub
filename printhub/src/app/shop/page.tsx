@@ -12,6 +12,10 @@ import FinancialTable, { Transaction } from "@/component/shop/financial-table";
 import OrderBreakdownModal from "@/component/shop/order-breakdown-modal";
 import ReviewComplaintModal from "@/component/shop/review-complaint-modal";
 
+// 🟢 กำหนด API_URL หลักให้รองรับทั้ง Environment Variable และ Fallback
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_URL = `${rawApiUrl.replace(/\/+$/, "")}/api`;
+
 type Order = {
   id: string;
   order_no?: string; // 👈 เพิ่ม order_no ใน Type
@@ -121,6 +125,7 @@ export default function ShopPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
 
+        // 🟢 เปลี่ยนทุก Request ให้ยิงผ่าน ${API_URL}/shop/...
         const [
           numRes,
           scoreRes,
@@ -132,37 +137,37 @@ export default function ShopPage() {
           profileRes,
         ] = await Promise.all([
           axios
-            .get("http://localhost:5000/shop/numWork", { headers })
+            .get(`${API_URL}/shop/numWork`, { headers })
             .catch(() => ({ data: { numWork: 0 } })),
           axios
-            .get("http://localhost:5000/shop/getScore", { headers })
+            .get(`${API_URL}/shop/getScore`, { headers })
             .catch(() => ({ data: { score: 0, totalReviews: 0 } })),
           axios
-            .get("http://localhost:5000/shop/getIncome", { headers })
+            .get(`${API_URL}/shop/getIncome`, { headers })
             .catch(() => ({ data: { income: 0, orderCount: 0 } })),
           axios
-            .get("http://localhost:5000/shop/getTopOrder", { headers })
+            .get(`${API_URL}/shop/getTopOrder`, { headers })
             .catch(() => ({ data: [] })),
           axios
-            .get("http://localhost:5000/shop/getFinancialOverview", {
+            .get(`${API_URL}/shop/getFinancialOverview`, {
               headers,
             })
             .catch(() => ({ data: null })),
           axios
-            .get("http://localhost:5000/shop/getOrderStatusBreakdown", {
+            .get(`${API_URL}/shop/getOrderStatusBreakdown`, {
               headers,
             })
             .catch(() => ({ data: null })),
           axios
-            .get("http://localhost:5000/shop/getComplaintsAndReviews", {
+            .get(`${API_URL}/shop/getComplaintsAndReviews`, {
               headers,
             })
             .catch(() => ({ data: null })),
           axios
-            .get(`http://localhost:5000/api/shop/profile/${shopId}`, { headers })
+            .get(`${API_URL}/shop/profile/${shopId}`, { headers })
             .catch(() =>
               axios
-                .get(`http://localhost:5000/shop/getProfile/${shopId}`, { headers })
+                .get(`${API_URL}/shop/getProfile/${shopId}`, { headers })
                 .catch(() => ({ data: null }))
             ),
         ]);

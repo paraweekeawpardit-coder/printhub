@@ -293,12 +293,18 @@ export const getTopOrder = async (
       return dateB - dateA;
     });
 
-    return res.status(200).json(sortedOrders.slice(0, 5));
+    const formattedOrders = sortedOrders.map((order: any) => ({
+      ...order,
+      latest_status: order.current_status?.state || "ไม่ทราบสถานะ",
+    }));
+
+    return res.status(200).json(formattedOrders.slice(0, 5));
   } catch (err) {
     console.error("Error in getTopOrder:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
+
 // ==========================================
 // Get Financial Overview & Transactions
 // ==========================================
@@ -496,11 +502,10 @@ export const getOrderStatusBreakdown = async (
         `
         *,
         customer (first_name, last_name, contact),
-        current_status:status!current_status_id!inner (id, state)
+        current_status:status!current_status_id (id, state)
         `
       )
       .eq("shop_id", shop_id)
-      .neq("current_status.state", "รอการชำระเงิน") // 👈 กรองสถานะ "รอชำระเงิน" ออกที่นี่
       .order("order_date", { ascending: false });
 
     if (error) return res.status(400).json({ error: error.message });
@@ -519,6 +524,7 @@ export const getOrderStatusBreakdown = async (
     const parseSafeDate = (dateStr: any) => {
       if (!dateStr) return null;
       
+      // กรณีเป็น String เช่น "2026-09-28" หรือ "2569-09-28"
       const cleanStr = String(dateStr).split("T")[0];
       const parts = cleanStr.split(/[-/]/);
       
@@ -527,6 +533,7 @@ export const getOrderStatusBreakdown = async (
         let month = parseInt(parts[1], 10) - 1;
         let day = parseInt(parts[2], 10);
 
+        // ถ้าเก็บปีเป็น พ.ศ. (เช่น > 2400) ให้แปลงเป็น ค.ศ.
         if (year > 2400) year -= 543;
 
         return new Date(year, month, day);
@@ -544,7 +551,7 @@ export const getOrderStatusBreakdown = async (
     });
 
     const now = new Date();
-    const currentYear = now.getFullYear();
+    const currentYear = now.getFullYear(); // เช่น 2026
 
     // 1. รายวัน (จันทร์ - อาทิตย์ ของสัปดาห์นี้)
     const daysName = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
@@ -612,7 +619,7 @@ export const getOrderStatusBreakdown = async (
         return od.getFullYear() === yr;
       }).length;
       
-      yearlyData.push({ label: `${yr + 543}`, count });
+      yearlyData.push({ label: `${yr + 543}`, count }); // แสดงเป็น พ.ศ. บนแท่งกราฟ
     }
 
     return res.status(200).json({
@@ -634,6 +641,8 @@ export const getOrderStatusBreakdown = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
+ 
+
 export const getComplaintsAndReviews = async (
   req: Request,
   res: Response

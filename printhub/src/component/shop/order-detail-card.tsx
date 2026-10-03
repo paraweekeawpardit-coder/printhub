@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { MessageCircle, ExternalLink, Download, Eye, X, Check, Loader2 } from "lucide-react";
+import {
+  MessageCircle,
+  ExternalLink,
+  Download,
+  Eye,
+  X,
+  Check,
+  Loader2,
+} from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
 import { useRouter, useParams } from "next/navigation";
@@ -46,20 +54,20 @@ const STATUS_CONFIG: Record<
   string,
   { dot: string; text: string; bg: string }
 > = {
-  รอการดำเนินงาน: {
-    dot: "bg-yellow-500 animate-pulse",
-    text: "text-amber-800",
-    bg: "bg-amber-100",
+  รอการดำเนินการ: {
+    dot: "bg-amber-500 animate-pulse",
+    text: "text-amber-700",
+    bg: "bg-amber-500/10",
   },
   กำลังพิมพ์: {
-    dot: "bg-blue-400 animate-pulse",
-    text: "text-blue-500 font-semibold",
-    bg: "bg-blue-50",
-  },
-  พิมพ์เสร็จสิ้น: {
-    dot: "bg-blue-500",
+    dot: "bg-blue-600 animate-pulse",
     text: "text-blue-700",
     bg: "bg-blue-500/10",
+  },
+  พิมพ์เสร็จสิ้น: {
+    dot: "bg-purple-500",
+    text: "text-purple-700",
+    bg: "bg-purple-500/10",
   },
   รายการเสร็จสิ้น: {
     dot: "bg-emerald-500",
@@ -100,17 +108,17 @@ export default function OrderDetailCard({
 }: Props) {
   const router = useRouter();
   const params = useParams();
-  const shopId = params?.shop_id; // ดึง shop_id จาก URL ปัจจุบัน
-
-  const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
-  const items = order.items ?? [];
+  const shopId = params?.shop_id;
 
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
   const [verifyingSlip, setVerifyingSlip] = useState<boolean>(false);
 
+  const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
+  const items = order.items ?? [];
   const isVerified = order.payment?.is_verified ?? null;
 
   const isDisabledFile =
+    disabled ||
     order.status === "รอการดำเนินงาน" ||
     order.status === "ยกเลิกการพิมพ์";
 
@@ -135,7 +143,7 @@ export default function OrderDetailCard({
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Download failed, fallbacking to direct URL:", error);
-      window.open(fileUrl, "_self");
+      window.open(fileUrl, "_blank");
     }
   };
 
@@ -152,11 +160,31 @@ export default function OrderDetailCard({
     }
   };
 
+  const handleChat = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (disabled) return;
+
+    if (onChatClick) {
+      onChatClick(order.order_id);
+    } else {
+      const targetPath = shopId
+        ? `/shop/order/${shopId}/chat?orderId=${order.order_id}`
+        : `/shop/order/chat?orderId=${order.order_id}`;
+      router.push(targetPath);
+    }
+  };
+
   return (
     <>
       <div
-        onClick={onClick}
-        className="group relative flex w-full cursor-pointer flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200"
+        onClick={() => {
+          if (!disabled) onClick?.();
+        }}
+        className={`group relative flex w-full flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 ${
+          disabled
+            ? "opacity-60 cursor-not-allowed"
+            : "cursor-pointer hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200"
+        }`}
       >
         <div>
           {/* Header: Status & Date */}
@@ -164,7 +192,9 @@ export default function OrderDetailCard({
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${statusConfig.bg} ${statusConfig.text}`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`} />
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`}
+              />
               {order.status || "ไม่ทราบสถานะ"}
             </span>
 
@@ -196,13 +226,19 @@ export default function OrderDetailCard({
               <span className="text-slate-600 font-medium">
                 สลิปชำระเงิน:{" "}
                 {isVerified === true && (
-                  <span className="text-emerald-600 font-semibold">ถูกต้องแล้ว</span>
+                  <span className="text-emerald-600 font-semibold">
+                    ถูกต้องแล้ว
+                  </span>
                 )}
                 {isVerified === false && (
-                  <span className="text-rose-600 font-semibold">สลิปไม่ถูกต้อง</span>
+                  <span className="text-rose-600 font-semibold">
+                    สลิปไม่ถูกต้อง
+                  </span>
                 )}
                 {isVerified === null && (
-                  <span className="text-amber-600 font-semibold">ยังไม่ได้ตรวจสอบ</span>
+                  <span className="text-amber-600 font-semibold">
+                    ยังไม่ได้ตรวจสอบ
+                  </span>
                 )}
               </span>
 
@@ -246,8 +282,12 @@ export default function OrderDetailCard({
                       )}
                       <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1 flex-wrap">
                         <span>{item.quantity} ชิ้น</span>
-                        {item.page_count && <span>· {item.page_count} หน้า</span>}
-                        <span>· ฿{item.unit_price.toLocaleString()}/ชิ้น</span>
+                        {item.page_count && (
+                          <span>· {item.page_count} หน้า</span>
+                        )}
+                        <span>
+                          · ฿{item.unit_price.toLocaleString()}/ชิ้น
+                        </span>
                       </div>
                     </div>
 
@@ -263,7 +303,9 @@ export default function OrderDetailCard({
                             handleDownloadFile(
                               e,
                               item.file_url!,
-                              `order-${order.order_no ?? "file"}-${item.category}`
+                              `order-${order.order_no ?? "file"}-${
+                                item.category
+                              }`
                             )
                           }
                           className={`flex items-center gap-1 text-[11px] font-semibold transition-all ${
@@ -295,20 +337,9 @@ export default function OrderDetailCard({
           {/* Chat Action */}
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              
-              // Path ที่ถูกต้องตาม Folder Structure
-              const targetPath = shopId
-                ? `/shop/order/${shopId}/chat?orderId=${order.order_id}`
-                : `/shop/order/chat?orderId=${order.order_id}`;
-                
-              router.push(targetPath);
-              
-              // เรียก prop เดิมไว้ด้วยกรณีมี logic อื่นผูกอยู่
-              onChatClick?.(order.order_id);
-            }}
-            className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
+            onClick={handleChat}
+            disabled={disabled}
+            className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <MessageCircle size={14} />
             <span>แชทกับลูกค้า</span>
@@ -332,7 +363,7 @@ export default function OrderDetailCard({
 
           <div onClick={(e) => e.stopPropagation()}>
             <OrderActions
-              status={order.status}
+              status={order.status as OrderStatus}
               isVerified={isVerified}
               onUpdateStatus={(newStatus) =>
                 onUpdateStatus?.(order.order_id, newStatus)

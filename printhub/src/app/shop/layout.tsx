@@ -68,9 +68,42 @@ export default function ShopLayout({
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {isSuspended && <SuspendedBanner reason={suspendReason} />}
-      <div className="flex-1">{children}</div>
+    <div className="relative min-h-screen flex flex-col">
+      {/* CSS บล็อกทุกอย่างในหน้า เว้นแต่ปุ่ม 'ออกจากระบบ' และ Banner */}
+      {isSuspended && (
+        <style jsx global>{`
+          /* บล็อกฟิลด์กรอกข้อมูล ปุ่มกดทั่วไป เลือกไฟล์ สวิตช์เปิดปิด */
+          .suspended-mode input,
+          .suspended-mode select,
+          .suspended-mode textarea,
+          .suspended-mode button:not(.logout-btn):not(.banner-btn) {
+            pointer-events: none !important;
+            opacity: 0.6 !important;
+            cursor: not-allowed !important;
+          }
+
+          /* ยินยอมให้ปุ่มออกจากระบบ และปุ่มบนแบนเนอร์ทำงานได้ตามปกติ */
+          .logout-btn,
+          .banner-btn,
+          .banner-btn * {
+            pointer-events: auto !important;
+            opacity: 1 !important;
+            cursor: pointer !important;
+          }
+        `}</style>
+      )}
+
+      {/* 1. Sticky Banner ด้านบนสุด */}
+      {isSuspended && (
+        <div className="sticky top-0 z-50 w-full banner-btn">
+          <SuspendedBanner reason={suspendReason} />
+        </div>
+      )}
+
+      {/* 2. เนื้อหาทั้งหมด (ใส่ class suspended-mode ถ้าถูกระงับ) */}
+      <div className={`flex-1 ${isSuspended ? "suspended-mode" : ""}`}>
+        {children}
+      </div>
     </div>
   );
 }

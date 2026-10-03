@@ -1,10 +1,12 @@
-"use client";
+import React from "react";
+import Link from "next/link";
 
 interface StatCardProps {
   title: string;
-  value: number | string | undefined;
+  value: string | number;
   unit: string;
   subtitle: string;
+  href?: string;
   isAlert?: boolean;
 }
 
@@ -13,68 +15,41 @@ export default function StatCard({
   value,
   unit,
   subtitle,
+  href,
   isAlert = false,
 }: StatCardProps) {
-  return (
-    <div className={`stat-card ${isAlert ? "stat-alert" : ""}`}>
-      <div className="stat-header">
-        <span>{title}</span>
+  const CardContent = (
+    <div
+      className={`rounded-xl border p-5 transition-all duration-200 ${
+        isAlert
+          ? "border-amber-300 bg-amber-50/50 hover:bg-amber-50"
+          : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+      } ${href ? "cursor-pointer" : ""}`}
+    >
+      <p className="text-sm font-medium text-slate-500">{title}</p>
+      <div className="mt-2 flex items-baseline gap-2">
+        <span
+          className={`text-2xl font-bold ${
+            isAlert ? "text-amber-600" : "text-slate-900"
+          }`}
+        >
+          {value}
+        </span>
+        <span className="text-xs text-slate-500">{unit}</span>
       </div>
-      <div className="stat-value-container">
-        <span className="stat-value">{value ?? 0}</span>
-        <span className="stat-unit">{unit}</span>
-      </div>
-      <div className="stat-footer">{subtitle}</div>
-
-      <style jsx>{`
-        .stat-card {
-          background-color: #f0f8ff;
-          border-radius: 16px;
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          border: 1px solid #e2e8f0;
-        }
-
-        .stat-alert {
-          background-color: #fff5f5;
-        }
-
-        .stat-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 0.95rem;
-          font-weight: 600;
-          color: #334155;
-        }
-
-        .stat-value-container {
-          display: flex;
-          align-items: baseline;
-          gap: 8px;
-        }
-
-        .stat-value {
-          font-size: 2.2rem;
-          font-weight: 800;
-          color: #0f172a;
-          line-height: 1;
-        }
-
-        .stat-unit {
-          font-size: 1.1rem;
-          font-weight: 700;
-          color: #0f172a;
-        }
-
-        .stat-footer {
-          font-size: 0.85rem;
-          color: #94a3b8;
-          font-weight: 400;
-        }
-      `}</style>
+      <p
+        className={`mt-1 text-xs ${
+          isAlert ? "text-amber-600 font-semibold" : "text-slate-400"
+        }`}
+      >
+        {subtitle}
+      </p>
     </div>
   );
+
+  if (href) {
+    return <Link href={href}>{CardContent}</Link>;
+  }
+
+  return CardContent;
 }

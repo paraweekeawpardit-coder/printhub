@@ -8,10 +8,11 @@ import {
   AlertCircle,
   CheckCircle2,
   RotateCw,
+  MessageSquareWarning,
+  ShieldCheck,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
-// 📌 Import Components จากโฟลเดอร์ src/component/admin/
 import ShopCard, { Shop } from "../../../component/admin/ShopCard";
 import ShopDetailModal from "../../../component/admin/ShopDetailModal";
 import BankRequestCard, {
@@ -24,6 +25,20 @@ import ConfirmModal, {
 import PendingShopsTab from "../../../component/admin/PendingShopsTab";
 import ShopFilterControls from "../../../component/admin/ShopFilterControls";
 import PaginationBar from "../../../component/admin/PaginationBar";
+
+export interface ShopAppeal {
+  id: string | number;
+  shop_id: string | number;
+  subject: string;
+  message: string;
+  status: string;
+  created_at: string;
+  shop?: {
+    shop_name?: string;
+    profile_image?: string;
+    email?: string;
+  };
+}
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
@@ -58,19 +73,27 @@ function ShopsContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
 
-  const [activeTab, setActiveTab] = useState<"pending" | "bank" | "all">(
-    tabParam === "all" ? "all" : tabParam === "bank" ? "bank" : "pending",
+  const [activeTab, setActiveTab] = useState<
+    "pending" | "bank" | "all" | "appeals"
+  >(
+    tabParam === "all"
+      ? "all"
+      : tabParam === "bank"
+      ? "bank"
+      : tabParam === "appeals"
+      ? "appeals"
+      : "pending"
   );
 
   const [pendingShops, setPendingShops] = useState<Shop[]>([]);
   const [bankRequests, setBankRequests] = useState<BankChangeRequest[]>([]);
   const [allShops, setAllShops] = useState<Shop[]>([]);
+  const [appeals, setAppeals] = useState<ShopAppeal[]>([]);
 
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // State สำหรับ Filter & Search ใน Tab ร้านค้าทั้งหมด
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     "ALL" | "APPROVED" | "SUSPENDED"
@@ -104,10 +127,11 @@ function ShopsContent() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const [pendingRes, bankRes, allRes] = await Promise.all([
+      const [pendingRes, bankRes, allRes, appealsRes] = await Promise.all([
         fetch(`${API_URL}/shops/pending`).catch(() => null),
         fetch(`${API_URL}/bank-accounts/pending`).catch(() => null),
         fetch(`${API_URL}/shops/all`).catch(() => null),
+        fetch(`${API_URL}/appeals`).catch(() => null),
       ]);
 
       if (pendingRes && pendingRes.ok) {
@@ -123,17 +147,19 @@ function ShopsContent() {
       if (bankRes && bankRes.ok) {
         const result = await bankRes.json();
         const data = result.data || result;
-        const formatted = (Array.isArray(data) ? data : []).map((req: any) => ({
-          ...req,
-          created_at:
-            req.created_at ||
-            req.createdAt ||
-            req.requested_at ||
-            req.updated_at,
-          shopLogo: getImageUrl(
-            req.shopLogo || req.logoUrl || req.shop?.profile_image,
-          ),
-        }));
+        const formatted = (Array.isArray(data) ? data : []).map(
+          (req: any) => ({
+            ...req,
+            created_at:
+              req.created_at ||
+              req.createdAt ||
+              req.requested_at ||
+              req.updated_at,
+            shopLogo: getImageUrl(
+              req.shopLogo || req.logoUrl || req.shop?.profile_image
+            ),
+          })
+        );
         setBankRequests(formatted);
       }
 
@@ -145,6 +171,12 @@ function ShopsContent() {
           profile_image: getImageUrl(s.profile_image || s.logoUrl),
         }));
         setAllShops(formatted);
+      }
+
+      if (appealsRes && appealsRes.ok) {
+        const result = await appealsRes.json();
+        const data = result.data || result;
+        setAppeals(Array.isArray(data) ? data : []);
       }
     } catch (err: any) {
       console.error("Fetch Data Error:", err);
@@ -162,7 +194,6 @@ function ShopsContent() {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, sortBy, activeTab]);
 
-  // คำนวณข้อมูลค้นหาและ Filter สำหรับร้านค้าทั้งหมด
   const filteredAndSortedShops = useMemo(() => {
     let result = [...allShops];
 
@@ -205,13 +236,13 @@ function ShopsContent() {
       if (sortBy === "name_asc") {
         return (a.shop_name || a.name || "").localeCompare(
           b.shop_name || b.name || "",
-          "th",
+          "th"
         );
       }
       if (sortBy === "name_desc") {
         return (b.shop_name || b.name || "").localeCompare(
           a.shop_name || a.name || "",
-          "th",
+          "th"
         );
       }
       return 0;
@@ -227,15 +258,17 @@ function ShopsContent() {
     return filteredAndSortedShops.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredAndSortedShops, currentPage]);
 
-  // 📌 ปรับแก้ไขฟังก์ชันอนุมัติร้านค้า เพื่อแนบ admin_id ส่งไปด้วย
   const executeVerifyShop = async (
     shop_id: string | number,
-    action: "approve" | "reject",
+    action: "approve" | "reject"
   ) => {
     try {
-      // ดึง admin_id และ token จาก Storage (ปรับเปลี่ยน key ให้ตรงกับที่เก็บในแอปของคุณ)
-      const adminId = typeof window !== "undefined" ? localStorage.getItem("admin_id") : null;
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const adminId =
+        typeof window !== "undefined"
+          ? localStorage.getItem("admin_id")
+          : null;
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -247,17 +280,17 @@ function ShopsContent() {
       const res = await fetch(`${API_URL}/shops/verify`, {
         method: "PATCH",
         headers,
-        body: JSON.stringify({ 
-          shop_id, 
-          action, 
-          admin_id: adminId, 
-          verified_by: adminId 
+        body: JSON.stringify({
+          shop_id,
+          action,
+          admin_id: adminId,
+          verified_by: adminId,
         }),
       });
       if (!res.ok) throw new Error("การอัปเดตสถานะล้มเหลว");
 
       setPendingShops((prev) =>
-        prev.filter((s) => String(s.id || (s as any)._id) !== String(shop_id)),
+        prev.filter((s) => String(s.id || (s as any)._id) !== String(shop_id))
       );
       setSelectedShop(null);
       fetchAllInitialData();
@@ -270,7 +303,7 @@ function ShopsContent() {
 
   const handleVerifyShop = (
     shop_id: string | number,
-    action: "approve" | "reject",
+    action: "approve" | "reject"
   ) => {
     const actionText = action === "approve" ? "อนุมัติ" : "ปฏิเสธ";
     setConfirmModal({
@@ -284,7 +317,7 @@ function ShopsContent() {
 
   const executeVerifyBank = async (
     requestId: string,
-    action: "approve" | "reject",
+    action: "approve" | "reject"
   ) => {
     try {
       const res = await fetch(`${API_URL}/bank-accounts/verify`, {
@@ -305,7 +338,7 @@ function ShopsContent() {
 
   const handleVerifyBank = (
     requestId: string,
-    action: "approve" | "reject",
+    action: "approve" | "reject"
   ) => {
     const actionText = action === "approve" ? "อนุมัติ" : "ปฏิเสธ";
     setConfirmModal({
@@ -320,11 +353,12 @@ function ShopsContent() {
   const executeToggleSuspendShop = async (
     shop_id: string | number,
     currentStatus: string,
-    reason?: string,
+    reason?: string
   ) => {
     try {
       const normalizedStatus = (currentStatus || "").toLowerCase();
-      const isSuspending = normalizedStatus !== "suspended" && normalizedStatus !== "banned";
+      const isSuspending =
+        normalizedStatus !== "suspended" && normalizedStatus !== "banned";
 
       const res = await fetch(`${API_URL}/shops/suspend`, {
         method: "PATCH",
@@ -336,13 +370,13 @@ function ShopsContent() {
       setAllShops((prev) =>
         prev.map((shop) =>
           String(shop.id || (shop as any)._id) === String(shop_id)
-            ? { 
-                ...shop, 
+            ? ({
+                ...shop,
                 status: isSuspending ? "suspended" : "approved",
-                suspend_reason: isSuspending ? reason : null
-              }
-            : shop,
-        ),
+                suspend_reason: isSuspending ? reason || undefined : undefined,
+              } as Shop)
+            : shop
+        )
       );
 
       fetchAllInitialData();
@@ -356,7 +390,7 @@ function ShopsContent() {
   const handleToggleSuspendShop = (
     shop_id: string | number,
     currentStatus: string,
-    reason?: string,
+    reason?: string
   ) => {
     if (reason) {
       executeToggleSuspendShop(shop_id, currentStatus, reason);
@@ -364,9 +398,10 @@ function ShopsContent() {
     }
 
     const normalizedStatus = (currentStatus || "").toLowerCase();
-    const isSuspending = normalizedStatus !== "suspended" && normalizedStatus !== "banned";
+    const isSuspending =
+      normalizedStatus !== "suspended" && normalizedStatus !== "banned";
     const actionText = isSuspending ? "ระงับการใช้งาน" : "ปลดการระงับ";
-    
+
     setConfirmModal({
       isOpen: true,
       title: `ยืนยันการ${actionText}`,
@@ -385,7 +420,7 @@ function ShopsContent() {
 
   const formattedSelectedShop = selectedShop
     ? {
-        _id: selectedShop.id || (selectedShop as any)._id || "",
+        _id: String(selectedShop.id || (selectedShop as any)._id || ""),
         name:
           selectedShop.shop_name ||
           (selectedShop as any).name ||
@@ -401,15 +436,18 @@ function ShopsContent() {
         address: formatAddressString(rawAddress),
         description: (selectedShop as any).description,
         logoUrl: getImageUrl(
-          selectedShop.profile_image || (selectedShop as any).logoUrl,
+          selectedShop.profile_image || (selectedShop as any).logoUrl
         ),
         documentUrl: getImageUrl(
           (selectedShop as any).documentUrl ||
-            (selectedShop as any).id_card_image,
+            (selectedShop as any).id_card_image
         ),
         status: (selectedShop.status || "PENDING") as any,
       }
     : null;
+
+  // กรองคำร้องที่ยังอยู่สถานะ pending สำหรับตัวนับBadge
+  const pendingAppealsCount = appeals.filter(a => a.status === 'pending').length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 font-['Prompt',sans-serif] text-slate-900">
@@ -423,10 +461,10 @@ function ShopsContent() {
       </div>
 
       {/* Tabs Menu */}
-      <div className="flex gap-4 border-b border-slate-200 mb-6">
+      <div className="flex gap-4 border-b border-slate-200 mb-6 overflow-x-auto">
         <button
           type="button"
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "pending"
               ? "border-sky-600 text-sky-600"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -444,7 +482,7 @@ function ShopsContent() {
 
         <button
           type="button"
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "bank"
               ? "border-sky-600 text-sky-600"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -462,7 +500,25 @@ function ShopsContent() {
 
         <button
           type="button"
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "appeals"
+              ? "border-sky-600 text-sky-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+          onClick={() => setActiveTab("appeals")}
+        >
+          <MessageSquareWarning size={18} />
+          <span>คำขอปลดระงับ</span>
+          {pendingAppealsCount > 0 && (
+            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+              {pendingAppealsCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeTab === "all"
               ? "border-sky-600 text-sky-600"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -505,7 +561,7 @@ function ShopsContent() {
             <PendingShopsTab
               shops={pendingShops}
               onVerify={handleVerifyShop}
-              onSelectShop={setSelectedShop}
+              onSelectShop={(shop) => setSelectedShop(shop)}
             />
           )}
 
@@ -533,7 +589,77 @@ function ShopsContent() {
               </div>
             ))}
 
-          {/* TAB 3: ร้านค้าทั้งหมดในระบบ */}
+          {/* TAB 3: คำขอปลดระงับ */}
+          {activeTab === "appeals" &&
+            (appeals.length === 0 ? (
+              <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-700">
+                  ไม่มีรายการคำขอปลดระงับในขณะนี้
+                </h3>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {appeals.map((appeal) => (
+                  <div
+                    key={appeal.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-base">
+                            {appeal.shop?.shop_name || `ร้านค้า ID: ${appeal.shop_id}`}
+                          </h4>
+                          <p className="text-xs text-slate-400">
+                            {appeal.shop?.email || ""}
+                          </p>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          appeal.status === 'pending' 
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {appeal.status === 'pending' ? 'รอการตรวจสอบ' : 'อนุมัติเรียบร้อย'}
+                        </span>
+                      </div>
+
+                      <div className="my-3 space-y-1.5 text-sm">
+                        <p className="font-semibold text-slate-700">
+                          เรื่อง: {appeal.subject}
+                        </p>
+                        <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 border border-slate-100">
+                          {appeal.message}
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          วันที่ยื่นเรื่อง:{" "}
+                          {new Date(appeal.created_at).toLocaleString("th-TH")}
+                        </p>
+                      </div>
+                    </div>
+
+                    {appeal.status === 'pending' && (
+                      <div className="flex justify-end pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggleSuspendShop(appeal.shop_id, "suspended")
+                          }
+                          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700 transition cursor-pointer"
+                        >
+                          <ShieldCheck size={16} />
+                          อนุมัติปลดระงับร้านค้า
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+
+          {/* TAB 4: ร้านค้าทั้งหมดในระบบ */}
           {activeTab === "all" && (
             <div className="space-y-4">
               <ShopFilterControls

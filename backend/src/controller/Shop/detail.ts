@@ -20,9 +20,7 @@ export const getOrder = async (
       });
     }
 
-    // ==========================================
     // Main order + standard reverse relations
-    // ==========================================
     const { data: order, error } = await supabase
       .from("print_order")
       .select(
@@ -87,9 +85,7 @@ export const getOrder = async (
       });
     }
 
-    // ==========================================
     // Status / Payment / Review (fetched by id)
-    // ==========================================
     const [
       { data: statusRow, error: statusError },
       { data: paymentRow, error: paymentError },
@@ -126,26 +122,24 @@ export const getOrder = async (
 
     const statusState = statusRow?.state || ORDER_PENDING_STATE;
 
-    // ==========================================
     // Customer
-    // ==========================================
-    const formattedCustomer = Array.isArray(order.customer)
-      ? order.customer[0]
-      : order.customer;
+    const rawCustomer: any = order.customer;
+    const formattedCustomer = Array.isArray(rawCustomer)
+      ? rawCustomer[0]
+      : rawCustomer;
 
     const formattedAddress = Array.isArray(formattedCustomer?.address)
       ? formattedCustomer.address[0]
       : formattedCustomer?.address;
 
-    // ==========================================
     // Items
-    // ==========================================
-    const items = (order.print_order_item || []).map((item: any) => ({
+    const rawItems: any = order.print_order_item;
+    const items = (rawItems || []).map((item: any) => ({
       id: item.id,
       category: item.category || "รายการพิมพ์",
-      group_name: item.category || "รายการพิมพ์", // เพิ่ม map สำหรับ Frontend
+      group_name: item.category || "รายการพิมพ์",
       describe: item.describe || "",
-      detail: item.describe || "",               // เพิ่ม map สำหรับ Frontend
+      detail: item.describe || "",
       file_url: item.file_url || null,
       quantity: item.quantity,
       unit_price: Number(item.unit_price || 0),
@@ -153,10 +147,9 @@ export const getOrder = async (
       page_count: item.page_count ?? null,
     }));
 
-    // ==========================================
-    // Files (mapped with item_id)
-    // ==========================================
-    const files = (order.print_file || []).map((f: any) => ({
+    // Files
+    const rawFiles: any = order.print_file;
+    const files = (rawFiles || []).map((f: any) => ({
       id: f.id,
       filename: f.filename,
       file_url: f.file_url,
@@ -176,10 +169,8 @@ export const getOrder = async (
         small_order_fee: Number(order.small_order_fee || 0),
         platform_fee: Number(order.platform_fee || 0),
         total_amount: Number(order.total_amount || 0),
-        total_price: Number(order.total_amount || 0), // เพิ่ม total_price ตรงกับ Frontend
+        total_price: Number(order.total_amount || 0),
         status_state: statusState,
-
-        // ส่ง slip_url ออกไปโดยตรงเพื่อให้ Frontend อ่านค่าได้ทันที
         slip_url: paymentRow?.slip_url || null,
 
         customer: {
@@ -196,7 +187,7 @@ export const getOrder = async (
         review: reviewRow || null,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Backend Error:", err);
     return res.status(500).json({
       error: "Server Error",
@@ -204,7 +195,9 @@ export const getOrder = async (
   }
 };
 
+// ==========================================
 // UPDATE ORDER STATUS
+// ==========================================
 export const updateOrderStatus = async (
   req: Request,
   res: Response
@@ -243,7 +236,7 @@ export const updateOrderStatus = async (
     // การรับงาน (กำลังพิมพ์) ต้องตรวจสลิปแล้วและผลต้องเป็น "ถูกต้อง" (is_verified = true)
     // การปฏิเสธออเดอร์ (ยกเลิกการพิมพ์) ทำได้เสมอ
     if (status_name === "กำลังพิมพ์") {
-      // รับงานได้เฉพาะออเดอร์ที่ยังรอการดำเนินงาน (กันรับซ้ำ / กู้ออเดอร์ที่ยกเลิกแล้ว)
+      // รับงานได้เฉพาะออเดอร์ที่ยังรอการดำเนินงาน
       if (order.current_status_id) {
         const { data: currentStatus, error: currentStatusError } =
           await supabase
@@ -346,17 +339,15 @@ export const updateOrderStatus = async (
         status_state: statusData.state,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Update Status Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
 
+// ==========================================
 // VERIFY PAYMENT SLIP
-// body: { is_verified: true | false }
-// - ตรวจได้ครั้งเดียว: ถ้า payment.is_verified ไม่ใช่ null แล้วจะเปลี่ยนไม่ได้
-// - ผลเป็น false ออเดอร์ยังคงสถานะ "รอการดำเนินงาน"
-// - จะตรวจใหม่ได้เมื่อ is_verified ถูกรีเซ็ตเป็น null (เช่น ลูกค้าส่งสลิปใหม่)
+// ==========================================
 export const verifyPayment = async (
   req: Request,
   res: Response
@@ -384,8 +375,10 @@ export const verifyPayment = async (
       .eq("id", id)
       .single();
 
-    if (orderError || !order) {
-      return res.status(404).json({ error: "Order not found" });
+    if (orderError || !order || !order.payment_id) {
+      return res
+        .status(404)
+        .json({ error: "Payment record not found for this order" });
     }
 
     if (shop_id && order.shop_id !== shop_id) {
@@ -413,12 +406,6 @@ export const verifyPayment = async (
       }
     }
 
-    if (!order.payment_id) {
-      return res
-        .status(400)
-        .json({ error: "ยังไม่มีหลักฐานการชำระเงินสำหรับออเดอร์นี้" });
-    }
-
     const { data: payment, error: paymentError } = await supabase
       .from("payment")
       .select("id, slip_url, is_verified")
@@ -441,7 +428,7 @@ export const verifyPayment = async (
       });
     }
 
-    // อัปเดตเฉพาะตอนที่ยังเป็น null (กันกดซ้อน/เขียนทับ)
+    // อัปเดตเฉพาะตอนที่ยังเป็น null
     const { data: updated, error: updateError } = await supabase
       .from("payment")
       .update({ is_verified })
@@ -465,8 +452,8 @@ export const verifyPayment = async (
       message: "Payment slip checked successfully",
       data: { payment_id: updated.id, is_verified: updated.is_verified },
     });
-  } catch (err) {
-    console.error("Verify Payment Error:", err);
+  } catch (err: any) {
+    console.error("Update Payment Status Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };

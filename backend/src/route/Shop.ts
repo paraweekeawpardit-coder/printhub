@@ -18,24 +18,28 @@ router.get("/getComplaintsAndReviews", Home.getComplaintsAndReviews);
 
 // ==================== Orders ====================
 router.get("/getOrderByStatus", Order.getOrdersByStatus);
-router.get("/orders/:id", Detail.getOrder);
-router.patch("/orders/:id/status", Detail.updateOrderStatus);
-router.patch("/orders/:id/verify-payment", Detail.verifyPayment);
 
-// 🟢 สลับมาใช้ Order.updateOrderStatus ที่มีระบบตรวจสอบสถานะร้านค้า (suspended check)
-router.patch("/orders/:orderId/status", Order.updateOrderStatus);
+// 🟢 แก้ไข Path ให้สอดคล้องกับ Frontend (สั่งซื้อชิ้นเดียวใช้ /order/:orderId)
+router.get("/order/:orderId", Order.getOrderById);
+
+// 🟢 รองรับ Endpoint อัปเดตสถานะแบบตรวจสอบร้านค้า (suspended check)
+router.patch("/order/:orderId/status", Order.updateOrderStatus);
+
+// 🟢 สำหรับตรวจสอบสลิปและชำระเงิน
+router.patch("/order/:id/paymentstatus", Detail.verifyPayment);
+router.patch("/order/:id/verify-payment", Detail.verifyPayment);
 
 // ==================== Shop Profile & Settings ====================
-router.get("/profile/:shop_id", Setting.getShopProfile);
-router.put("/profile/:shop_id", Setting.updateShopProfile);
-router.patch("/open-status/:shop_id", Setting.setShopOpenStatus);
+router.get("/profile/:shop_id", Setting.getProfile);
+router.put("/profile/:shop_id", Setting.updateProfile);
+router.patch("/open-status/:shop_id", Setting.updateOpenStatus);
 
 // ดึงข้อมูลบัญชีธนาคาร และ บันทึก/อัปเดตข้อมูลบัญชีธนาคาร
 router.get("/bank-account/:shop_id", Setting.getBankAccount);
 router.put("/bank-account/:shop_id", Setting.updateBankAccount);
 
-// ตรวจสอบสถานะการยืนยันตัวตน (เปลี่ยนจาก checkShopVerified เป็น getVerifyStatus)
-router.get("/verify-status/:shop_id", Setting.checkShopVerified);
+// ตรวจสอบสถานะการยืนยันตัวตน
+router.get("/verify-status/:shop_id", Setting.getVerifyStatus);
 
 // บริการของร้านค้า
 router.get("/services/:shop_id", Setting.getShopServices);

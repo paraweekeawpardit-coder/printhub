@@ -6,10 +6,22 @@ import {
   verifyShop,
   toggleSuspendShop,
   getPendingBankAccounts,
-  approveOrRejectBankAccount 
+  approveOrRejectBankAccount,
+  createContactAdmin,
+  getShopAppeals,
+  getShopAppealStatus,
+  nudgeShopAppeal
 } from "../controller/Admin/shopController.js";
-import { getAllReports, verifyReport } from "../controller/Admin/reportController.js";
-import { getAllTransactions } from "../controller/Admin/transactionController.js";
+import { 
+  getAllReports, 
+  verifyReport, 
+  resolveReport // 👈 นำเข้าฟังก์ชันตัดสินเคสรายงาน
+} from "../controller/Admin/reportController.js";
+import { 
+  getAllTransactions, 
+  getPendingRefunds, // 👈 นำเข้าฟังก์ชันดึงรายการรอคืนเงิน
+  processRefund      // 👈 นำเข้าฟังก์ชันอนุมัติโอนเงินคืน
+} from "../controller/Admin/transactionController.js";
 import { adminLogin } from "../controller/Auth/admin.js";
 import {
   getAdminProfile,
@@ -37,6 +49,10 @@ router.get("/shops/all", getAllShops);
 router.patch("/shops/verify", verifyShop);
 router.patch("/shops/suspend", toggleSuspendShop);
 
+// Contact Admin & Appeals
+router.post("/contact-admin", createContactAdmin);
+router.get("/appeals", getShopAppeals);
+
 // Bank Accounts
 router.get("/bank-accounts/pending", getPendingBankAccounts);
 router.patch("/bank-accounts/verify", approveOrRejectBankAccount);
@@ -44,9 +60,12 @@ router.patch("/bank-accounts/verify", approveOrRejectBankAccount);
 // Reports
 router.get("/reports", getAllReports);
 router.patch("/reports/verify", verifyReport);
+router.patch("/reports/resolve", resolveReport); // 👈 เพิ่ม Route ตัดสินเคสรายงานปัญหา
 
-// Transactions
+// Transactions & Refunds
 router.get("/transactions", getAllTransactions);
+router.get("/refunds", getPendingRefunds);       // 👈 เพิ่ม Route ดึงออเดอร์ยกเลิกเพื่อรอคืนเงิน
+router.patch("/refunds/process", processRefund);  // 👈 เพิ่ม Route อนุมัติการโอนเงินคืน
 
 // Profile & Settings
 router.get("/profile", getAdminProfile);
@@ -54,5 +73,9 @@ router.put("/profile", updateAdminProfile);
 router.put("/settings", updateSettings);
 router.get("/notifications", getNotifications);
 router.post("/logout", adminLogout);
+
+// Shop Appeals & Nudge
+router.get("/shop-appeal/:shop_id", getShopAppealStatus);
+router.patch("/shop-appeal/nudge", nudgeShopAppeal);
 
 export default router;

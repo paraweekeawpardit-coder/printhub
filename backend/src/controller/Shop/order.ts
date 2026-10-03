@@ -50,15 +50,17 @@ export const getOrdersByStatus = async (
       });
     }
 
-    const { data: orders, error } = await supabase
+    // 1. สร้าง Base Query ดึงจาก print_order
+    let query = supabase
       .from("print_order")
       .select(
         `
         id,
         order_no,
         order_date,
-        appointment_time,
         receive_date,
+        appointment_time,
+        total_price,
         total_amount,
         payment_id,
 
@@ -67,7 +69,8 @@ export const getOrdersByStatus = async (
           last_name
         ),
 
-        current_status:current_status_id (
+        current_status:current_status_id!inner (
+          id,
           state
         ),
 
@@ -91,6 +94,15 @@ export const getOrdersByStatus = async (
       )
       .eq("shop_id", shop_id);
 
+    // 2. ถ้ามีการส่ง status ที่ไม่ใช่ "ทั้งหมด" ให้ Filter ตั้งแต่ชั้น Query
+    if (status !== "ทั้งหมด") {
+      query = query.eq("current_status.state", status);
+    }
+
+    const { data: orders, error } = await query.order("order_date", {
+      ascending: false,
+    });
+
     if (error) {
       console.error("Get orders error:", error);
       return res.status(400).json({
@@ -101,16 +113,8 @@ export const getOrdersByStatus = async (
     const now = new Date().getTime();
     const ONE_DAY_MS = 24 * 60 * 60 * 1000; // 24 ชั่วโมงในหน่วยมิลลิวินาที
 
-    // 1. กรองสถานะ "รอการชำระเงิน" ออก
-    const filteredOrders = (orders || []).filter((order: any) => {
-      const currentStatus = Array.isArray(order.current_status)
-        ? order.current_status[0]
-        : order.current_status;
-      return currentStatus?.state !== "รอการชำระเงิน";
-    });
-
-    // 2. คำนวณและปรับเปลี่ยนสถานะตามเงื่อนไขเวลา
-    const processedOrders: ResultOrder[] = filteredOrders
+    // 3. แปลงและคำนวณเงื่อนไขสถานะของแต่ละออเดอร์
+    const processedOrders: ResultOrder[] = (orders || [])
       .map((order: any) => {
         const customer = Array.isArray(order.customer)
           ? order.customer[0]
@@ -134,12 +138,12 @@ export const getOrdersByStatus = async (
           computedStatus === "รอการดำเนินการ" ||
           computedStatus === "รอการดำเนินงาน";
 
-        // เงื่อนไขพิเศษ: ถ้ารอดำเนินการอยู่ แล้วร้านไม่ยืนยันภายใน 24 ชม. (นับจาก order_date) -> เปลี่ยนเป็น "ยกเลิกการพิมพ์"
+        // ถ้ารอดำเนินการอยู่ แล้วร้านไม่ยืนยันภายใน 24 ชม. (นับจาก order_date) -> เปลี่ยนเป็น "ยกเลิกการพิมพ์"
         if (isPending && now > orderTime + ONE_DAY_MS) {
           computedStatus = "ยกเลิกการพิมพ์";
         }
 
-        // เช็คเวลานัดรับ (appointment_time) เดิม
+        // เช็คเวลานัดรับ (appointment_time / receive_date)
         const appointmentTimeStr =
           order.appointment_time || order.receive_date;
 
@@ -147,7 +151,8 @@ export const getOrdersByStatus = async (
           const appointmentTime = new Date(appointmentTimeStr).getTime();
 
           // ถ้ารอดำเนินการ หรือ กำลังพิมพ์ แล้วเลยเวลานัดรับ -> เปลี่ยนเป็น "ยกเลิกการพิมพ์"
-          const isPendingOrPrinting = isPending || computedStatus === "กำลังพิมพ์";
+          const isPendingOrPrinting =
+            isPending || computedStatus === "กำลังพิมพ์";
           if (isPendingOrPrinting && now > appointmentTime) {
             computedStatus = "ยกเลิกการพิมพ์";
           }
@@ -159,7 +164,7 @@ export const getOrdersByStatus = async (
           }
         }
 
-        // Sub-orders (cart items -> print_order_item)
+        // Sub-orders (items)
         const items: OrderItemDetail[] = (order.print_order_item || []).map(
           (item: any) => ({
             id: item.id,
@@ -181,7 +186,7 @@ export const getOrdersByStatus = async (
             customer?.last_name ?? ""
           }`.trim(),
           status: computedStatus,
-          amount: Number(order.total_amount || 0),
+          amount: Number(order.total_amount || order.total_price || 0),
           items,
           payment: payment
             ? {
@@ -194,7 +199,7 @@ export const getOrdersByStatus = async (
       })
       .filter((order) => status === "ทั้งหมด" || order.status === status);
 
-    // 3. กำหนดลำดับความสำคัญของสถานะ
+    // 4. กำหนดลำดับความสำคัญของสถานะ
     const STATUS_PRIORITY: Record<string, number> = {
       รอการดำเนินการ: 1,
       รอการดำเนินงาน: 1,
@@ -204,7 +209,7 @@ export const getOrdersByStatus = async (
       ยกเลิกการพิมพ์: 5,
     };
 
-    // 4. จัดเรียงข้อมูล (Status Priority -> Order Date จากใหม่ไปเก่า)
+    // 5. จัดเรียงข้อมูล (Status Priority -> Order Date จากใหม่ไปเก่า)
     const sortedOrders = processedOrders.sort((a, b) => {
       const priorityA = STATUS_PRIORITY[a.status] ?? 99;
       const priorityB = STATUS_PRIORITY[b.status] ?? 99;
@@ -241,15 +246,17 @@ export const updateOrderStatus = async (
   try {
     const { orderId } = req.params;
     const { newStatus } = req.body;
-    const shop_id = (req.headers.shop_id || req.query.shop_id || req.body.shop_id) as string;
+    const shop_id = (req.headers.shop_id ||
+      req.query.shop_id ||
+      req.body.shop_id) as string;
 
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
     }
 
-    // 🟢 1. เช็กสถานะของร้านค้าว่าถูกระงับการใช้งานอยู่หรือไม่
+    // 1. ตรวจสอบสถานะระงับการใช้งานของร้านค้า
     const { data: shop, error: shopError } = await supabase
-      .from("shop")
+      .from("print_shop")
       .select("status")
       .eq("id", shop_id)
       .single();
@@ -264,9 +271,9 @@ export const updateOrderStatus = async (
       });
     }
 
-    // 🟢 2. ค้นหา status_id จากตาราง order_status ตามชื่อ newStatus
+    // 2. ดึงสถานะออเดอร์ตาม state
     const { data: statusData, error: statusError } = await supabase
-      .from("order_status")
+      .from("status")
       .select("id")
       .eq("state", newStatus)
       .single();
@@ -275,7 +282,7 @@ export const updateOrderStatus = async (
       return res.status(400).json({ error: "ไม่พบสถานะออเดอร์ที่ระบุ" });
     }
 
-    // 🟢 3. อัปเดตสถานะ current_status_id ในตาราง print_order
+    // 3. อัปเดตสถานะ current_status_id ในตาราง print_order
     const { error: updateError } = await supabase
       .from("print_order")
       .update({ current_status_id: statusData.id })
@@ -293,5 +300,138 @@ export const updateOrderStatus = async (
   } catch (err) {
     console.error("Update order status server error:", err);
     return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// ==========================================
+// Get Single Order By ID (for shop detail page)
+// ==========================================
+
+export const getOrderById = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({
+        error: "orderId is required",
+      });
+    }
+
+    // 1. ดึงข้อมูลออเดอร์รายชิ้นจาก print_order
+    const { data: order, error } = await supabase
+      .from("print_order")
+      .select(
+        `
+        id,
+        order_no,
+        order_date,
+        receive_date,
+        appointment_time,
+        total_price,
+        total_amount,
+        payment_id,
+
+        customer:customer_id (
+          first_name,
+          last_name,
+          contact
+        ),
+
+        current_status:current_status_id (
+          id,
+          state
+        ),
+
+        payment:payment_id (
+          id,
+          slip_url,
+          is_verified,
+          amount,
+          payment_date
+        ),
+
+        print_order_item (
+          id,
+          category,
+          describe,
+          file_url,
+          quantity,
+          unit_price,
+          subtotal,
+          page_count
+        )
+        `
+      )
+      .eq("id", orderId)
+      .single();
+
+    if (error || !order) {
+      console.error("Get order detail error:", error);
+      return res.status(404).json({
+        error: "ไม่พบข้อมูลรายการสั่งซื้อ",
+      });
+    }
+
+    const customer = Array.isArray(order.customer)
+      ? order.customer[0]
+      : order.customer;
+
+    const currentStatus = Array.isArray(order.current_status)
+      ? order.current_status[0]
+      : order.current_status;
+
+    const payment = Array.isArray(order.payment)
+      ? order.payment[0]
+      : order.payment;
+
+    // Sub-orders (items)
+    const items: OrderItemDetail[] = (order.print_order_item || []).map(
+      (item: any) => ({
+        id: item.id,
+        category: item.category || "รายการพิมพ์",
+        describe: item.describe || "",
+        file_url: item.file_url || null,
+        quantity: item.quantity,
+        unit_price: Number(item.unit_price || 0),
+        subtotal: Number(item.subtotal || 0),
+        page_count: item.page_count ?? null,
+      })
+    );
+
+    // 2. จัดโครงสร้างข้อมูลส่งกลับให้ตรงกับที่ Frontend page.tsx คาดหวัง
+    const resultOrder = {
+      order_id: order.id,
+      order_no: order.order_no,
+      date: order.order_date,
+      appointment_time: order.appointment_time || order.receive_date,
+      customer_name: `${customer?.first_name ?? ""} ${
+        customer?.last_name ?? ""
+      }`.trim(),
+      customer_contact: customer?.contact || "",
+      status: currentStatus?.state || "รอการดำเนินการ",
+      amount: Number(order.total_amount || order.total_price || 0),
+      items,
+      payment: payment
+        ? {
+            id: payment.id,
+            slip_url: payment.slip_url || null,
+            is_verified: payment.is_verified ?? null,
+            amount: Number(payment.amount || 0),
+            payment_date: payment.payment_date || null,
+          }
+        : null,
+    };
+
+    return res.status(200).json({
+      order: resultOrder,
+    });
+  } catch (err) {
+    console.error("Get order by ID server error:", err);
+    return res.status(500).json({
+      error: "Server Error",
+    });
   }
 };

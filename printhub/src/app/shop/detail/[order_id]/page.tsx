@@ -55,12 +55,16 @@ export default function OrderDetailPage() {
         setError(null);
       }
 
+      // ✅ แก้ไข: ลบ s ออกจาก /shop/orders/ เป็น /shop/order/
       const res = await axios.get(
-        `http://localhost:5000/shop/orders/${orderId}`
+        `http://localhost:5000/api/shop/order/${orderId}`,
       );
 
       if (res.data && res.data.order) {
         setOrder(res.data.order);
+      } else if (res.data) {
+        // กรณี API ส่งข้อมูล order กลับมาโดยตรง ไม่ได้หุ้มด้วย { order: ... }
+        setOrder(res.data);
       } else {
         throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
       }
@@ -68,6 +72,7 @@ export default function OrderDetailPage() {
       console.error("Axios Error:", err);
       const message =
         err.response?.data?.error ||
+        err.response?.data?.message ||
         err.message ||
         "เกิดข้อผิดพลาดในการดึงข้อมูล";
       if (silent) setActionError(message);
@@ -94,13 +99,15 @@ export default function OrderDetailPage() {
       setIsUpdating(true);
       setActionError(null);
 
+      // ✅ แก้ไข: ลบ s ออกจาก /shop/orders/ ให้ตรงกับ Backend Route
       await axios.patch(
-        `http://localhost:5000/shop/orders/${orderId}/status`,
+        `http://localhost:5000/shop/order/${orderId}/status`,
         { status_name: nextStatus },
-        { headers: {
+        {
+          headers: {
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       await fetchOrder(true);
@@ -125,7 +132,7 @@ export default function OrderDetailPage() {
       setActionError(null);
       await axios.patch(
         `http://localhost:5000/shop/orders/${orderId}/verify-payment`,
-        { is_verified: isVerified }
+        { is_verified: isVerified },
       );
       await fetchOrder(true);
     } catch (err: any) {
@@ -150,7 +157,7 @@ export default function OrderDetailPage() {
   const handleDownloadFile = async (
     fileUrl: string,
     filename: string,
-    fileId: string
+    fileId: string,
   ) => {
     try {
       setDownloadingId(fileId);
@@ -365,7 +372,7 @@ export default function OrderDetailPage() {
                   const itemFiles = allFiles.filter(
                     (f: any) =>
                       f.item_id === item.id ||
-                      (!f.item_id && f.file_url === item.file_url)
+                      (!f.item_id && f.file_url === item.file_url),
                   );
 
                   return (
@@ -408,14 +415,18 @@ export default function OrderDetailPage() {
                           </span>
                         </div>
                         <div>
-                          <span className="text-gray-400 block">ราคา/หน่วย</span>
+                          <span className="text-gray-400 block">
+                            ราคา/หน่วย
+                          </span>
                           <span className="font-semibold text-gray-700">
                             ฿{Number(item.unit_price || 0).toLocaleString()}
                           </span>
                         </div>
                         {item.page_count && (
                           <div>
-                            <span className="text-gray-400 block">จำนวนหน้า</span>
+                            <span className="text-gray-400 block">
+                              จำนวนหน้า
+                            </span>
                             <span className="font-semibold text-gray-700">
                               {item.page_count} หน้า
                             </span>
@@ -468,14 +479,17 @@ export default function OrderDetailPage() {
                                     handleDownloadFile(
                                       file.file_url,
                                       file.filename,
-                                      file.id
+                                      file.id,
                                     )
                                   }
                                   disabled={downloadingId === file.id}
                                   className="flex items-center gap-1.5 text-xs font-medium text-blue-600 bg-blue-50/80 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors shrink-0 disabled:opacity-50"
                                 >
                                   {downloadingId === file.id ? (
-                                    <Loader2 size={13} className="animate-spin" />
+                                    <Loader2
+                                      size={13}
+                                      className="animate-spin"
+                                    />
                                   ) : (
                                     <Download size={13} />
                                   )}
@@ -517,7 +531,10 @@ export default function OrderDetailPage() {
                     ราคารวมทั้งหมด
                   </span>
                   <span className="text-xl font-bold text-[#12356b]">
-                    ฿{Number(order.total_amount || order.subtotal_price || 0).toFixed(2)}
+                    ฿
+                    {Number(
+                      order.total_amount || order.subtotal_price || 0,
+                    ).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -571,9 +588,21 @@ export default function OrderDetailPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs text-gray-400 mb-0.5">ติดต่อ</p>
+                  <p className="text-xs text-gray-400 mb-0.5">เบอร์ติดต่อ</p>
                   <p className="font-medium text-gray-700">
                     {order.customer?.contact || "-"}
+                  </p>
+                </div>
+
+                {/* เพิ่มที่อยู่แบบปลอดภัย ไม่พังเมื่อข้อมูลเป็น null */}
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">
+                    ที่อยู่จัดส่ง / ติดต่อ
+                  </p>
+                  <p className="font-medium text-gray-700 leading-relaxed text-xs">
+                    {order.customer?.address
+                      ? `${order.customer.address.detail || ""} ${order.customer.address.subdistrict || ""} ${order.customer.address.district || ""} ${order.customer.address.province || ""} ${order.customer.address.postcode || ""}`.trim()
+                      : "ไม่ได้ระบุที่อยู่"}
                   </p>
                 </div>
               </div>
@@ -582,7 +611,9 @@ export default function OrderDetailPage() {
                 <button
                   disabled={!isConfirmed}
                   onClick={() => {
-                    router.push(`/shop/order/${shopId}/chat?order_id=${order.id}`);
+                    router.push(
+                      `/shop/order/${shopId}/chat?order_id=${order.id}`,
+                    );
                   }}
                   className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-colors ${
                     isConfirmed
@@ -605,7 +636,10 @@ export default function OrderDetailPage() {
                   หลักฐานการชำระเงิน
                 </p>
                 <p className="text-2xl font-bold mt-1">
-                  ฿{Number(payment?.amount ?? order.total_amount ?? 0).toLocaleString()}
+                  ฿
+                  {Number(
+                    payment?.amount ?? order.total_amount ?? 0,
+                  ).toLocaleString()}
                 </p>
                 <p className="text-xs text-blue-100/70 mt-1">
                   {payment?.payment_date
@@ -668,10 +702,10 @@ export default function OrderDetailPage() {
                             slipVerdict === true
                               ? "bg-emerald-500 text-white"
                               : slipVerdict === false
-                              ? "bg-red-500 text-white"
-                              : slipViewed
-                              ? "bg-blue-600 text-white"
-                              : "bg-gray-100 text-gray-400"
+                                ? "bg-red-500 text-white"
+                                : slipViewed
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-gray-100 text-gray-400"
                           }`}
                         >
                           {slipVerdict === true ? (
@@ -697,10 +731,10 @@ export default function OrderDetailPage() {
                           {slipVerdict === true
                             ? "ตรวจสอบแล้ว ไม่สามารถแก้ไขผลได้"
                             : slipVerdict === false
-                            ? "ตรวจสอบแล้ว ไม่สามารถแก้ไขผลได้ จนกว่าลูกค้าจะส่งสลิปใหม่"
-                            : slipViewed
-                            ? "สลิปถูกต้องหรือไม่? เลือกผลการตรวจสอบ (เลือกแล้วแก้ไม่ได้)"
-                            : "ต้องเปิดดูสลิปก่อนจึงจะเลือกผลการตรวจสอบได้"}
+                              ? "ตรวจสอบแล้ว ไม่สามารถแก้ไขผลได้ จนกว่าลูกค้าจะส่งสลิปใหม่"
+                              : slipViewed
+                                ? "สลิปถูกต้องหรือไม่? เลือกผลการตรวจสอบ (เลือกแล้วแก้ไม่ได้)"
+                                : "ต้องเปิดดูสลิปก่อนจึงจะเลือกผลการตรวจสอบได้"}
                         </p>
 
                         {slipVerdict === true ? (
@@ -838,8 +872,7 @@ export default function OrderDetailPage() {
             <p className="text-sm text-gray-500 mb-6">
               คุณต้องการปฏิเสธรายการนี้จริงหรือไม่?
               <br />
-              หากยืนยันการยกเลิก
-              จะไม่สามารถย้อนกลับได้
+              หากยืนยันการยกเลิก จะไม่สามารถย้อนกลับได้
             </p>
 
             <div className="grid grid-cols-2 gap-2.5">
@@ -943,8 +976,7 @@ export default function OrderDetailPage() {
               ยืนยันการรับงาน
             </h3>
             <p className="text-sm text-gray-500 mb-6">
-              คุณได้ตรวจสอบหลักฐานการชำระเงินว่าถูกต้องแล้ว
-              ยืนยันหรือไม่?
+              คุณได้ตรวจสอบหลักฐานการชำระเงินว่าถูกต้องแล้ว ยืนยันหรือไม่?
             </p>
 
             <div className="grid grid-cols-2 gap-2.5">
