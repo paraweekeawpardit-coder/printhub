@@ -27,6 +27,9 @@ interface PaymentActionButtonProps {
     order_date?: string | null;
     created_at?: string | null;
     total_price?: number;
+    payment?: {
+      is_verified?: boolean | null;
+    } | null;
     status?: {
       state?: string;
     } | null;
@@ -94,7 +97,7 @@ export default function PaymentActionButton({
     return () => clearInterval(interval);
   }, [targetExpiryTime, orderState, onExpired]);
 
-  // 🌟 5. กรองสถานะ: ถ้าไม่ใช่ "รอการชำระเงิน" ให้ซ่อนตัวเองทันที (ต้องอยู่ใต้ Hooks ทั้งหมด)
+  // 🌟 5. กรองสถานะ: ถ้าไม่ใช่ "รอการชำระเงิน" ให้ซ่อนตัวเองทันที
   if (orderState !== "รอการชำระเงิน") {
     return null;
   }
@@ -105,6 +108,7 @@ export default function PaymentActionButton({
     .padStart(2, "0");
   const seconds = (remainingSeconds % 60).toString().padStart(2, "0");
   const isTimeOut = remainingSeconds <= 0;
+  const isSlipRejected = order.payment?.is_verified === false;
 
   // นำทางไปหน้าชำระเงิน
   const handleGoToPayment = () => {
@@ -118,13 +122,19 @@ export default function PaymentActionButton({
         <button
           type="button"
           onClick={handleGoToPayment}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer group"
-          title="คลิกเพื่อดำเนินการชำระเงิน"
+          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer group ${
+            isSlipRejected 
+              ? "bg-amber-600 hover:bg-amber-700" 
+              : "bg-blue-600 hover:bg-blue-700"
+          }`}
+          title={isSlipRejected ? "สลิปไม่ถูกต้อง คลิกเพื่อแนบสลิปใหม่" : "คลิกเพื่อดำเนินการชำระเงิน"}
         >
-          <CreditCard className="w-3.5 h-3.5 text-blue-200 group-hover:text-white transition-colors" />
-          <span>ชำระเงิน</span>
-          <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-blue-100 bg-blue-700/60 px-1.5 py-0.5 rounded-md">
-            <Clock className="w-3 h-3 text-blue-200" />
+          <CreditCard className="w-3.5 h-3.5 text-white/80 group-hover:text-white transition-colors" />
+          <span>{isSlipRejected ? "แนบสลิปใหม่" : "ชำระเงิน"}</span>
+          <span className={`inline-flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded-md ${
+            isSlipRejected ? "text-amber-100 bg-amber-800/50" : "text-blue-100 bg-blue-700/60"
+          }`}>
+            <Clock className="w-3 h-3 text-white/80" />
             {minutes}:{seconds}
           </span>
         </button>

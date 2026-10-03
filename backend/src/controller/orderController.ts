@@ -452,6 +452,7 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
         slip_url: slipPublicUrl,
         status: "paid",
         payment_date: new Date().toISOString(),
+        is_verified: null,
       })
       .select("id")
       .single();
@@ -467,7 +468,7 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
       .update({ 
         payment_id: paymentData.id,
         current_status_id: inProgressStatusId,
-        expires_at: null 
+        // expires_at: null 
       })
       .eq("id", order_id);
 
@@ -518,6 +519,88 @@ export const cancelOrderTimeout = async (req: Request, res: Response) => {
     return res.status(200).json({ success: true, message: "ยกเลิกคำสั่งซื้อเนื่องจากหมดเวลาแล้ว" });
   } catch (error: any) {
     console.error("Cancel order timeout error:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 8. ร้านค้าปฏิเสธสลิป / สลิปไม่ถูกต้อง (ให้ลูกค้าส่งใหม่โดยนับเวลาเดิม)
+// ==========================================
+export const rejectPaymentSlip = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+
+    // 1. ดึงข้อมูลออเดอร์เพื่อเช็คเวลาหมดอายุและ customer_id
+    const { data: order, error: orderErr } = await supabase
+      .from("print_order")
+      .select("id, expires_at, customer_id")
+      .eq("id", orderId)
+      .single();
+
+    if (orderErr || !order) {
+      return res.status(404).json({ success: false, message: "ไม่พบคำสั่งซื้อ" });
+    }
+
+    // ถ้าเวลาเดิม 10 นาทีหมดไปแล้ว จะไม่สามารถให้ส่งใหม่ได้ (ตัดเป็นยกเลิก)
+    if (order.expires_at && new Date(order.expires_at).getTime() <= Date.now()) {
+      const cancelStatusId = "9aee439b-3d24-4b4e-8d68-d9b63081b80c";
+      await supabase
+        .from("print_order")
+        .update({ current_status_id: cancelStatusId })
+        .eq("id", orderId);
+
+      return res.status(400).json({ 
+        success: false, 
+        message: "คำสั่งซื้อหมดเวลาการชำระเงินแล้ว ไม่สามารถส่งสลิปใหม่ได้" 
+      });
+    }
+
+    // 2. ปรับ is_verified ใน payment เป็น false
+    await supabase
+      .from("payment")
+      .update({ is_verified: false })
+      .eq("order_id", orderId);
+
+    // 3. ปรับสถานะใน print_order กลับไปเป็น "รอการชำระเงิน" (โดยคงค่า expires_at เดิมไว้ ไม่แก้เวลา)
+    const pendingPaymentStatusId = "8961dbd1-5317-4690-b037-e2ed4e9587e5";
+    const { error: updateErr } = await supabase
+      .from("print_order")
+      .update({ current_status_id: pendingPaymentStatusId })
+      .eq("id", orderId);
+
+    if (updateErr) throw updateErr;
+
+    // 4. บันทึกประวัติสถานะลง work_status
+    try {
+      await supabase.from("work_status").insert([
+        {
+          order_id: orderId,
+          status_id: pendingPaymentStatusId,
+        },
+      ]);
+    } catch (wsErr) {
+      console.warn("work_status insert warning:", wsErr);
+    }
+
+    // 5. แจ้งเตือนลูกค้าให้แนบสลิปใหม่
+    if (order.customer_id) {
+      await supabase.from("notifications").insert([
+        {
+          customer_id: order.customer_id,
+          order_id: orderId,
+          title: "สลิปชำระเงินไม่ถูกต้อง",
+          message: `สลิปสำหรับออเดอร์ #${orderId.slice(0, 8)} ไม่ถูกต้อง กรุณาแนบสลิปใหม่ก่อนหมดเวลา`,
+          is_read: false,
+        },
+      ]);
+    }
+
+    return res.status(200).json({ 
+      success: true, 
+      message: "ปฏิเสธสลิปแล้ว ระบบเปิดให้ลูกค้าแนบสลิปใหม่โดยนับเวลาเดิม" 
+    });
+  } catch (error: any) {
+    console.error("Reject slip error:", error.message);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
