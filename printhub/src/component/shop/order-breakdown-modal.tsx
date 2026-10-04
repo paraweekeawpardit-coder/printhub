@@ -286,7 +286,7 @@ export default function OrderBreakdownModal({
                         ? "bg-blue-100 text-blue-800"
                         : o.latest_status === "กำลังพิมพ์"
                         ? "bg-sky-100 text-sky-800"
-                        : o.latest_status === "รอการดำเนินการ"
+                        : o.latest_status === "รอการดำเนินงาน"
                         ? "bg-amber-100 text-amber-800"
                         : "bg-rose-100 text-rose-800"
                     }`}

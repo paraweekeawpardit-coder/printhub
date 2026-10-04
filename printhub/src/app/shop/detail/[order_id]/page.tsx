@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 import {
@@ -21,12 +21,18 @@ import {
   X,
   FileText,
 } from "lucide-react";
-import { SlipModal, ActionConfirmModal, WarnModal } from "@/src/component/shop/OrderModals";
+import { SlipModal, ActionConfirmModal, WarnModal } from "@/component/shop/OrderModals";
+
+// 🟢 ปรับ API_BASE ให้มี /api นำหน้าเสมอ
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE = `${rawApiUrl.replace(/\/+$/, "")}/api`;
 
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const orderId = (params?.id || params?.order_id) as string;
+  
+  // ดึง order_id หรือ id จาก params
+  const orderId = (params?.order_id || params?.id) as string;
 
   const [shopId, setShopId] = useState<string>("");
   const [order, setOrder] = useState<any>(null);
@@ -42,7 +48,17 @@ export default function OrderDetailPage() {
   const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
   const [showWarnModal, setShowWarnModal] = useState<boolean>(false);
 
-  const fetchOrder = async (silent = false) => {
+  // ดึง shop_id จาก localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") || localStorage.getItem("id");
+      if (storedShopId) setShopId(storedShopId);
+    }
+  }, []);
+
+  // 🟢 ดึงข้อมูลออเดอร์โดยชี้ไปที่ /api/shop/orders/:orderId
+  const fetchOrder = useCallback(async (silent = false) => {
     if (!orderId) return;
 
     try {
@@ -50,43 +66,45 @@ export default function OrderDetailPage() {
         setIsLoading(true);
         setError(null);
       }
-      const res = await axios.get(`http://localhost:5000/shop/orders/${orderId}`);
+      
+      const res = await axios.get(`${API_BASE}/shop/orders/${orderId}`, {
+        headers: shopId ? { shop_id: shopId } : {},
+      });
+
       if (res.data && res.data.order) {
         setOrder(res.data.order);
       } else if (res.data) {
-        // กรณี API ส่งข้อมูล order กลับมาโดยตรง ไม่ได้หุ้มด้วย { order: ... }
         setOrder(res.data);
       } else {
         throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
       }
     } catch (err: any) {
-      const message = err.response?.data?.error || err.message || "เกิดข้อผิดพลาดในการดึงข้อมูล";
+      const message =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        "เกิดข้อผิดพลาดในการดึงข้อมูล";
       if (silent) setActionError(message);
       else setError(message);
     } finally {
       if (!silent) setIsLoading(false);
     }
-  };
+  }, [orderId, shopId]);
 
   useEffect(() => {
     fetchOrder();
-  }, [orderId]);
+  }, [fetchOrder]);
 
-  useEffect(() => {
-    if (!shopId && typeof window !== "undefined") {
-      const storedShopId =
-        localStorage.getItem("shop_id") || localStorage.getItem("id");
-      if (storedShopId) setShopId(storedShopId);
-    }
-  }, [shopId]);
-
+  // 🟢 อัปเดตสถานะออเดอร์
   const handleUpdateStatus = async (nextStatus: string) => {
     try {
       setIsUpdating(true);
       setActionError(null);
-      await axios.patch(`http://localhost:5000/shop/orders/${orderId}/status`, {
-        status_name: nextStatus,
-      });
+      await axios.patch(
+        `${API_BASE}/shop/orders/${orderId}/status`,
+        { status_name: nextStatus },
+        { params: { shop_id: shopId } }
+      );
       await fetchOrder(true);
     } catch (err: any) {
       setActionError(err.response?.data?.error || "อัปเดตสถานะไม่สำเร็จ");
@@ -95,16 +113,18 @@ export default function OrderDetailPage() {
     }
   };
 
-  // ตรวจสลิป: Correct = เปลี่ยนเป็น "กำลังพิมพ์", Incorrect = เปลี่ยนเป็น "รอการชำระเงิน"
+  // 🟢 ตรวจสลิปการชำระเงิน
   const handleVerifySlip = async (isVerified: boolean) => {
     if (!slipViewed) return;
 
     try {
       setIsUpdating(true);
       setActionError(null);
-      await axios.patch(`http://localhost:5000/shop/orders/${orderId}/verify-payment`, {
-        is_verified: isVerified,
-      });
+      await axios.patch(
+        `${API_BASE}/shop/orders/${orderId}/verify-payment`,
+        { is_verified: isVerified },
+        { params: { shop_id: shopId } }
+      );
       await fetchOrder(true);
     } catch (err: any) {
       setActionError(err.response?.data?.error || "บันทึกผลตรวจสลิปไม่สำเร็จ");
@@ -173,13 +193,6 @@ export default function OrderDetailPage() {
   const slipUrl: string | null = payment?.slip_url || null;
   const slipVerdict: boolean | null = payment?.is_verified ?? null;
 
-  const statusStyles: Record<string, string> = {
-    รอการดำเนินงาน: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-    กำลังพิมพ์: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-    พิมพ์เสร็จสิ้น: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-    ยกเลิกการพิมพ์: "bg-red-50 text-red-700 ring-1 ring-red-200",
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">
       {/* Top Bar */}
@@ -191,7 +204,7 @@ export default function OrderDetailPage() {
           </button>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">หมายเลขออเดอร์</span>
-            <span className="text-sm font-semibold text-[#12356b] bg-blue-50 px-2.5 py-1 rounded-lg">#{order.order_no}</span>
+            <span className="text-sm font-semibold text-[#12356b] bg-blue-50 px-2.5 py-1 rounded-lg">#{order.order_no || order.id}</span>
           </div>
         </div>
       </div>
@@ -259,7 +272,6 @@ export default function OrderDetailPage() {
 
                   return (
                     <div key={item.id || index} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                      {/* ส่วนหัวของออเดอร์ย่อย */}
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="bg-blue-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-md">
@@ -267,10 +279,9 @@ export default function OrderDetailPage() {
                           </span>
                           <h3 className="font-semibold text-gray-900 text-base mt-1">{item.category}</h3>
                         </div>
-                        <p className="font-bold text-slate-800">฿{item.subtotal.toLocaleString()}</p>
+                        <p className="font-bold text-slate-800">฿{item.subtotal?.toLocaleString() ?? 0}</p>
                       </div>
 
-                      {/* รายละเอียดสเปกการพิมพ์ (Describe) และตัวเลขกำกับ */}
                       {item.describe && (
                         <div className="p-3 bg-white rounded-lg border border-slate-200 text-xs text-gray-700 space-y-1.5">
                           <p className="font-semibold text-gray-900 flex items-center gap-1">
@@ -286,7 +297,6 @@ export default function OrderDetailPage() {
                         </div>
                       )}
 
-                      {/* ส่วนดาวน์โหลดไฟล์ */}
                       <div className="pt-2 border-t border-slate-200">
                         {!isConfirmed ? (
                           <div className="p-2.5 bg-amber-50 rounded-lg text-center text-xs text-amber-700 flex items-center justify-center gap-1.5">

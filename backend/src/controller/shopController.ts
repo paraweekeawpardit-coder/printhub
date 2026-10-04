@@ -17,7 +17,6 @@ export const getShops = async (req: Request, res: Response) => {
       category,
       finishing_service,
       finishing,
-      // 🌟 1. รับ Query Parameters เรื่องราคา
       min_price,
       max_price,
       minPrice,
@@ -30,7 +29,6 @@ export const getShops = async (req: Request, res: Response) => {
     const categoryParam = ((service_type || category) as string || '').trim();
     const finishingParam = (finishing_service || finishing) as string;
 
-    // แปลงช่วงราคาและตรวจสอบเงื่อนไขต้อง > 0 เสมอ
     const rawMin = min_price || minPrice;
     const rawMax = max_price || maxPrice;
     const parsedMin = rawMin ? parseFloat(rawMin as string) : null;
@@ -39,7 +37,7 @@ export const getShops = async (req: Request, res: Response) => {
     const filterMinPrice = parsedMin !== null && !isNaN(parsedMin) && parsedMin > 0 ? parsedMin : null;
     const filterMaxPrice = parsedMax !== null && !isNaN(parsedMax) && parsedMax > 0 ? parsedMax : null;
 
-    // 🌟 2. Query ดึงข้อมูลร้านค้าพร้อมบริการและราคาของสเปกย่อย
+    // 🌟 Query ดึงข้อมูลร้านค้า (กรองเฉพาะสถานะ 'approved' เพื่อตัดร้าน suspended / pending ออก)
     let query = supabase
       .from('print_shop')
       .select(`
@@ -49,7 +47,7 @@ export const getShops = async (req: Request, res: Response) => {
         open_time,
         close_time,
         is_open,
-        is_verify,
+        status,
         rating,
         address:address_id (
           latitude,
@@ -64,7 +62,7 @@ export const getShops = async (req: Request, res: Response) => {
           )
         )
       `)
-      .eq('is_verify', true);
+      .eq('status', 'approved'); // 🛑 ใช้ status = approved เพื่อกรองเฉพาะร้านที่ใช้งานได้ปกติ
 
     if (is_top_rated === 'true') {
       query = query.gte('rating', 4.0);
@@ -158,7 +156,7 @@ export const getShops = async (req: Request, res: Response) => {
     });
 
     // -------------------------------------------------------------
-    // กรองด้วย Search Box (ค้นหาชื่อร้าน, หมวดหมู่, หรือสเปก)
+    // กรองด้วย Search Box
     // -------------------------------------------------------------
     if (search && typeof search === 'string') {
       const keyword = search.trim().toLowerCase();
@@ -175,7 +173,7 @@ export const getShops = async (req: Request, res: Response) => {
     }
 
     // -------------------------------------------------------------
-    // กรอง 1: ประเภทงานพิมพ์หลัก (Category / Service Type)
+    // กรองประเภทงานพิมพ์หลัก (Category / Service Type)
     // -------------------------------------------------------------
     if (categoryParam && categoryParam !== 'ทั้งหมด') {
       formattedShops = formattedShops.filter((shop: any) => {
@@ -186,7 +184,7 @@ export const getShops = async (req: Request, res: Response) => {
     }
 
     // -------------------------------------------------------------
-    // 🌟 กรอง 2: สเปกย่อย + คำนวณราคาแบบ Combination Matching
+    // กรองสเปกย่อย + คำนวณราคาแบบ Combination Matching
     // -------------------------------------------------------------
     if (finishingParam && typeof finishingParam === 'string' && finishingParam.trim() !== '') {
       const selectedSpecs = finishingParam
@@ -196,7 +194,6 @@ export const getShops = async (req: Request, res: Response) => {
 
       if (selectedSpecs.length > 0) {
         formattedShops = formattedShops.filter((shop: any) => {
-          // ดึงรายการไอเทมของร้าน (ถ้าเลือกหมวดให้ดูเฉพาะหมวดนั้น ถ้าไม่เลือกให้ดูทั้งหมด)
           let availableItems: Array<{ group: string; detail: string; price: number }> = [];
 
           if (categoryParam && categoryParam !== 'ทั้งหมด' && shop.items_by_category?.[categoryParam]) {
@@ -207,7 +204,6 @@ export const getShops = async (req: Request, res: Response) => {
             });
           }
 
-          // 1. ตรวจสอบว่าร้านต้องมีครบทุกตัวเลือกที่ลูกค้าติ๊ก (AND Condition)
           const hasAllSpecs = selectedSpecs.every((spec) => {
             const cleanSpec = spec.toLowerCase();
             return availableItems.some((item) => {
@@ -216,13 +212,10 @@ export const getShops = async (req: Request, res: Response) => {
             });
           });
 
-          // ถ้าร้านไม่มีตัวเลือกใดตัวเลือกหนึ่ง ให้ตัดออกทันที
           if (!hasAllSpecs) return false;
 
-          // ถ้าร้านมีครบ และลูกค้าไม่ได้ระบุช่วงราคา ให้ผ่านได้เลย
           if (filterMinPrice === null && filterMaxPrice === null) return true;
 
-          // 2. จัดกลุ่มตัวเลือกที่เลือกตาม group_type เพื่อเตรียมรวมราคา
           const selectedByGroup: Record<string, number[]> = {};
 
           selectedSpecs.forEach((spec) => {
@@ -239,7 +232,6 @@ export const getShops = async (req: Request, res: Response) => {
             }
           });
 
-          // 3. แตกคู่ Combination ข้ามกลุ่ม (Cartesian Product)
           const groupArrays = Object.values(selectedByGroup);
           const combinations = groupArrays.reduce<number[][]>(
             (acc, currentGroup) => {
@@ -254,7 +246,6 @@ export const getShops = async (req: Request, res: Response) => {
             [[]]
           );
 
-          // 4. ตรวจสอบว่ามีอย่างน้อย 1 กรณี Combination ที่ราคารวมผ่านเกณฑ์งบประมาณหรือไม่
           return combinations.some((comboPrices) => {
             const totalPrice = comboPrices.reduce((sum, p) => sum + p, 0);
             if (filterMinPrice !== null && totalPrice < filterMinPrice) return false;
@@ -264,7 +255,6 @@ export const getShops = async (req: Request, res: Response) => {
         });
       }
     } else if (filterMinPrice !== null || filterMaxPrice !== null) {
-      // กรณีกำหนดเฉพาะราคา แต่ไม่ได้เลือกสเปกย่อย (ตรวจราคาเริ่มต้นของร้าน)
       formattedShops = formattedShops.filter((shop: any) => {
         let allPrices: number[] = [];
         Object.values(shop.items_by_category || {}).forEach((items: any) => {
@@ -345,7 +335,6 @@ export const getShopServices = async (req: Request, res: Response) => {
   try {
     const { shopId } = req.params;
 
-    // ✅ ปรับแก้ตรงนี้: ดึง phone, email และ join ตาราง address ให้ครบถ้วน
     const { data: shop, error: shopError } = await supabase
       .from("print_shop")
       .select(`
@@ -358,6 +347,7 @@ export const getShopServices = async (req: Request, res: Response) => {
         phone,
         email,
         is_open,
+        status,
         address:address_id (
           id,
           detail,
@@ -373,8 +363,10 @@ export const getShopServices = async (req: Request, res: Response) => {
       .maybeSingle();
 
     if (shopError) throw shopError;
-    if (!shop) {
-      return res.status(404).json({ success: false, message: "ไม่พบร้านค้านี้ในระบบ" });
+    
+    // 🛑 ตรวจสอบ: ถ้าร้านค้าไม่ได้มีสถานะอนุมัติ (approved) ให้ระบุว่าไม่พบร้าน
+    if (!shop || shop.status !== 'approved') {
+      return res.status(404).json({ success: false, message: "ไม่พบร้านค้านี้ในระบบ หรือร้านค้าถูกระงับการใช้งาน" });
     }
 
     const { data: serviceTypes, error: stError } = await supabase
@@ -419,7 +411,8 @@ export const getCustomerShops = async (req: Request, res: Response) => {
         service_type (
           type
         )
-      `);
+      `)
+      .eq("status", "approved"); // 🛑 กรองเฉพาะสถานะ approved
 
     if (error) throw error;
 
@@ -442,7 +435,7 @@ export const getCustomerShops = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 5. [เพิ่มใหม่] ยื่นเรื่องขอเปลี่ยน/เพิ่มบัญชีธนาคาร (ฝั่งร้านค้า - Status: Pending)
+// 5. ยื่นเรื่องขอเปลี่ยน/เพิ่มบัญชีธนาคาร (ฝั่งร้านค้า - Status: Pending)
 // ==========================================
 export const requestBankAccountUpdate = async (req: Request, res: Response) => {
   try {
@@ -452,7 +445,6 @@ export const requestBankAccountUpdate = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "กรุณากรอกข้อมูลบัญชีธนาคารให้ครบถ้วน" });
     }
 
-    // บันทึกข้อมูลบัญชีธนาคารใหม่ลงตารางโดยกำหนด status เป็น 'pending'
     const { data, error } = await supabase
       .from("bank_account")
       .insert([
@@ -461,7 +453,7 @@ export const requestBankAccountUpdate = async (req: Request, res: Response) => {
           bank_name,
           account_number,
           account_name,
-          status: "pending", // 🌟 ตั้งค่าให้รอ Admin ตรวจสอบ
+          status: "pending",
         },
       ])
       .select()
@@ -481,7 +473,7 @@ export const requestBankAccountUpdate = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 6. [เพิ่มใหม่] ดึงข้อมูลบัญชีธนาคารที่อนุมัติแล้ว (สำหรับลูกค้าชำระเงิน)
+// 6. ดึงข้อมูลบัญชีธนาคารที่อนุมัติแล้ว (สำหรับลูกค้าชำระเงิน)
 // ==========================================
 export const getApprovedBankAccount = async (req: Request, res: Response) => {
   try {
@@ -491,7 +483,6 @@ export const getApprovedBankAccount = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "กรุณาระบุ shopId" });
     }
 
-    // 🌟 ดึงเฉพาะบัญชีที่อนุมัติแล้ว (approved) เพื่อความปลอดภัย
     const { data: bankInfo, error } = await supabase
       .from("bank_account")
       .select("*")
@@ -509,5 +500,4 @@ export const getApprovedBankAccount = async (req: Request, res: Response) => {
     console.error("Get approved bank account error:", error.message);
     return res.status(500).json({ success: false, message: error.message });
   }
-  
 };

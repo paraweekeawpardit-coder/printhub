@@ -55,7 +55,7 @@ export const getOrdersByStatus = async (
     // ซิงก์สถานะอัตโนมัติก่อนดึงข้อมูล
     await syncAutoStatuses(shop_id);
 
-    // 1. สร้าง Query ตั้งต้น
+    // 1. สร้าง Query Builder
     let query = supabase
       .from("print_order")
       .select(
@@ -104,7 +104,7 @@ export const getOrdersByStatus = async (
       query = query.eq("current_status.state", status);
     }
 
-    // 3. ดึงข้อมูลและเรียงลำดับเวลา
+    // สั่ง Query ข้อมูลและเรียงลำดับ order_date
     const { data: orders, error } = await query.order("order_date", {
       ascending: false,
     });
@@ -140,6 +140,7 @@ export const getOrdersByStatus = async (
           computedStatus === "รอการดำเนินการ" ||
           computedStatus === "รอการดำเนินงาน";
 
+        // ยกเลิกอัตโนมัติเฉพาะเมื่อถึงเวลารับแล้วยังเป็นรอการดำเนินงาน/กำลังพิมพ์
         const appointmentTimeStr =
           order.appointment_time || order.receive_date;
 
@@ -203,6 +204,7 @@ export const getOrdersByStatus = async (
       ยกเลิกการพิมพ์: 5,
     };
 
+    // จัดเรียงข้อมูล (Status Priority -> เวลารับที่ใกล้ถึงขึ้นก่อน)
     const getPickupTime = (o: ResultOrder) => {
       const t = new Date(o.pickup_time || o.date).getTime();
       return isNaN(t) ? new Date(o.date).getTime() : t;

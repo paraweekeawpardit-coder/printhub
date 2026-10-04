@@ -121,7 +121,7 @@ export default function OrderPage() {
   const handleVerifyPayment = useCallback(
     async (orderId: string, isVerified: boolean) => {
       const newStatus = isVerified ? "กำลังพิมพ์" : "รอการชำระเงิน";
-      const config = { params: { shop_id } };
+      const config = { params: { shopId } };
 
       try {
         await axios.patch(
@@ -139,7 +139,7 @@ export default function OrderPage() {
         console.error("Verify payment and update status error:", error);
       }
     },
-    [shop_id, getOrder]
+    [shopId, getOrder]
   );
 
   return (
