@@ -112,8 +112,11 @@ export default function PaymentActionButton({
 
   // นำทางไปหน้าชำระเงิน
   const handleGoToPayment = () => {
-    const priceParam = order.total_price ? `?totalPrice=${order.total_price}` : "";
-    router.push(`/customer/order/payment/${order.id}${priceParam}`);
+    const queryParams = new URLSearchParams({
+      totalPrice: String(order.total_price || 0),
+      ...(order.expires_at ? { expiresAt: order.expires_at } : {}),
+    });
+    router.push(`/customer/order/payment/${order.id}?${queryParams.toString()}`);
   };
 
   return (

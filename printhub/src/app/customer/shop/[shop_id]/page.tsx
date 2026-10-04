@@ -18,7 +18,7 @@ export default function ShopMainPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // 🌟 ดึง shopId ให้ครอบคลุมทุกชื่อ parameter ของ Next.js
+  // ดึง shopId ให้ครอบคลุมทุกชื่อ parameter ของ Next.js
   const shopId = (params?.shop_id || params?.id || "") as string;
 
   const [shop, setShop] = useState<any>(null);
@@ -37,7 +37,6 @@ export default function ShopMainPage() {
     if (cid && !cid.startsWith("customer_")) {
       setCustomerId(cid);
     } else {
-      alert("กรุณาเข้าสู่ระบบก่อนเลือกสั่งพิมพ์");
       router.push("/auth");
     }
   }, [router]);
@@ -49,7 +48,7 @@ export default function ShopMainPage() {
   }, [searchParams]);
 
   const isShopOpen = useMemo(() => {
-    if (!shop) return true; // ป้องกันพังถ้ายังไม่มีข้อมูลร้าน
+    if (!shop) return true;
     try {
       return checkIsShopOpen(shop);
     } catch {
@@ -85,7 +84,6 @@ export default function ShopMainPage() {
         const jsonCart = await resCart.json();
 
         if (jsonCart.success && jsonCart.data) {
-          // จำนวนรวมทุกร้านสำหรับ NavBar
           let globalTotal = 0;
           if (typeof jsonCart.data.total_items === "number") {
             globalTotal = jsonCart.data.total_items;
@@ -99,7 +97,6 @@ export default function ShopMainPage() {
           }
           setTotalCartCount(globalTotal);
 
-          // รายการเฉพาะร้านนี้สำหรับ Bottom Bar และ Drawer
           let currentShopItems: any[] = [];
           if (Array.isArray(jsonCart.data.shops)) {
             const currentShop = jsonCart.data.shops.find(
@@ -130,7 +127,7 @@ export default function ShopMainPage() {
   };
 
   useEffect(() => {
-    if (shopId) {
+    if (shopId && customerId) {
       loadData(customerId);
     }
   }, [shopId, customerId]);
@@ -168,7 +165,7 @@ export default function ShopMainPage() {
       const json = await res.json();
 
       if (!res.ok || !json.success) {
-        alert(json.message || "ไม่สามารถเพิ่มลงตะกร้าได้");
+        console.warn(json.message);
         return;
       }
 
@@ -179,7 +176,6 @@ export default function ShopMainPage() {
       }
     } catch (err) {
       console.error("Add item to cart error:", err);
-      alert("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
     }
   };
 
@@ -210,13 +206,7 @@ export default function ShopMainPage() {
   };
 
   const handleProceedToPayment = async (appointmentData: any) => {
-    if (!shopId) {
-      alert("ไม่พบรหัสร้านค้า");
-      return;
-    }
-
-    if (!cartItems || cartItems.length === 0) {
-      alert("ไม่มีสินค้าในตะกร้า กรุณาเลือกรายการพิมพ์ก่อนครับ");
+    if (!shopId || !cartItems || cartItems.length === 0) {
       return;
     }
 
@@ -265,26 +255,23 @@ export default function ShopMainPage() {
 
       const result = await res.json();
 
+      // ลบคำสั่ง alert ออก และแสดงข้อความผ่าน console.warn แทน
       if (!res.ok || !result.success) {
-        alert(result.message || "ไม่สามารถสร้างคำสั่งซื้อได้");
+        console.warn("Order creation notice:", result.message || "ไม่สามารถสร้างคำสั่งซื้อได้");
         return;
       }
 
-      // 🌟 1. ดึง order_id, total_price และ expires_at ที่ส่งมาจาก Backend
       const realOrderId = result.data?.order_id || result.data?.id || fallbackOrderId;
       const finalPrice = result.data?.total_price || appointmentData.total_price || formattedItems.reduce((a, b) => a + b.totalPrice, 0);
       const expiresAt = result.data?.expires_at || "";
 
-      // 🌟 2. เคลียร์ State ตะกร้าบนหน้าจอทันที
       setCartItems([]);
       setIsCartOpen(false);
       setTotalCartCount(0);
 
-      // 🌟 3. อัปเดต payload ใน sessionStorage
       pendingOrderPayload.id = realOrderId;
       sessionStorage.setItem("pending_order_data", JSON.stringify(pendingOrderPayload));
 
-      // 🌟 4. นำทางไปหน้า payment พร้อมส่ง totalPrice และ expiresAt ผ่าน query params
       const queryParams = new URLSearchParams({
         totalPrice: String(finalPrice),
         ...(expiresAt ? { expiresAt } : {}),
@@ -293,10 +280,6 @@ export default function ShopMainPage() {
       router.push(`/customer/order/payment/${realOrderId}?${queryParams.toString()}`);
     } catch (err: any) {
       console.error("Order API exception:", err);
-      const finalPrice =
-        appointmentData.total_price ||
-        formattedItems.reduce((a, b) => a + b.totalPrice, 0);
-      router.push(`/customer/order/payment/${fallbackOrderId}?totalPrice=${finalPrice}`);
     } finally {
       setIsSubmittingOrder(false);
     }
@@ -330,10 +313,8 @@ export default function ShopMainPage() {
         <ShopBackButton />
 
         <main className="space-y-6">
-          {/* แสดงการ์ดข้อมูลร้านค้า */}
           {updatedShop && <ShopHeaderCard shop={updatedShop} />}
 
-          {/* แสดงตารางบริการของร้าน */}
           <ServiceMenuGrid
             services={services}
             onSelectService={(srv) => setSelectedService(srv)}

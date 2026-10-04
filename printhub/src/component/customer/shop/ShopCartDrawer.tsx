@@ -23,7 +23,7 @@ interface ShopCartDrawerProps {
   isOpen?: boolean;
   onClose?: () => void;
   onClearCart: () => void;
-  onRemoveItem?: (itemId: string) => void; // 🌟 ฟังก์ชันลบทีละรายการ
+  onRemoveItem?: (itemId: string) => void;
   onProceedToPayment: (appointmentData: {
     receive_date: string;
     appointment_time: string;
@@ -67,15 +67,22 @@ export default function ShopCartDrawer({
     0
   );
 
+  // 🌟 คำนวณเวลาปัจจุบัน + 30 นาที
   const getNowInfo = () => {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const currentTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    return { todayStr, currentTimeStr };
+
+    // เวลาขั้นต่ำล่วงหน้า 30 นาที
+    const minTimeObj = new Date(now.getTime() + 31 * 60 * 1000);
+    const minDateStr = `${minTimeObj.getFullYear()}-${String(minTimeObj.getMonth() + 1).padStart(2, "0")}-${String(minTimeObj.getDate()).padStart(2, "0")}`;
+    const minAllowedTimeStr = `${String(minTimeObj.getHours()).padStart(2, "0")}:${String(minTimeObj.getMinutes()).padStart(2, "0")}`;
+
+    return { todayStr, currentTimeStr, minDateStr, minAllowedTimeStr };
   };
 
   const handleConfirmCheckout = () => {
-    const { todayStr, currentTimeStr } = getNowInfo();
+    const { todayStr, minAllowedTimeStr } = getNowInfo();
 
     if (!appointmentDate || !appointmentTime) {
       setTimeError("กรุณาระบุวันและเวลานัดหมายให้ครบถ้วน");
@@ -96,13 +103,32 @@ export default function ShopCartDrawer({
     const shopClose = shop?.close_time ? shop.close_time.slice(0, 5) : "18:00";
     const selectedTime = appointmentTime.slice(0, 5);
 
+    // ตรวจสอบเวลาทำการของร้าน
     if (selectedTime < shopOpen || selectedTime > shopClose) {
       setTimeError(`เวลานัดรับต้องอยู่ระหว่างเวลาทำการ (${shopOpen} - ${shopClose} น.)`);
       return;
     }
 
-    if (appointmentDate === todayStr && selectedTime < currentTimeStr) {
-      setTimeError(`เวลานัดรับต้องมากกว่าหรือเท่ากับเวลาปัจจุบัน (ขณะนี้เวลา ${currentTimeStr} น.)`);
+    // 🌟 ดักเงื่อนไข: ตรวจสอบว่านัดรับล่วงหน้าอย่างน้อย 30 นาทีขึ้นไป
+    const selectedDateTime = new Date(`${appointmentDate}T${selectedTime}:00`);
+    const now = new Date();
+    const nowWithoutSeconds = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      now.getHours(),
+      now.getMinutes(),
+      0
+    );
+
+    const diffInMinutes = Math.round(
+      (selectedDateTime.getTime() - nowWithoutSeconds.getTime()) / (1000 * 60)
+    );
+
+    if (diffInMinutes < 30) {
+      setTimeError(
+        `กรุณาเลือกเวลานัดรับตั้งแต่ ${minAllowedTimeStr} น. เป็นต้นไป (ล่วงหน้าอย่างน้อย 30 นาที))`
+      );
       return;
     }
 
@@ -115,9 +141,17 @@ export default function ShopCartDrawer({
     });
   };
 
-  const { todayStr, currentTimeStr } = getNowInfo();
+  const { todayStr, minAllowedTimeStr } = getNowInfo();
   const shopOpen = shop?.open_time ? shop.open_time.slice(0, 5) : "08:00";
   const shopClose = shop?.close_time ? shop.close_time.slice(0, 5) : "18:00";
+
+  // คำนวณเวลาเริ่มต้นที่ยอมให้เลือกในช่อง input type="time"
+  const calculatedMinTime =
+    appointmentDate === todayStr
+      ? minAllowedTimeStr > shopOpen
+        ? minAllowedTimeStr
+        : shopOpen
+      : shopOpen;
 
   return (
     <>
@@ -228,7 +262,6 @@ export default function ShopCartDrawer({
                           ฿{Number(item.subtotal || item.quantity * item.unit_price).toFixed(2)}
                         </span>
 
-                        {/* 🌟 ปุ่มลบรายการนี้รายการเดียว */}
                         <button
                           type="button"
                           onClick={() => onRemoveItem && onRemoveItem(item.id)}
@@ -243,7 +276,7 @@ export default function ShopCartDrawer({
                 )}
               </div>
 
-              {/* นัดหมายวันและเวลา (FR-2.8) */}
+              {/* นัดหมายวันและเวลา */}
               <div className="space-y-3 pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700 block">นัดหมายวันและเวลารับเอกสาร</span>
@@ -267,16 +300,12 @@ export default function ShopCartDrawer({
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">เวลารับ</label>
+                    <label className="text-[11px] text-slate-400 block mb-1">
+                      เวลารับ <span className="text-blue-600">(ล่วงหน้ามากกว่า 30 นาที)</span>
+                    </label>
                     <input
                       type="time"
-                      min={
-                        appointmentDate === todayStr
-                          ? currentTimeStr > shopOpen
-                            ? currentTimeStr
-                            : shopOpen
-                          : shopOpen
-                      }
+                      min={calculatedMinTime}
                       max={shopClose}
                       value={appointmentTime}
                       onChange={(e) => {
