@@ -10,7 +10,9 @@ type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+// 🟢 ปรับ Fallback หรือลบ Slash ท้าย URL ป้องกัน URL ซ้ำซ้อน
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_URL = rawApiUrl.replace(/\/+$/, "");
 
 export default function LoginForm({ setRegis }: RegisFormProps) {
   const router = useRouter();
@@ -27,7 +29,8 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
     setLoading(true);
 
     try {
-      const res = await axios.post(`${API_URL}/auth/login`, logindata);
+      // 🟢 แก้จาก /auth/login เป็น /api/auth/login ให้ตรงกับ Express Backend
+      const res = await axios.post(`${API_URL}/api/auth/login`, logindata);
 
       if (!res.data.token) return;
 
@@ -37,7 +40,7 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
         case "admin":
           localStorage.setItem("id", res.data.id);
           localStorage.setItem("username", res.data.name);
-          router.push("/admin");
+          router.push("/admin/login");
           break;
         case "owner":
           localStorage.setItem("id", res.data.id);
@@ -77,8 +80,8 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
 
         <button
           type="button"
-          onClick={() => router.push("/admin")}
-          title="ไปที่หน้า Admin"
+          onClick={() => router.push("/admin/login")}
+          title="ไปที่หน้าเข้าสู่ระบบ Admin"
           className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-navy transition hover:bg-primary hover:text-white"
         >
           <ShieldCheck size={14} />

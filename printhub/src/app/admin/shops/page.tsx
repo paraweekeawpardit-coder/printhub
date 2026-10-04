@@ -1,402 +1,740 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import {
+  FileText,
+  Landmark,
+  Store,
+  AlertCircle,
+  CheckCircle2,
+  RotateCw,
+  MessageSquareWarning,
+  ShieldCheck,
+} from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
-interface Shop {
-  id: string;
-  shop_name: string;
-  owner_name: string;
-  email: string;
-  phone: string;
-  profile_image?: string;
-  open_time?: string;
-  close_time?: string;
-  is_verify: boolean;
-  created_at?: string;
+import ShopCard, { Shop } from "../../../component/admin/ShopCard";
+import ShopDetailModal from "../../../component/admin/ShopDetailModal";
+import BankRequestCard, {
+  BankChangeRequest,
+} from "../../../component/admin/BankRequestCard";
+import AllShopsTable from "../../../component/admin/AllShopsTable";
+import ConfirmModal, {
+  ConfirmModalState,
+} from "../../../component/admin/ConfirmModal";
+import PendingShopsTab from "../../../component/admin/PendingShopsTab";
+import ShopFilterControls from "../../../component/admin/ShopFilterControls";
+import PaginationBar from "../../../component/admin/PaginationBar";
+
+export interface ShopAppeal {
+  id: string | number;
+  shop_id: string | number;
+  subject: string;
+  message: string;
+  status: string;
+  created_at: string;
+  shop?: {
+    shop_name?: string;
+    profile_image?: string;
+    email?: string;
+  };
 }
 
-export default function ShopsPage() {
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+
+const getImageUrl = (url?: string) => {
+  if (!url) return undefined;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+
+  const cleanUrl = url.startsWith("/") ? url.slice(1) : url;
+  return `${BACKEND_URL}/${cleanUrl}`;
+};
+
+const formatAddressString = (addrData: any) => {
+  if (!addrData) return "";
+  if (typeof addrData === "string") return addrData;
+  if (typeof addrData === "object") {
+    const parts = [
+      addrData.detail || addrData.house_number || addrData.address,
+      addrData.subdistrict || addrData.sub_district || addrData.tambon,
+      addrData.district || addrData.amphoe,
+      addrData.province || addrData.changwat,
+      addrData.postcode || addrData.postal_code || addrData.zipcode,
+    ];
+    return parts.filter(Boolean).join(" ").trim();
+  }
+  return "";
+};
+
+function ShopsContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+
+  const [activeTab, setActiveTab] = useState<
+    "pending" | "bank" | "all" | "appeals"
+  >(
+    tabParam === "all"
+      ? "all"
+      : tabParam === "bank"
+      ? "bank"
+      : tabParam === "appeals"
+      ? "appeals"
+      : "pending"
+  );
+
   const [pendingShops, setPendingShops] = useState<Shop[]>([]);
+  const [bankRequests, setBankRequests] = useState<BankChangeRequest[]>([]);
+  const [allShops, setAllShops] = useState<Shop[]>([]);
+  const [appeals, setAppeals] = useState<ShopAppeal[]>([]);
+
+  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "ALL" | "APPROVED" | "SUSPENDED"
+  >("ALL");
+  const [sortBy, setSortBy] = useState<
+    "newest" | "oldest" | "name_asc" | "name_desc"
+  >("newest");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
-  useEffect(() => {
-    fetchPendingShops();
-  }, []);
+  const handleResetFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("ALL");
+    setSortBy("newest");
+    setCurrentPage(1);
+  };
 
-  // ดึงข้อมูลร้านค้า status = 'pending' จาก Supabase ผ่าน Backend API
-  const fetchPendingShops = async () => {
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({
+    isOpen: false,
+    title: "",
+    message: "",
+    type: "approve",
+    onConfirm: () => {},
+  });
+
+  const closeConfirmModal = () => {
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const fetchAllInitialData = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg(null);
     try {
-      setLoading(true);
-      setErrorMsg(null);
-      const res = await fetch(`${API_URL}/shops/pending`);
+      const [pendingRes, bankRes, allRes, appealsRes] = await Promise.all([
+        fetch(`${API_URL}/shops/pending`).catch(() => null),
+        fetch(`${API_URL}/bank-accounts/pending`).catch(() => null),
+        fetch(`${API_URL}/shops/all`).catch(() => null),
+        fetch(`${API_URL}/appeals`).catch(() => null),
+      ]);
 
-      if (!res.ok) {
-        throw new Error(`เกิดข้อผิดพลาดจากเซิร์ฟเวอร์ (${res.status})`);
+      if (pendingRes && pendingRes.ok) {
+        const result = await pendingRes.json();
+        const data = result.data || result;
+        const formatted = (Array.isArray(data) ? data : []).map((s: any) => ({
+          ...s,
+          profile_image: getImageUrl(s.profile_image || s.logoUrl),
+        }));
+        setPendingShops(formatted);
       }
 
-      const data = await res.json();
-      setPendingShops(Array.isArray(data) ? data : []);
+      if (bankRes && bankRes.ok) {
+        const result = await bankRes.json();
+        const data = result.data || result;
+        const formatted = (Array.isArray(data) ? data : []).map(
+          (req: any) => ({
+            ...req,
+            created_at:
+              req.created_at ||
+              req.createdAt ||
+              req.requested_at ||
+              req.updated_at,
+            shopLogo: getImageUrl(
+              req.shopLogo || req.logoUrl || req.shop?.profile_image
+            ),
+          })
+        );
+        setBankRequests(formatted);
+      }
+
+      if (allRes && allRes.ok) {
+        const result = await allRes.json();
+        const data = result.data || result;
+        const formatted = (Array.isArray(data) ? data : []).map((s: any) => ({
+          ...s,
+          profile_image: getImageUrl(s.profile_image || s.logoUrl),
+        }));
+        setAllShops(formatted);
+      }
+
+      if (appealsRes && appealsRes.ok) {
+        const result = await appealsRes.json();
+        const data = result.data || result;
+        setAppeals(Array.isArray(data) ? data : []);
+      }
     } catch (err: any) {
-      console.error("Fetch Pending Shops Error:", err);
-      setErrorMsg(err.message || "ไม่สามารถดึงข้อมูลร้านค้าได้");
-    } fontFinally: {
+      console.error("Fetch Data Error:", err);
+      setErrorMsg(err.message || "ไม่สามารถดึงข้อมูลได้");
+    } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // ส่งคำขออนุมัติหรือปฏิเสธไปยัง Supabase
-  const handleVerifyShop = async (shop_id: string, action: "approve" | "reject") => {
-    const actionText = action == "approve" ? "อนุมัติ" : "ปฏิเสธ";
-    if (!window.confirm(`คุณต้องการ${actionText}ร้านค้านี้ใช่หรือไม่?`)) return;
+  useEffect(() => {
+    fetchAllInitialData();
+  }, [fetchAllInitialData]);
 
-    try {
-      const res = await fetch(`${API_URL}/shops/verify`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shop_id, action }),
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, sortBy, activeTab]);
+
+  const filteredAndSortedShops = useMemo(() => {
+    let result = [...allShops];
+
+    if (searchTerm.trim() !== "") {
+      const term = searchTerm.toLowerCase();
+      result = result.filter((shop: any) => {
+        const name = (shop.shop_name || shop.name || "").toLowerCase();
+        const owner = (shop.owner_name || shop.ownerName || "").toLowerCase();
+        const phone = (shop.phone || "").toLowerCase();
+        const email = (shop.email || "").toLowerCase();
+        return (
+          name.includes(term) ||
+          owner.includes(term) ||
+          phone.includes(term) ||
+          email.includes(term)
+        );
       });
+    }
 
-      const result = await res.json();
+    if (statusFilter !== "ALL") {
+      result = result.filter((shop: any) => {
+        const status = (shop.status || "APPROVED").toUpperCase();
+        return status === statusFilter;
+      });
+    }
 
-      if (!res.ok) {
-        throw new Error(result.error || "การอัปเดตสถานะล้มเหลว");
+    result.sort((a: any, b: any) => {
+      if (sortBy === "newest") {
+        return (
+          new Date(b.created_at || b.createdAt || b.id || 0).getTime() -
+          new Date(a.created_at || a.createdAt || a.id || 0).getTime()
+        );
+      }
+      if (sortBy === "oldest") {
+        return (
+          new Date(a.created_at || a.createdAt || a.id || 0).getTime() -
+          new Date(b.created_at || b.createdAt || b.id || 0).getTime()
+        );
+      }
+      if (sortBy === "name_asc") {
+        return (a.shop_name || a.name || "").localeCompare(
+          b.shop_name || b.name || "",
+          "th"
+        );
+      }
+      if (sortBy === "name_desc") {
+        return (b.shop_name || b.name || "").localeCompare(
+          a.shop_name || a.name || "",
+          "th"
+        );
+      }
+      return 0;
+    });
+
+    return result;
+  }, [allShops, searchTerm, statusFilter, sortBy]);
+
+  const totalItems = filteredAndSortedShops.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const paginatedShops = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredAndSortedShops.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredAndSortedShops, currentPage]);
+
+  const executeVerifyShop = async (
+    shop_id: string | number,
+    action: "approve" | "reject"
+  ) => {
+    try {
+      const adminId =
+        typeof window !== "undefined"
+          ? localStorage.getItem("admin_id")
+          : null;
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
       }
 
-      // ลบรายการที่อนุมัติ/ปฏิเสธแล้วออกจาก State
-      setPendingShops((prev) => prev.filter((shop) => shop.id !== shop_id));
-      alert(`ทำรายการ${actionText}ร้านค้าเรียบร้อยแล้ว`);
+      const res = await fetch(`${API_URL}/shops/verify`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({
+          shop_id,
+          action,
+          admin_id: adminId,
+          verified_by: adminId,
+        }),
+      });
+      if (!res.ok) throw new Error("การอัปเดตสถานะล้มเหลว");
+
+      setPendingShops((prev) =>
+        prev.filter((s) => String(s.id || (s as any)._id) !== String(shop_id))
+      );
+      setSelectedShop(null);
+      fetchAllInitialData();
     } catch (err: any) {
-      console.error("Verify Shop Error:", err);
-      alert(`เกิดข้อผิดพลาด: ${err.message}`);
+      console.error("Verify Shop Error:", err.message);
+    } finally {
+      closeConfirmModal();
     }
   };
 
-  const formatTime = (timeStr?: string) => {
-    if (!timeStr) return "ไม่ระบุ";
-    return timeStr.slice(0, 5) + " น.";
+  const handleVerifyShop = (
+    shop_id: string | number,
+    action: "approve" | "reject"
+  ) => {
+    const actionText = action === "approve" ? "อนุมัติ" : "ปฏิเสธ";
+    setConfirmModal({
+      isOpen: true,
+      title: `ยืนยันการ${actionText}ร้านค้า`,
+      message: `คุณต้องการ${actionText}คำขอเปิดร้านค้านี้ใช่หรือไม่?`,
+      type: action === "approve" ? "approve" : "reject",
+      onConfirm: () => executeVerifyShop(shop_id, action),
+    });
   };
 
+  const executeVerifyBank = async (
+    requestId: string,
+    action: "approve" | "reject"
+  ) => {
+    try {
+      const res = await fetch(`${API_URL}/bank-accounts/verify`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: requestId, action }),
+      });
+      if (!res.ok) throw new Error("การดำเนินการล้มเหลว");
+
+      setBankRequests((prev) => prev.filter((item) => item.id !== requestId));
+      fetchAllInitialData();
+    } catch (err: any) {
+      console.error("Verify Bank Error:", err.message);
+    } finally {
+      closeConfirmModal();
+    }
+  };
+
+  const handleVerifyBank = (
+    requestId: string,
+    action: "approve" | "reject"
+  ) => {
+    const actionText = action === "approve" ? "อนุมัติ" : "ปฏิเสธ";
+    setConfirmModal({
+      isOpen: true,
+      title: `ยืนยันการ${actionText}เปลี่ยนบัญชีธนาคาร`,
+      message: `คุณต้องการ${actionText}คำขอเปลี่ยนบัญชีธนาคารนี้ใช่หรือไม่?`,
+      type: action === "approve" ? "approve" : "reject",
+      onConfirm: () => executeVerifyBank(requestId, action),
+    });
+  };
+
+  const executeToggleSuspendShop = async (
+    shop_id: string | number,
+    currentStatus: string,
+    reason?: string
+  ) => {
+    try {
+      const normalizedStatus = (currentStatus || "").toLowerCase();
+      const isSuspending =
+        normalizedStatus !== "suspended" && normalizedStatus !== "banned";
+
+      const res = await fetch(`${API_URL}/shops/suspend`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shop_id, suspend: isSuspending, reason }),
+      });
+      if (!res.ok) throw new Error("การเปลี่ยนสถานะล้มเหลว");
+
+      setAllShops((prev) =>
+        prev.map((shop) =>
+          String(shop.id || (shop as any)._id) === String(shop_id)
+            ? ({
+                ...shop,
+                status: isSuspending ? "suspended" : "approved",
+                suspend_reason: isSuspending ? reason || undefined : undefined,
+              } as Shop)
+            : shop
+        )
+      );
+
+      fetchAllInitialData();
+    } catch (err: any) {
+      console.error("Toggle Suspend Error:", err.message);
+    } finally {
+      closeConfirmModal();
+    }
+  };
+
+  const handleToggleSuspendShop = (
+    shop_id: string | number,
+    currentStatus: string,
+    reason?: string
+  ) => {
+    if (reason) {
+      executeToggleSuspendShop(shop_id, currentStatus, reason);
+      return;
+    }
+
+    const normalizedStatus = (currentStatus || "").toLowerCase();
+    const isSuspending =
+      normalizedStatus !== "suspended" && normalizedStatus !== "banned";
+    const actionText = isSuspending ? "ระงับการใช้งาน" : "ปลดการระงับ";
+
+    setConfirmModal({
+      isOpen: true,
+      title: `ยืนยันการ${actionText}`,
+      message: `คุณต้องการ${actionText}ร้านค้านี้ใช่หรือไม่?`,
+      type: isSuspending ? "reject" : "approve",
+      onConfirm: () => executeToggleSuspendShop(shop_id, currentStatus),
+    });
+  };
+
+  const rawAddress = selectedShop
+    ? selectedShop.address ||
+      (selectedShop as any).Address ||
+      (selectedShop as any).full_address ||
+      (selectedShop as any).address_detail
+    : null;
+
+  const formattedSelectedShop = selectedShop
+    ? {
+        _id: String(selectedShop.id || (selectedShop as any)._id || ""),
+        name:
+          selectedShop.shop_name ||
+          (selectedShop as any).name ||
+          "ไม่ระบุชื่อร้าน",
+        ownerName:
+          selectedShop.owner_name ||
+          (selectedShop as any).ownerName ||
+          "ไม่ระบุ",
+        email: selectedShop.email || "",
+        phone: selectedShop.phone || "",
+        openTime: selectedShop.open_time || (selectedShop as any).openTime,
+        closeTime: selectedShop.close_time || (selectedShop as any).closeTime,
+        address: formatAddressString(rawAddress),
+        description: (selectedShop as any).description,
+        logoUrl: getImageUrl(
+          selectedShop.profile_image || (selectedShop as any).logoUrl
+        ),
+        documentUrl: getImageUrl(
+          (selectedShop as any).documentUrl ||
+            (selectedShop as any).id_card_image
+        ),
+        status: (selectedShop.status || "PENDING") as any,
+      }
+    : null;
+
+  // กรองคำร้องที่ยังอยู่สถานะ pending สำหรับตัวนับBadge
+  const pendingAppealsCount = appeals.filter(a => a.status === 'pending').length;
+
   return (
-    <div className="shops-container">
-      {/* Header Section */}
-      <div className="page-header">
-        <div>
-          <h2 className="section-title">ตรวจสอบและอนุมัติร้านค้า</h2>
-          <p className="subtitle">คำขอลงทะเบียนร้านค้าใหม่ที่รอการตรวจสอบข้อมูลในระบบ</p>
-        </div>
-        <div className="pending-badge">
-          <span>รอการอนุมัติ</span>
-          <strong className="count">{pendingShops.length}</strong>
-        </div>
+    <div className="max-w-7xl mx-auto px-4 py-6 font-['Prompt',sans-serif] text-slate-900">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
+          ศูนย์จัดการร้านค้า (Admin Panel)
+        </h2>
+        <p className="text-sm text-slate-500 mt-1">
+          ตรวจสอบคำขอใหม่ บัญชีธนาคาร และจัดการสถานะร้านค้าในระบบ
+        </p>
       </div>
 
-      {/* Error State */}
+      {/* Tabs Menu */}
+      <div className="flex gap-4 border-b border-slate-200 mb-6 overflow-x-auto">
+        <button
+          type="button"
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "pending"
+              ? "border-sky-600 text-sky-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+          onClick={() => setActiveTab("pending")}
+        >
+          <FileText size={18} />
+          <span>คำขอสมัครใหม่</span>
+          {pendingShops.length > 0 && (
+            <span className="bg-sky-600 text-white text-xs px-2 py-0.5 rounded-full">
+              {pendingShops.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "bank"
+              ? "border-sky-600 text-sky-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+          onClick={() => setActiveTab("bank")}
+        >
+          <Landmark size={18} />
+          <span>เปลี่ยนบัญชีธนาคาร</span>
+          {bankRequests.length > 0 && (
+            <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full">
+              {bankRequests.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "appeals"
+              ? "border-sky-600 text-sky-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+          onClick={() => setActiveTab("appeals")}
+        >
+          <MessageSquareWarning size={18} />
+          <span>คำขอปลดระงับ</span>
+          {pendingAppealsCount > 0 && (
+            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+              {pendingAppealsCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === "all"
+              ? "border-sky-600 text-sky-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+          onClick={() => setActiveTab("all")}
+        >
+          <Store size={18} />
+          <span>ร้านค้าทั้งหมดในระบบ</span>
+          <span className="bg-slate-400 text-white text-xs px-2 py-0.5 rounded-full">
+            {allShops.length}
+          </span>
+        </button>
+      </div>
+
       {errorMsg && (
-        <div className="error-box">
-          <p>⚠️ {errorMsg}</p>
-          <button onClick={fetchPendingShops} className="btn-retry">ลองใหม่</button>
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={20} className="text-rose-600" />
+            <span>{errorMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchAllInitialData}
+            className="bg-rose-700 text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-rose-800 transition cursor-pointer"
+          >
+            <RotateCw size={14} /> ลองใหม่
+          </button>
         </div>
       )}
 
-      {/* Content Area */}
       {loading ? (
-        <div className="loading-state">กำลังเชื่อมต่อข้อมูลกับ Supabase...</div>
-      ) : pendingShops.length === 0 ? (
-        <div className="empty-card">
-          <div className="empty-icon">✓</div>
-          <h3>ไม่มีคำขออนุมัติในขณะนี้</h3>
-          <p>ร้านค้าทั้งหมดในระบบได้รับการตรวจสอบเรียบร้อยแล้ว</p>
+        <div className="text-center py-16 text-slate-500 flex flex-col items-center gap-3">
+          <RotateCw size={28} className="animate-spin text-sky-600" />
+          <p>กำลังเชื่อมต่อข้อมูล...</p>
         </div>
       ) : (
-        <div className="shop-grid">
-          {pendingShops.map((shop) => (
-            <div key={shop.id} className="shop-card">
-              <div className="card-top">
-                <div className="avatar-wrapper">
-                  {shop.profile_image ? (
-                    <img src={shop.profile_image} alt={shop.shop_name} className="avatar-img" />
-                  ) : (
-                    <div className="avatar-placeholder">
-                      {shop.shop_name?.charAt(0) || "S"}
+        <>
+          {/* TAB 1: คำขอสมัครใหม่ */}
+          {activeTab === "pending" && (
+            <PendingShopsTab
+              shops={pendingShops}
+              onVerify={handleVerifyShop}
+              onSelectShop={(shop) => setSelectedShop(shop)}
+            />
+          )}
+
+          {/* TAB 2: เปลี่ยนบัญชีธนาคาร */}
+          {activeTab === "bank" &&
+            (bankRequests.length === 0 ? (
+              <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-700">
+                  ไม่มีคำขอแก้ไขบัญชีธนาคาร
+                </h3>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {bankRequests.map((req) => (
+                  <BankRequestCard
+                    key={req.id}
+                    request={req}
+                    onApprove={(id) => handleVerifyBank(id, "approve")}
+                    onReject={(id) => handleVerifyBank(id, "reject")}
+                  />
+                ))}
+              </div>
+            ))}
+
+          {/* TAB 3: คำขอปลดระงับ */}
+          {activeTab === "appeals" &&
+            (appeals.length === 0 ? (
+              <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-700">
+                  ไม่มีรายการคำขอปลดระงับในขณะนี้
+                </h3>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {appeals.map((appeal) => (
+                  <div
+                    key={appeal.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-base">
+                            {appeal.shop?.shop_name || `ร้านค้า ID: ${appeal.shop_id}`}
+                          </h4>
+                          <p className="text-xs text-slate-400">
+                            {appeal.shop?.email || ""}
+                          </p>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          appeal.status === 'pending' 
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {appeal.status === 'pending' ? 'รอการตรวจสอบ' : 'อนุมัติเรียบร้อย'}
+                        </span>
+                      </div>
+
+                      <div className="my-3 space-y-1.5 text-sm">
+                        <p className="font-semibold text-slate-700">
+                          เรื่อง: {appeal.subject}
+                        </p>
+                        <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 border border-slate-100">
+                          {appeal.message}
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          วันที่ยื่นเรื่อง:{" "}
+                          {new Date(appeal.created_at).toLocaleString("th-TH")}
+                        </p>
+                      </div>
                     </div>
+
+                    {appeal.status === 'pending' && (
+                      <div className="flex justify-end pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggleSuspendShop(appeal.shop_id, "suspended")
+                          }
+                          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700 transition cursor-pointer"
+                        >
+                          <ShieldCheck size={16} />
+                          อนุมัติปลดระงับร้านค้า
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+
+          {/* TAB 4: ร้านค้าทั้งหมดในระบบ */}
+          {activeTab === "all" && (
+            <div className="space-y-4">
+              <ShopFilterControls
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
+                sortBy={sortBy}
+                setSortBy={setSortBy}
+                onResetFilters={handleResetFilters}
+              />
+
+              <div className="text-xs md:text-sm text-slate-500">
+                แสดงผล <strong>{paginatedShops.length}</strong> จาก{" "}
+                <strong>{totalItems}</strong> รายการ (ร้านค้าในระบบทั้งหมด{" "}
+                {allShops.length} รายการ)
+              </div>
+
+              {paginatedShops.length === 0 ? (
+                <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
+                  <h3 className="text-base font-semibold text-slate-700">
+                    ไม่พบข้อมูลร้านค้าที่ค้นหา
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    ลองเปลี่ยนคำค้นหาหรือกดรีเซ็ตค่าตัวกรองด้านบน
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <AllShopsTable
+                    shops={paginatedShops}
+                    onToggleSuspend={handleToggleSuspendShop}
+                  />
+
+                  {totalPages > 1 && (
+                    <PaginationBar
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                    />
                   )}
-                </div>
-                <span className="status-pill">Pending</span>
-              </div>
-
-              <div className="card-body">
-                <h3 className="shop-name">{shop.shop_name}</h3>
-                <p className="owner-name">เจ้าของร้าน: <span>{shop.owner_name || "ไม่ระบุ"}</span></p>
-
-                <div className="info-divider" />
-
-                <div className="info-list">
-                  <div className="info-item">
-                    <span className="info-label">อีเมล</span>
-                    <span className="info-value">{shop.email}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">เบอร์โทรศัพท์</span>
-                    <span className="info-value">{shop.phone || "-"}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">เวลาทำการ</span>
-                    <span className="info-value highlight">
-                      {formatTime(shop.open_time)} - {formatTime(shop.close_time)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card-actions">
-                <button
-                  className="btn btn-reject"
-                  onClick={() => handleVerifyShop(shop.id, "reject")}
-                >
-                  ปฏิเสธ
-                </button>
-                <button
-                  className="btn btn-approve"
-                  onClick={() => handleVerifyShop(shop.id, "approve")}
-                >
-                  อนุมัติร้านค้า
-                </button>
-              </div>
+                </>
+              )}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
-      <style jsx>{`
-        .shops-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          font-family: 'Prompt', 'Kanit', sans-serif;
-          color: #0F172A;
-        }
-        .page-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-end;
-          margin-bottom: 28px;
-        }
-        .section-title {
-          font-size: 1.35rem;
-          font-weight: 700;
-          color: #0F172A;
-          margin: 0 0 4px 0;
-        }
-        .subtitle {
-          font-size: 0.9rem;
-          color: #64748B;
-          margin: 0;
-        }
-        .pending-badge {
-          background-color: #F0F8FF;
-          border-radius: 12px;
-          padding: 8px 16px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 0.9rem;
-          color: #003554;
-          font-weight: 600;
-        }
-        .pending-badge .count {
-          background-color: #003554;
-          color: white;
-          padding: 2px 10px;
-          border-radius: 20px;
-          font-size: 0.85rem;
-        }
-        .error-box {
-          background-color: #FEF2F2;
-          border: 1px solid #FECDD3;
-          color: #991B1B;
-          padding: 12px 16px;
-          border-radius: 12px;
-          margin-bottom: 20px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .btn-retry {
-          background-color: #991B1B;
-          color: white;
-          border: none;
-          padding: 6px 12px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 0.8rem;
-        }
-        .shop-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-          gap: 24px;
-        }
-        .shop-card {
-          background-color: #FFFFFF;
-          border: 1px solid #E2E8F0;
-          border-radius: 16px;
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          transition: all 0.2s ease;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
-        }
-        .shop-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-          border-color: #CBD5E1;
-        }
-        .card-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 16px;
-        }
-        .avatar-wrapper {
-          width: 56px;
-          height: 56px;
-          border-radius: 14px;
-          overflow: hidden;
-          background-color: #F0F8FF;
-        }
-        .avatar-img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .avatar-placeholder {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background-color: #E0F2FE;
-          color: #0284C7;
-          font-size: 1.5rem;
-          font-weight: 700;
-        }
-        .status-pill {
-          background-color: #FEF3C7;
-          color: #D97706;
-          font-size: 0.75rem;
-          font-weight: 700;
-          padding: 4px 12px;
-          border-radius: 20px;
-          text-transform: uppercase;
-        }
-        .shop-name {
-          font-size: 1.15rem;
-          font-weight: 700;
-          color: #0F172A;
-          margin: 0 0 4px 0;
-        }
-        .owner-name {
-          font-size: 0.88rem;
-          color: #64748B;
-          margin: 0;
-        }
-        .owner-name span {
-          color: #334155;
-          font-weight: 600;
-        }
-        .info-divider {
-          height: 1px;
-          background-color: #F1F5F9;
-          margin: 16px 0;
-        }
-        .info-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-        .info-item {
-          display: flex;
-          justify-content: space-between;
-          font-size: 0.85rem;
-        }
-        .info-label {
-          color: #94A3B8;
-        }
-        .info-value {
-          color: #334155;
-          font-weight: 500;
-        }
-        .info-value.highlight {
-          color: #003554;
-          font-weight: 600;
-        }
-        .card-actions {
-          display: flex;
-          gap: 12px;
-          margin-top: 24px;
-        }
-        .btn {
-          flex: 1;
-          padding: 10px;
-          border-radius: 10px;
-          font-size: 0.88rem;
-          font-weight: 600;
-          cursor: pointer;
-          border: none;
-          transition: background-color 0.15s ease;
-        }
-        .btn-approve {
-          background-color: #003554;
-          color: white;
-        }
-        .btn-approve:hover {
-          background-color: #002238;
-        }
-        .btn-reject {
-          background-color: #FFF5F5;
-          color: #E11D48;
-          border: 1px solid #FECDD3;
-        }
-        .btn-reject:hover {
-          background-color: #FFE4E6;
-        }
-        .empty-card {
-          background-color: #FFFFFF;
-          border-radius: 16px;
-          padding: 48px;
-          text-align: center;
-          border: 1px dashed #CBD5E1;
-        }
-        .empty-icon {
-          width: 48px;
-          height: 48px;
-          background-color: #DCFCE7;
-          color: #16A34A;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.5rem;
-          margin: 0 auto 16px;
-          font-weight: bold;
-        }
-        .empty-card h3 {
-          margin: 0 0 8px;
-          color: #0F172A;
-        }
-        .empty-card p {
-          color: #64748B;
-          margin: 0;
-          font-size: 0.9rem;
-        }
-        .loading-state {
-          text-align: center;
-          padding: 40px;
-          color: #64748B;
-        }
-      `}</style>
+      {/* Modal รายละเอียดร้านค้า */}
+      {selectedShop && (
+        <ShopDetailModal
+          shop={formattedSelectedShop}
+          onClose={() => setSelectedShop(null)}
+          onApprove={(id) => handleVerifyShop(id, "approve")}
+          onReject={(id) => handleVerifyShop(id, "reject")}
+        />
+      )}
+
+      {/* Custom Confirmation Modal */}
+      <ConfirmModal modalData={confirmModal} onClose={closeConfirmModal} />
     </div>
+  );
+}
+
+export default function ShopsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-center py-16 text-slate-500 flex flex-col items-center gap-3">
+          <RotateCw size={28} className="animate-spin text-sky-600" />
+          <p>กำลังโหลด...</p>
+        </div>
+      }
+    >
+      <ShopsContent />
+    </Suspense>
   );
 }

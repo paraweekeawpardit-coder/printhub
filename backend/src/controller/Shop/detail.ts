@@ -85,6 +85,7 @@ export const getOrder = async (
         small_order_fee: Number(order.small_order_fee || 0),
         platform_fee: Number(order.platform_fee || 0),
         total_amount: Number(order.total_amount || 0),
+        total_price: Number(order.total_amount || 0),
         status_state: statusState,
         customer: {
           id: formattedCustomer?.id,
@@ -103,7 +104,7 @@ export const getOrder = async (
         review: reviewRow || null,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Backend Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
@@ -219,8 +220,8 @@ export const verifyPayment = async (
       is_verified,
       new_status: nextStatusName,
     });
-  } catch (err) {
-    console.error("Verify Payment Error:", err);
+  } catch (err: any) {
+    console.error("Update Payment Status Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };

@@ -28,6 +28,7 @@ export default function OrderDetailPage() {
   const router = useRouter();
   const orderId = (params?.id || params?.order_id) as string;
 
+  const [shopId, setShopId] = useState<string>("");
   const [order, setOrder] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
@@ -52,6 +53,9 @@ export default function OrderDetailPage() {
       const res = await axios.get(`http://localhost:5000/shop/orders/${orderId}`);
       if (res.data && res.data.order) {
         setOrder(res.data.order);
+      } else if (res.data) {
+        // กรณี API ส่งข้อมูล order กลับมาโดยตรง ไม่ได้หุ้มด้วย { order: ... }
+        setOrder(res.data);
       } else {
         throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
       }
@@ -67,6 +71,14 @@ export default function OrderDetailPage() {
   useEffect(() => {
     fetchOrder();
   }, [orderId]);
+
+  useEffect(() => {
+    if (!shopId && typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") || localStorage.getItem("id");
+      if (storedShopId) setShopId(storedShopId);
+    }
+  }, [shopId]);
 
   const handleUpdateStatus = async (nextStatus: string) => {
     try {
@@ -160,6 +172,13 @@ export default function OrderDetailPage() {
   const payment = order.payment;
   const slipUrl: string | null = payment?.slip_url || null;
   const slipVerdict: boolean | null = payment?.is_verified ?? null;
+
+  const statusStyles: Record<string, string> = {
+    รอการดำเนินงาน: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+    กำลังพิมพ์: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+    พิมพ์เสร็จสิ้น: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+    ยกเลิกการพิมพ์: "bg-red-50 text-red-700 ring-1 ring-red-200",
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">

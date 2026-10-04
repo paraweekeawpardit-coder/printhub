@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
+import { useRouter, useParams } from "next/navigation";
 
 export type OrderItemDetail = {
   id: string;
@@ -47,16 +48,17 @@ type Props = {
   onUpdateStatus?: (orderId: string, newStatus: OrderStatus) => void;
   onVerifyPayment?: (orderId: string, isVerified: boolean) => Promise<void>;
   onChatClick?: (orderId: string) => void;
+  disabled?: boolean;
 };
 
 const STATUS_CONFIG: Record<
   string,
   { dot: string; text: string; bg: string }
 > = {
-  รอการดำเนินงาน: {
-    dot: "bg-yellow-500 animate-pulse",
-    text: "text-amber-800",
-    bg: "bg-amber-100",
+  รอการดำเนินการ: {
+    dot: "bg-amber-500 animate-pulse",
+    text: "text-amber-700",
+    bg: "bg-amber-500/10",
   },
   กำลังพิมพ์: {
     dot: "bg-blue-400 animate-pulse",
@@ -67,6 +69,11 @@ const STATUS_CONFIG: Record<
     dot: "bg-blue-700",
     text: "text-blue-800",
     bg: "bg-blue-100",
+  },
+  พิมพ์เสร็จสิ้น: {
+    dot: "bg-purple-500",
+    text: "text-purple-700",
+    bg: "bg-purple-500/10",
   },
   รายการเสร็จสิ้น: {
     dot: "bg-emerald-500",
@@ -107,13 +114,17 @@ export default function OrderDetailCard({
   onUpdateStatus,
   onVerifyPayment,
   onChatClick,
+  disabled = false,
 }: Props) {
-  const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
-  const items = order.items ?? [];
+  const router = useRouter();
+  const params = useParams();
+  const shopId = params?.shop_id;
 
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
   const [verifyingSlip, setVerifyingSlip] = useState<boolean>(false);
 
+  const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
+  const items = order.items ?? [];
   const isVerified = order.payment?.is_verified ?? null;
 
   const isDisabledFile =
@@ -157,11 +168,31 @@ export default function OrderDetailCard({
     }
   };
 
+  const handleChat = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (disabled) return;
+
+    if (onChatClick) {
+      onChatClick(order.order_id);
+    } else {
+      const targetPath = shopId
+        ? `/shop/order/${shopId}/chat?orderId=${order.order_id}`
+        : `/shop/order/chat?orderId=${order.order_id}`;
+      router.push(targetPath);
+    }
+  };
+
   return (
     <>
       <div
-        onClick={onClick}
-        className="group relative flex w-full cursor-pointer flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200"
+        onClick={() => {
+          if (!disabled) onClick?.();
+        }}
+        className={`group relative flex w-full flex-col justify-between rounded-3xl bg-white p-6 border border-slate-100 shadow-sm transition-all duration-300 ${
+          disabled
+            ? "opacity-60 cursor-not-allowed"
+            : "cursor-pointer hover:shadow-xl hover:shadow-slate-200/50 hover:border-slate-200"
+        }`}
       >
         <div>
           {/* Header: Status & Date */}
@@ -313,11 +344,9 @@ export default function OrderDetailCard({
           {/* Chat Action */}
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onChatClick?.(order.order_id);
-            }}
-            className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
+            onClick={handleChat}
+            disabled={disabled}
+            className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <MessageCircle size={14} />
             <span>แชทกับลูกค้า</span>
@@ -340,7 +369,7 @@ export default function OrderDetailCard({
 
           <div onClick={(e) => e.stopPropagation()}>
             <OrderActions
-              status={order.status}
+              status={order.status as OrderStatus}
               isVerified={isVerified}
               onUpdateStatus={(newStatus) =>
                 onUpdateStatus?.(order.order_id, newStatus)

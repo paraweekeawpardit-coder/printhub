@@ -7,27 +7,42 @@ import * as Setting from "../controller/Shop/setting.js";
 
 const router = express.Router();
 
-// Dashboard
+// ==================== Dashboard ====================
 router.get("/getScore", Home.getTotalScore);
 router.get("/getIncome", Home.getTodayInCome);
 router.get("/numWork", Home.getNumOrderUnAccept);
 router.get("/getTopOrder", Home.getTopOrder);
 router.get("/getFinancialOverview", Home.getFinancialOverview);
-// เพิ่ม 2 Endpoint ในส่วน Dashboard
 router.get("/getOrderStatusBreakdown", Home.getOrderStatusBreakdown);
 router.get("/getComplaintsAndReviews", Home.getComplaintsAndReviews);
 
-// Orders
+// ==================== Orders ====================
 router.get("/getOrderByStatus", Order.getOrdersByStatus);
-router.get("/orders/:id", Detail.getOrder);
-router.patch("/orders/:id/status", Detail.updateOrderStatus);
-router.patch("/orders/:id/verify-payment", Detail.verifyPayment);
 
-// Shop Profile
-router.get("/profile/:shop_id", Setting.getShopProfile);
+// 🟢 แก้ไข Path ให้สอดคล้องกับ Frontend (สั่งซื้อชิ้นเดียวใช้ /order/:orderId)
+router.get("/order/:orderId", Order.getOrderById);
+
+// 🟢 รองรับ Endpoint อัปเดตสถานะแบบตรวจสอบร้านค้า (suspended check)
+router.patch("/order/:orderId/status", Order.updateOrderStatus);
+
+// 🟢 สำหรับตรวจสอบสลิปและชำระเงิน
+router.patch("/order/:id/paymentstatus", Detail.verifyPayment);
+router.patch("/order/:id/verify-payment", Detail.verifyPayment);
+
+// ==================== Shop Profile & Settings ====================
+router.get("/profile/:shop_id", Setting.getProfile);
+router.put("/profile/:shop_id", Setting.updateProfile);
+router.patch("/open-status/:shop_id", Setting.updateOpenStatus);
+
+// ดึงข้อมูลบัญชีธนาคาร และ บันทึก/อัปเดตข้อมูลบัญชีธนาคาร
 router.get("/bank-account/:shop_id", Setting.getBankAccount);
+router.put("/bank-account/:shop_id", Setting.updateBankAccount);
+
+// ตรวจสอบสถานะการยืนยันตัวตน
+router.get("/verify-status/:shop_id", Setting.getVerifyStatus);
+
+// บริการของร้านค้า
 router.get("/services/:shop_id", Setting.getShopServices);
-router.get("/verify-status/:shop_id", Setting.checkShopVerified);
 router.post("/services", Setting.saveShopServices);
 
 export default router;
