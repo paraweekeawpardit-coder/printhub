@@ -19,15 +19,15 @@ router.get("/getComplaintsAndReviews", Home.getComplaintsAndReviews);
 // ==================== Orders ====================
 router.get("/getOrderByStatus", Order.getOrdersByStatus);
 
-// 🟢 แก้ไข Path ให้สอดคล้องกับ Frontend (สั่งซื้อชิ้นเดียวใช้ /order/:orderId)
-router.get("/order/:orderId", Order.getOrderById);
+// 🟢 ปรับแก้ Path ให้ตรงกับ Frontend (/orders/...)
+router.get("/orders/:orderId", Order.getOrderById);
 
-// 🟢 รองรับ Endpoint อัปเดตสถานะแบบตรวจสอบร้านค้า (suspended check)
-router.patch("/order/:orderId/status", Order.updateOrderStatus);
+// 🟢 อัปเดตสถานะออเดอร์
+router.patch("/orders/:orderId/status", Order.updateOrderStatus);
 
-// 🟢 สำหรับตรวจสอบสลิปและชำระเงิน
-router.patch("/order/:id/paymentstatus", Detail.verifyPayment);
-router.patch("/order/:id/verify-payment", Detail.verifyPayment);
+// 🟢 ตรวจสอบสลิปและการชำระเงิน (รองรับทั้งสองแบบ)
+router.patch("/orders/:id/paymentstatus", Detail.verifyPayment);
+router.patch("/orders/:id/verify-payment", Detail.verifyPayment);
 
 // ==================== Shop Profile & Settings ====================
 router.get("/profile/:shop_id", Setting.getProfile);
