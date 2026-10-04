@@ -134,7 +134,6 @@ export default function AdminProfilePage() {
         body: JSON.stringify({
           id: profile.id, // ส่ง ID แนบไปด้วยเพื่ออัปเดตถูกคน
           name: profile.name,
-          email: profile.email,
           avatar: profile.avatar,
         }),
       });
@@ -152,7 +151,7 @@ export default function AdminProfilePage() {
         ...currentUser,
         id: updatedData.id || profile.id,
         name: updatedData.name,
-        email: updatedData.email,
+        email: profile.email,
         avatar: updatedData.avatar,
       };
       
@@ -257,22 +256,24 @@ export default function AdminProfilePage() {
                 />
               </div>
 
+              {/* อีเมล (ล็อกไม่ให้แก้ไข) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  อีเมล
+                  อีเมล (ไม่สามารถแก้ไขได้)
                 </label>
                 <div className="relative">
                   <input
                     type="email"
                     value={profile.email}
-                    onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                    className="w-full px-3.5 py-2 pl-9 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-500 transition-colors text-slate-800"
-                    required
+                    disabled
+                    readOnly
+                    className="w-full px-3.5 py-2 pl-9 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-400 cursor-not-allowed"
                   />
                   <Mail size={15} className="absolute left-3 top-2.5 text-slate-400" />
                 </div>
               </div>
 
+              {/* ตำแหน่ง (ล็อกไม่ให้แก้ไข) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
                   ตำแหน่งในระบบ
@@ -282,6 +283,7 @@ export default function AdminProfilePage() {
                     type="text"
                     value={profile.role}
                     disabled
+                    readOnly
                     className="w-full px-3.5 py-2 pl-9 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-400 cursor-not-allowed"
                   />
                   <Shield size={15} className="absolute left-3 top-2.5 text-slate-400" />
