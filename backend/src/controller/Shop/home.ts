@@ -10,6 +10,120 @@ interface PaymentRow {
   shop_income: number | null;
 }
 
+
+// ==========================================
+// Sync สถานะอัตโนมัติลง DB (ให้ทุก endpoint เห็นตรงกัน)
+//  - รอดำเนินงาน/กำลังพิมพ์ แล้วเลยเวลารับ        -> ยกเลิกการพิมพ์
+//  - พิมพ์เสร็จสิ้น แล้วเลยเวลารับเกิน 24 ชม.      -> รายการเสร็จสิ้น
+//  - หลังลูกค้าสั่ง 10 นาที ถ้าสถานะยังเป็น "รอการชำระเงิน" -> ยกเลิกการพิมพ์
+// เรียกพร้อมกันหลาย endpoint ได้ (ใช้ promise ร่วมกันต่อร้าน)
+// ==========================================
+const PENDING_STATES = ["รอการดำเนินงาน", "รอการดำเนินการ", "กำลังพิมพ์"];
+
+// กฎ: หลังลูกค้าสั่ง 10 นาที ถ้าสถานะยังเป็น "รอการชำระเงิน" -> ยกเลิกทันที
+export const UNPAID_TIMEOUT_MS = 10 * 60 * 1000;
+const inflightSync = new Map<string, Promise<void>>();
+
+export function syncAutoStatuses(shop_id: string): Promise<void> {
+  const existing = inflightSync.get(shop_id);
+  if (existing) return existing;
+
+  const p = runSyncAutoStatuses(shop_id)
+    .catch((err) => console.error("syncAutoStatuses error:", err))
+    .finally(() => inflightSync.delete(shop_id));
+
+  inflightSync.set(shop_id, p);
+  return p;
+}
+
+async function runSyncAutoStatuses(shop_id: string): Promise<void> {
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  const { data: statuses } = await supabase
+    .from("status")
+    .select("id, state")
+    .in("state", ["ยกเลิกการพิมพ์", "รายการเสร็จสิ้น"]);
+
+  const cancelledId = statuses?.find((s) => s.state === "ยกเลิกการพิมพ์")?.id;
+  const completedId = statuses?.find((s) => s.state === "รายการเสร็จสิ้น")?.id;
+  if (!cancelledId || !completedId) return;
+
+  const { data: orders, error } = await supabase
+    .from("print_order")
+    .select(
+      `id, order_date, appointment_time, receive_date,
+       current_status:status!current_status_id (state)`
+    )
+    .eq("shop_id", shop_id);
+
+  if (error || !orders) return;
+
+  const toCancel: string[] = [];
+  const toComplete: string[] = [];
+
+  for (const o of orders as any[]) {
+    const state: string = o.current_status?.state || "";
+
+    // ครบ 10 นาทีหลังสั่ง แต่สถานะยังเป็น "รอการชำระเงิน" -> ยกเลิก
+    if (state === "รอการชำระเงิน") {
+      const orderT = new Date(o.order_date).getTime();
+      if (!isNaN(orderT) && now > orderT + UNPAID_TIMEOUT_MS) {
+        toCancel.push(o.id);
+        continue;
+      }
+    }
+
+    const timeStr = o.appointment_time || o.receive_date;
+    if (!timeStr) continue;
+
+    const t = new Date(timeStr).getTime();
+    if (isNaN(t)) continue;
+
+    if (PENDING_STATES.includes(state) && now > t) toCancel.push(o.id);
+    else if (state === "พิมพ์เสร็จสิ้น" && now > t + ONE_DAY_MS)
+      toComplete.push(o.id);
+  }
+
+  await applyAutoStatus(toCancel, cancelledId);
+  await applyAutoStatus(toComplete, completedId);
+}
+
+// เปลี่ยนสถานะ + บันทึกประวัติลง work_status (เหมือน updateOrderStatus)
+async function applyAutoStatus(orderIds: string[], statusId: string) {
+  if (orderIds.length === 0) return;
+
+  const nowIso = new Date().toISOString();
+  const { data: rows } = await supabase
+    .from("work_status")
+    .insert(
+      orderIds.map((id) => ({
+        order_id: id,
+        status_id: statusId,
+        updated_at: nowIso,
+      }))
+    )
+    .select("id, order_id");
+
+  const workIdByOrder = new Map<string, string>(
+    (rows || []).map((r: any) => [r.order_id, r.id])
+  );
+
+  await Promise.all(
+    orderIds.map((id) =>
+      supabase
+        .from("print_order")
+        .update({
+          current_status_id: statusId,
+          ...(workIdByOrder.get(id)
+            ? { work_state_id: workIdByOrder.get(id) }
+            : {}),
+        })
+        .eq("id", id)
+    )
+  );
+}
+
 // ==========================================
 // Get Total Score & Review Count
 // ==========================================
@@ -63,6 +177,8 @@ export const getTodayInCome = async (
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
     }
+
+    await syncAutoStatuses(shop_id);
 
     // 1. ดึง id ของสถานะ "รายการเสร็จสิ้น"
     const { data: statusData, error: statusError } = await supabase
@@ -120,6 +236,8 @@ export const getNumOrderUnAccept = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
+    await syncAutoStatuses(shop_id);
+
     // 1. ดึง ID ของสถานะ "รอการดำเนินงาน" (ใส่คำว่า "รอการดำเนินการ" สำรองไว้เผื่อใช้ใน db)
     const { data: statuses, error: statusError } = await supabase
       .from("status")
@@ -149,10 +267,6 @@ export const getNumOrderUnAccept = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
-
-// ==========================================
-// Get Top Orders
-// ==========================================
 // ==========================================
 // Get Top Orders
 // ==========================================
@@ -167,12 +281,9 @@ export const getTopOrder = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    await syncAutoStatuses(shop_id);
 
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-
+    // ดึงออเดอร์ของร้านค้าทั้งหมด (เรียงจากล่าสุด)
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(
@@ -208,8 +319,7 @@ export const getTopOrder = async (
         `
       )
       .eq("shop_id", shop_id)
-      .gte("order_date", todayStart.toISOString())
-      .lte("order_date", todayEnd.toISOString());
+      .order("order_date", { ascending: false });
 
     if (error) {
       return res.status(400).json({ error: error.message });
@@ -219,44 +329,56 @@ export const getTopOrder = async (
       return res.status(200).json([]);
     }
 
-    const filteredOrders = orders.filter((order: any) => {
+    // Helper เช็คว่าเป็น "วันนี้" ตามเวลาไทย (YYYY-MM-DD)
+    const isTodayInThailand = (dateStr: string | null | undefined) => {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return false;
+
+      // แปลงเวลาให้เป็น String รูปแบบ YYYY-MM-DD ของ Thailand (Asia/Bangkok)
+      const targetDateStr = d.toLocaleDateString("en-CA", {
+        timeZone: "Asia/Bangkok",
+      });
+      const todayDateStr = new Date().toLocaleDateString("en-CA", {
+        timeZone: "Asia/Bangkok",
+      });
+
+      return targetDateStr === todayDateStr;
+    };
+
+    // กรองเอาเฉพาะออเดอร์ที่:
+    // 1. สั่งวันนี้ (order_date เป็นวันนี้) OR นัดรับวันนี้ (appointment_time/receive_date เป็นวันนี้)
+    // 2. ไม่ใช่สถานะ "รอการชำระเงิน"
+    const todayOrders = orders.filter((order: any) => {
       const state = order.current_status?.state;
-      return state !== "รอการชำระเงิน";
+      if (state === "รอการชำระเงิน") return false;
+
+      const isOrderToday = isTodayInThailand(order.order_date);
+      const isAppointmentToday = isTodayInThailand(order.appointment_time);
+      const isReceiveToday = isTodayInThailand(order.receive_date);
+
+      return isOrderToday || isAppointmentToday || isReceiveToday;
     });
 
-    const now = new Date().getTime();
+    const now = Date.now();
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    // Helper เช็คว่าเป็นสถานะที่กำลังรอดำเนินการหรือกำลังพิมพ์อยู่หรือไม่
     const isPendingStatus = (state: string) =>
       state === "รอการดำเนินการ" ||
       state === "รอการดำเนินงาน" ||
       state === "กำลังพิมพ์";
 
-    const processedOrders = filteredOrders.map((order: any) => {
+    const processedOrders = todayOrders.map((order: any) => {
       let state = order.current_status?.state || "";
-
-      const orderTime = new Date(order.order_date).getTime();
-      const isPending =
-        state === "รอการดำเนินการ" || state === "รอการดำเนินงาน";
-
-      // เงื่อนไข 1: หากรอดำเนินการ แล้วเกิน 24 ชั่วโมงนับจากเวลาสั่งซื้อ (order_date) -> ยกเลิกการพิมพ์
-      if (isPending && now > orderTime + ONE_DAY_MS) {
-        state = "ยกเลิกการพิมพ์";
-      }
-
-      // เงื่อนไข 2: ตรวจสอบเวลานัดรับ / รับสินค้า
       const appointmentTimeStr = order.appointment_time || order.receive_date;
 
       if (appointmentTimeStr) {
         const appointmentTime = new Date(appointmentTimeStr).getTime();
 
-        // รอดำเนินการหรือกำลังพิมพ์ แล้วเลยเวลานัดรับ -> ยกเลิกการพิมพ์
         if (isPendingStatus(state) && now > appointmentTime) {
           state = "ยกเลิกการพิมพ์";
         }
 
-        // พิมพ์เสร็จสิ้น แล้วเลยเวลานัดรับเกิน 24 ชั่วโมง -> รายการเสร็จสิ้น
         const isCompletedPrint = state === "พิมพ์เสร็จสิ้น";
         if (isCompletedPrint && now > appointmentTime + ONE_DAY_MS) {
           state = "รายการเสร็จสิ้น";
@@ -269,37 +391,41 @@ export const getTopOrder = async (
       };
     });
 
+    // ลำดับสถานะในการเรียง
+    const STATUS_RANK: Record<string, number> = {
+      "รอการดำเนินการ": 0,
+      "รอการดำเนินงาน": 0,
+      "กำลังพิมพ์": 1,
+      "พิมพ์เสร็จสิ้น": 2,
+      "รายการเสร็จสิ้น": 3,
+      "ยกเลิกการพิมพ์": 4,
+    };
+
+    const getPickupTime = (o: any) => {
+      const t = new Date(
+        o.appointment_time || o.receive_date || o.order_date
+      ).getTime();
+      return isNaN(t) ? new Date(o.order_date).getTime() : t;
+    };
+
     const sortedOrders = [...processedOrders].sort((a: any, b: any) => {
-      const stateA = a.latest_status;
-      const stateB = b.latest_status;
+      const rankA = STATUS_RANK[a.latest_status] ?? 99;
+      const rankB = STATUS_RANK[b.latest_status] ?? 99;
 
-      const isPendingA = isPendingStatus(stateA);
-      const isPendingB = isPendingStatus(stateB);
+      if (rankA !== rankB) return rankA - rankB;
 
-      if (isPendingA && !isPendingB) return -1;
-      if (!isPendingA && isPendingB) return 1;
-
-      if (isPendingA && isPendingB) {
-        const timeA = new Date(
-          a.appointment_time || a.receive_date || a.order_date
-        ).getTime();
-        const timeB = new Date(
-          b.appointment_time || b.receive_date || b.order_date
-        ).getTime();
-        return timeA - timeB;
-      }
-
-      const dateA = new Date(a.order_date).getTime();
-      const dateB = new Date(b.order_date).getTime();
-      return dateB - dateA;
+      return (
+        Math.abs(getPickupTime(a) - now) - Math.abs(getPickupTime(b) - now)
+      );
     });
 
-    return res.status(200).json(sortedOrders.slice(0, 5));
+    return res.status(200).json(sortedOrders);
   } catch (err) {
     console.error("Error in getTopOrder:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
+
 // ==========================================
 // Get Financial Overview & Transactions
 // ==========================================
@@ -313,6 +439,8 @@ export const getFinancialOverview = async (
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
     }
+
+    await syncAutoStatuses(shop_id);
 
     // 1. ดึง id ของสถานะ "รายการเสร็จสิ้น" จากตาราง status
     const { data: statusData, error: statusError } = await supabase
@@ -491,22 +619,26 @@ export const getOrderStatusBreakdown = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
+    await syncAutoStatuses(shop_id);
+
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(
         `
         *,
         customer (first_name, last_name, contact),
-        current_status:status!current_status_id!inner (id, state)
+        current_status:status!current_status_id (id, state)
         `
       )
       .eq("shop_id", shop_id)
-      .neq("current_status.state", "รอการชำระเงิน") // 👈 กรองสถานะ "รอชำระเงิน" ออกที่นี่
       .order("order_date", { ascending: false });
 
     if (error) return res.status(400).json({ error: error.message });
 
-    const orderList = orders ?? [];
+    // ซ่อนออเดอร์ที่ยังรอชำระเงิน (ยังไม่ใช่งานของร้าน)
+    const orderList = (orders ?? []).filter(
+      (o: any) => o.current_status?.state !== "รอการชำระเงิน"
+    );
 
     const counts: Record<string, number> = {
       "รอการดำเนินการ": 0,
@@ -520,6 +652,7 @@ export const getOrderStatusBreakdown = async (
     const parseSafeDate = (dateStr: any) => {
       if (!dateStr) return null;
       
+      // กรณีเป็น String เช่น "2026-09-28" หรือ "2569-09-28"
       const cleanStr = String(dateStr).split("T")[0];
       const parts = cleanStr.split(/[-/]/);
       
@@ -528,6 +661,7 @@ export const getOrderStatusBreakdown = async (
         let month = parseInt(parts[1], 10) - 1;
         let day = parseInt(parts[2], 10);
 
+        // ถ้าเก็บปีเป็น พ.ศ. (เช่น > 2400) ให้แปลงเป็น ค.ศ.
         if (year > 2400) year -= 543;
 
         return new Date(year, month, day);
@@ -545,7 +679,7 @@ export const getOrderStatusBreakdown = async (
     });
 
     const now = new Date();
-    const currentYear = now.getFullYear();
+    const currentYear = now.getFullYear(); // เช่น 2026
 
     // 1. รายวัน (จันทร์ - อาทิตย์ ของสัปดาห์นี้)
     const daysName = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
@@ -613,7 +747,7 @@ export const getOrderStatusBreakdown = async (
         return od.getFullYear() === yr;
       }).length;
       
-      yearlyData.push({ label: `${yr + 543}`, count });
+      yearlyData.push({ label: `${yr + 543}`, count }); // แสดงเป็น พ.ศ. บนแท่งกราฟ
     }
 
     return res.status(200).json({
@@ -635,6 +769,8 @@ export const getOrderStatusBreakdown = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
+ 
+
 export const getComplaintsAndReviews = async (
   req: Request,
   res: Response

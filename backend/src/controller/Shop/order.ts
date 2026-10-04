@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
+import { syncAutoStatuses } from "./home.js"; // ปรับ path ให้ตรงกับที่วาง home.ts
 
 // ==========================================
 // Types
@@ -30,6 +31,7 @@ export interface ResultOrder {
   amount: number;
   items: OrderItemDetail[];
   payment: PaymentDetail | null;
+  pickup_time: string | null;
 }
 
 // ==========================================
@@ -49,6 +51,9 @@ export const getOrdersByStatus = async (
         error: "shop_id is required",
       });
     }
+
+    // เขียนสถานะที่เปลี่ยนอัตโนมัติ (เลยเวลารับ ฯลฯ) ลง DB ก่อนดึงข้อมูล
+    await syncAutoStatuses(shop_id);
 
     const { data: orders, error } = await supabase
       .from("print_order")
@@ -99,7 +104,7 @@ export const getOrdersByStatus = async (
     }
 
     const now = new Date().getTime();
-    const ONE_DAY_MS = 24 * 60 * 60 * 1000; // 24 ชั่วโมงในหน่วยมิลลิวินาที
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000; // ใช้กับ พิมพ์เสร็จสิ้น -> รายการเสร็จสิ้น
 
     // 1. กรองสถานะ "รอการชำระเงิน" ออก
     const filteredOrders = (orders || []).filter((order: any) => {
@@ -129,17 +134,12 @@ export const getOrdersByStatus = async (
         // -------------------------------------------------------------
         // เงื่อนไขเวลาเพิ่มเติม:
         // -------------------------------------------------------------
-        const orderTime = new Date(order.order_date).getTime();
         const isPending =
           computedStatus === "รอการดำเนินการ" ||
           computedStatus === "รอการดำเนินงาน";
 
-        // เงื่อนไขพิเศษ: ถ้ารอดำเนินการอยู่ แล้วร้านไม่ยืนยันภายใน 24 ชม. (นับจาก order_date) -> เปลี่ยนเป็น "ยกเลิกการพิมพ์"
-        if (isPending && now > orderTime + ONE_DAY_MS) {
-          computedStatus = "ยกเลิกการพิมพ์";
-        }
-
-        // เช็คเวลานัดรับ (appointment_time) เดิม
+        // ยกเลิกอัตโนมัติเฉพาะเมื่อถึงเวลารับแล้วยังเป็นรอการดำเนินงาน/กำลังพิมพ์
+        // (ไม่มีการยกเลิกเพราะร้านไม่กดยืนยันภายใน 24 ชม. อีกต่อไป)
         const appointmentTimeStr =
           order.appointment_time || order.receive_date;
 
@@ -183,6 +183,8 @@ export const getOrdersByStatus = async (
           status: computedStatus,
           amount: Number(order.total_amount || 0),
           items,
+          pickup_time:
+            order.appointment_time || order.receive_date || order.order_date || null,
           payment: payment
             ? {
                 id: payment.id,
@@ -204,7 +206,12 @@ export const getOrdersByStatus = async (
       ยกเลิกการพิมพ์: 5,
     };
 
-    // 4. จัดเรียงข้อมูล (Status Priority -> Order Date จากใหม่ไปเก่า)
+    // 4. จัดเรียงข้อมูล (Status Priority -> เวลารับที่ใกล้ถึงขึ้นก่อน)
+    const getPickupTime = (o: ResultOrder) => {
+      const t = new Date(o.pickup_time || o.date).getTime();
+      return isNaN(t) ? new Date(o.date).getTime() : t;
+    };
+
     const sortedOrders = processedOrders.sort((a, b) => {
       const priorityA = STATUS_PRIORITY[a.status] ?? 99;
       const priorityB = STATUS_PRIORITY[b.status] ?? 99;
@@ -213,9 +220,10 @@ export const getOrdersByStatus = async (
         return priorityA - priorityB;
       }
 
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      return dateB - dateA;
+      // สถานะเดียวกัน -> เวลารับที่ใกล้ปัจจุบันที่สุดขึ้นก่อน
+      return (
+        Math.abs(getPickupTime(a) - now) - Math.abs(getPickupTime(b) - now)
+      );
     });
 
     return res.status(200).json({

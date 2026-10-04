@@ -3,6 +3,20 @@ import supabase from "../../config/supabase.js";
 
 const ORDER_PENDING_STATE = "รอการดำเนินงาน";
 
+// Helper: ปรับเวลาให้อยู่ในกรอบ 00:00:00 - 23:59:59.999 ของวันนั้นๆ
+export const getDayBounds = (dateInput: Date | string) => {
+  const startOfDay = new Date(dateInput);
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date(dateInput);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  return {
+    start: startOfDay.toISOString(),
+    end: endOfDay.toISOString(),
+  };
+};
+
 export const getOrder = async (
   req: Request,
   res: Response
@@ -15,153 +29,50 @@ export const getOrder = async (
     ) as string;
 
     if (!order_id) {
-      return res.status(400).json({
-        error: "order_id is required",
-      });
+      return res.status(400).json({ error: "order_id is required" });
     }
 
-    // ==========================================
-    // Main order + standard reverse relations
-    // ==========================================
     const { data: order, error } = await supabase
       .from("print_order")
       .select(
         `
-        id,
-        order_no,
-        description,
-        subtotal_price,
-        small_order_fee,
-        platform_fee,
-        total_amount,
-        order_date,
-        receive_date,
-        appointment_time,
-        current_status_id,
-        payment_id,
-        review_id,
-
+        id, order_no, description, subtotal_price, small_order_fee, platform_fee,
+        total_amount, order_date, receive_date, appointment_time, current_status_id,
+        payment_id, review_id,
         customer:customer_id (
-          id,
-          first_name,
-          last_name,
-          contact,
-
-          address:address_id (
-            detail,
-            subdistrict,
-            district,
-            province,
-            postcode
-          )
+          id, first_name, last_name, contact,
+          address:address_id ( detail, subdistrict, district, province, postcode )
         ),
-
-        print_order_item (
-          id,
-          category,
-          describe,
-          file_url,
-          quantity,
-          unit_price,
-          subtotal,
-          page_count
-        ),
-
-        print_file (
-          id,
-          filename,
-          file_url,
-          file_size_mb,
-          page_count,
-          item_id
-        )
+        print_order_item ( id, category, describe, file_url, quantity, unit_price, subtotal, page_count ),
+        print_file ( id, filename, file_url, file_size_mb, page_count, item_id )
         `
       )
       .eq("id", order_id)
       .single();
 
     if (error || !order) {
-      console.error("Get order error:", error);
-      return res.status(404).json({
-        error: "Order not found",
-      });
+      return res.status(404).json({ error: "Order not found" });
     }
 
-    // ==========================================
-    // Status / Payment / Review (fetched by id, no embed)
-    // ==========================================
     const [
-      { data: statusRow, error: statusError },
-      { data: paymentRow, error: paymentError },
-      { data: reviewRow, error: reviewError },
+      { data: statusRow },
+      { data: paymentRow },
+      { data: reviewRow },
     ] = await Promise.all([
       order.current_status_id
-        ? supabase
-            .from("status")
-            .select("state")
-            .eq("id", order.current_status_id)
-            .single()
-        : Promise.resolve({ data: null, error: null }),
-
+        ? supabase.from("status").select("state").eq("id", order.current_status_id).single()
+        : Promise.resolve({ data: null }),
       order.payment_id
-        ? supabase
-            .from("payment")
-            .select("amount, slip_url, payment_date, status, is_verified")
-            .eq("id", order.payment_id)
-            .single()
-        : Promise.resolve({ data: null, error: null }),
-
+        ? supabase.from("payment").select("amount, slip_url, payment_date, status, is_verified").eq("id", order.payment_id).single()
+        : Promise.resolve({ data: null }),
       order.review_id
-        ? supabase
-            .from("review")
-            .select("score, comment")
-            .eq("id", order.review_id)
-            .single()
-        : Promise.resolve({ data: null, error: null }),
+        ? supabase.from("review").select("score, comment").eq("id", order.review_id).single()
+        : Promise.resolve({ data: null }),
     ]);
 
-    if (statusError) console.error("Get status error:", statusError);
-    if (paymentError) console.error("Get payment error:", paymentError);
-    if (reviewError) console.error("Get review error:", reviewError);
-
     const statusState = statusRow?.state || ORDER_PENDING_STATE;
-
-    // ==========================================
-    // Customer
-    // ==========================================
-    const formattedCustomer = Array.isArray(order.customer)
-      ? order.customer[0]
-      : order.customer;
-
-    const formattedAddress = Array.isArray(formattedCustomer?.address)
-      ? formattedCustomer.address[0]
-      : formattedCustomer?.address;
-
-    // ==========================================
-    // Items (sub-orders from cart checkout)
-    // ==========================================
-    const items = (order.print_order_item || []).map((item: any) => ({
-      id: item.id,
-      category: item.category || "รายการพิมพ์",
-      describe: item.describe || "",
-      file_url: item.file_url || null,
-      quantity: item.quantity,
-      unit_price: Number(item.unit_price || 0),
-      subtotal: Number(item.subtotal || 0),
-      page_count: item.page_count ?? null,
-    }));
-
-    // ==========================================
-    // Files (mapped with item_id)
-    // ==========================================
-    const files = (order.print_file || []).map((f: any) => ({
-      id: f.id,
-      filename: f.filename,
-      file_url: f.file_url,
-      file_size_mb: f.file_size_mb,
-      page_count: f.page_count,
-      item_id: f.item_id || null,
-    }));
+    const formattedCustomer = Array.isArray(order.customer) ? order.customer[0] : order.customer;
+    const formattedAddress = Array.isArray(formattedCustomer?.address) ? formattedCustomer.address[0] : formattedCustomer?.address;
 
     return res.status(200).json({
       order: {
@@ -175,7 +86,6 @@ export const getOrder = async (
         platform_fee: Number(order.platform_fee || 0),
         total_amount: Number(order.total_amount || 0),
         status_state: statusState,
-
         customer: {
           id: formattedCustomer?.id,
           first_name: formattedCustomer?.first_name,
@@ -183,22 +93,23 @@ export const getOrder = async (
           contact: formattedCustomer?.contact,
           address: formattedAddress || null,
         },
-
-        items,
-        files,
+        items: (order.print_order_item || []).map((item: any) => ({
+          ...item,
+          unit_price: Number(item.unit_price || 0),
+          subtotal: Number(item.subtotal || 0),
+        })),
+        files: order.print_file || [],
         payment: paymentRow || null,
         review: reviewRow || null,
       },
     });
   } catch (err) {
     console.error("Backend Error:", err);
-    return res.status(500).json({
-      error: "Server Error",
-    });
+    return res.status(500).json({ error: "Server Error" });
   }
 };
 
-// UPDATE ORDER STATUS
+// UPDATE ORDER STATUS (ใช้สำหรับกรณีเปลี่ยนสถานะทั่วไป เช่น กดปฏิเสธ หรือ กดยืนยันพิมพ์เสร็จ)
 export const updateOrderStatus = async (
   req: Request,
   res: Response
@@ -206,152 +117,51 @@ export const updateOrderStatus = async (
   try {
     const { id } = req.params;
     const { status_name } = req.body;
-    const shop_id = (req.query.shop_id || req.headers.shop_id) as
-      | string
-      | undefined;
+    const shop_id = (req.query.shop_id || req.headers.shop_id) as string | undefined;
 
-    if (!id) {
-      return res.status(400).json({ error: "order_id is required" });
-    }
-
-    if (!status_name) {
-      return res.status(400).json({ error: "status_name is required" });
+    if (!id || !status_name) {
+      return res.status(400).json({ error: "Missing required parameters" });
     }
 
     const { data: order, error: orderError } = await supabase
       .from("print_order")
-      .select("id, shop_id, payment_id, current_status_id")
+      .select("id, shop_id, current_status_id")
       .eq("id", id)
       .single();
 
-    if (orderError || !order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
+    if (orderError || !order) return res.status(404).json({ error: "Order not found" });
     if (shop_id && order.shop_id !== shop_id) {
-      return res
-        .status(403)
-        .json({ error: "This order does not belong to this shop" });
+      return res.status(403).json({ error: "Unauthorized" });
     }
 
-    // การรับงาน (กำลังพิมพ์) ต้องตรวจสลิปแล้วและผลต้องเป็น "ถูกต้อง" (is_verified = true)
-    // การปฏิเสธออเดอร์ (ยกเลิกการพิมพ์) ทำได้เสมอ
-    if (status_name === "กำลังพิมพ์") {
-      // รับงานได้เฉพาะออเดอร์ที่ยังรอการดำเนินงาน (กันรับซ้ำ / กู้ออเดอร์ที่ยกเลิกแล้ว)
-      if (order.current_status_id) {
-        const { data: currentStatus, error: currentStatusError } =
-          await supabase
-            .from("status")
-            .select("state")
-            .eq("id", order.current_status_id)
-            .single();
-
-        if (currentStatusError || !currentStatus) {
-          return res.status(500).json({ error: "Cannot resolve order status" });
-        }
-
-        if (currentStatus.state !== ORDER_PENDING_STATE) {
-          return res.status(409).json({
-            error: "ออเดอร์นี้ดำเนินการไปแล้ว ไม่สามารถรับงานได้",
-          });
-        }
-      }
-
-      if (!order.payment_id) {
-        return res
-          .status(400)
-          .json({ error: "ยังไม่มีหลักฐานการชำระเงินสำหรับออเดอร์นี้" });
-      }
-
-      const { data: paymentRow, error: paymentError } = await supabase
-        .from("payment")
-        .select("is_verified")
-        .eq("id", order.payment_id)
-        .single();
-
-      if (paymentError || !paymentRow) {
-        return res.status(404).json({ error: "Payment not found" });
-      }
-
-      if (paymentRow.is_verified === null || paymentRow.is_verified === undefined) {
-        return res.status(400).json({
-          error: "ยังไม่ได้ตรวจสอบสลิป กรุณาตรวจสอบหลักฐานการชำระเงินก่อน",
-        });
-      }
-
-      if (paymentRow.is_verified === false) {
-        return res.status(400).json({
-          error: "สลิปถูกทำเครื่องหมายว่าไม่ถูกต้อง ไม่สามารถยืนยันออเดอร์ได้",
-        });
-      }
-    }
-
-    const { data: statusData, error: statusError } = await supabase
+    const { data: statusData } = await supabase
       .from("status")
       .select("id, state")
       .eq("state", status_name)
       .single();
 
-    if (statusError || !statusData) {
-      return res.status(404).json({
-        error: `Status '${status_name}' not found`,
-      });
-    }
+    if (!statusData) return res.status(404).json({ error: `Status '${status_name}' not found` });
 
-    const { data: newWorkStatus, error: insertError } = await supabase
+    const { data: newWorkStatus } = await supabase
       .from("work_status")
-      .insert([
-        {
-          order_id: id,
-          status_id: statusData.id,
-          updated_at: new Date().toISOString(),
-        },
-      ])
+      .insert([{ order_id: id, status_id: statusData.id, updated_at: new Date().toISOString() }])
       .select()
       .single();
 
-    if (insertError) {
-      console.error("Insert work_status error:", insertError);
-      return res.status(400).json({ error: insertError.message });
-    }
-
-    // อัปเดต current_status_id และ work_state_id ใน print_order
-    const { error: updateOrderError } = await supabase
+    await supabase
       .from("print_order")
-      .update({
-        current_status_id: statusData.id,
-        work_state_id: newWorkStatus.id,
-      })
+      .update({ current_status_id: statusData.id, work_state_id: newWorkStatus.id })
       .eq("id", id);
 
-    if (updateOrderError) {
-      console.error(
-        "Update print_order current_status error:",
-        updateOrderError
-      );
-      return res
-        .status(500)
-        .json({ error: "อัปเดตสถานะออเดอร์ไม่สำเร็จ" });
-    }
-
-    return res.status(200).json({
-      message: "Order status updated successfully",
-      data: {
-        ...newWorkStatus,
-        status_state: statusData.state,
-      },
-    });
+    return res.status(200).json({ message: "Status updated", data: { status_state: statusData.state } });
   } catch (err) {
-    console.error("Update Status Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
 
-// VERIFY PAYMENT SLIP
-// body: { is_verified: true | false }
-// - ตรวจได้ครั้งเดียว: ถ้า payment.is_verified ไม่ใช่ null แล้วจะเปลี่ยนไม่ได้
-// - ผลเป็น false ออเดอร์ยังคงสถานะ "รอการดำเนินงาน"
-// - จะตรวจใหม่ได้เมื่อ is_verified ถูกรีเซ็ตเป็น null (เช่น ลูกค้าส่งสลิปใหม่)
+// VERIFY PAYMENT SLIP & AUTO CHANGE STATUS
+// - ถูกต้อง = "กำลังพิมพ์" (เท่ากับกดยืนยันรับออเดอร์ทันที)
+// - ไม่ถูกต้อง = "รอการชำระเงิน" (ฝั่งช็อปจะไม่นำมาแสดง)
 export const verifyPayment = async (
   req: Request,
   res: Response
@@ -359,106 +169,55 @@ export const verifyPayment = async (
   try {
     const { id } = req.params;
     const { is_verified } = req.body;
-    const shop_id = (req.query.shop_id || req.headers.shop_id) as
-      | string
-      | undefined;
+    const shop_id = (req.query.shop_id || req.headers.shop_id) as string | undefined;
 
-    if (!id) {
-      return res.status(400).json({ error: "order_id is required" });
+    if (!id || typeof is_verified !== "boolean") {
+      return res.status(400).json({ error: "Invalid payload" });
     }
 
-    if (typeof is_verified !== "boolean") {
-      return res
-        .status(400)
-        .json({ error: "is_verified must be true or false" });
-    }
-
-    const { data: order, error: orderError } = await supabase
+    const { data: order } = await supabase
       .from("print_order")
-      .select("id, shop_id, payment_id, current_status_id")
+      .select("id, shop_id, payment_id")
       .eq("id", id)
       .single();
 
-    if (orderError || !order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    if (shop_id && order.shop_id !== shop_id) {
-      return res
-        .status(403)
-        .json({ error: "This order does not belong to this shop" });
-    }
-
-    // ตรวจสลิปได้เฉพาะออเดอร์ที่ยังรอการดำเนินงาน
-    if (order.current_status_id) {
-      const { data: statusRow, error: statusError } = await supabase
-        .from("status")
-        .select("state")
-        .eq("id", order.current_status_id)
-        .single();
-
-      if (statusError || !statusRow) {
-        return res.status(500).json({ error: "Cannot resolve order status" });
-      }
-
-      if (statusRow.state !== ORDER_PENDING_STATE) {
-        return res.status(409).json({
-          error: "ออเดอร์นี้ดำเนินการไปแล้ว ไม่สามารถตรวจสลิปได้",
-        });
-      }
+    if (!order || (shop_id && order.shop_id !== shop_id)) {
+      return res.status(404).json({ error: "Order not found or unauthorized" });
     }
 
     if (!order.payment_id) {
-      return res
-        .status(400)
-        .json({ error: "ยังไม่มีหลักฐานการชำระเงินสำหรับออเดอร์นี้" });
+      return res.status(400).json({ error: "ยังไม่มีหลักฐานการชำระเงิน" });
     }
 
-    const { data: payment, error: paymentError } = await supabase
-      .from("payment")
-      .select("id, slip_url, is_verified")
-      .eq("id", order.payment_id)
+    // 1. อัปเดตสถานะการตรวจสลิป
+    await supabase.from("payment").update({ is_verified }).eq("id", order.payment_id);
+
+    // 2. กำหนดสถานะออเดอร์ใหม่ตามผลการตรวจ
+    const nextStatusName = is_verified ? "กำลังพิมพ์" : "รอการชำระเงิน";
+
+    const { data: targetStatus } = await supabase
+      .from("status")
+      .select("id")
+      .eq("state", nextStatusName)
       .single();
 
-    if (paymentError || !payment) {
-      return res.status(404).json({ error: "Payment not found" });
-    }
+    if (targetStatus) {
+      const { data: newWorkStatus } = await supabase
+        .from("work_status")
+        .insert([{ order_id: id, status_id: targetStatus.id, updated_at: new Date().toISOString() }])
+        .select()
+        .single();
 
-    if (!payment.slip_url) {
-      return res.status(400).json({ error: "ยังไม่มีสลิปโอนเงิน" });
-    }
-
-    // ตรวจไปแล้ว (true/false) จะเปลี่ยนผลไม่ได้
-    if (payment.is_verified !== null) {
-      return res.status(409).json({
-        error: "ตรวจสอบสลิปไปแล้ว ไม่สามารถเปลี่ยนผลการตรวจสอบได้",
-        data: { payment_id: payment.id, is_verified: payment.is_verified },
-      });
-    }
-
-    // อัปเดตเฉพาะตอนที่ยังเป็น null (กันกดซ้อน/เขียนทับ)
-    const { data: updated, error: updateError } = await supabase
-      .from("payment")
-      .update({ is_verified })
-      .eq("id", payment.id)
-      .is("is_verified", null)
-      .select("id, is_verified")
-      .maybeSingle();
-
-    if (updateError) {
-      console.error("Verify payment error:", updateError);
-      return res.status(400).json({ error: updateError.message });
-    }
-
-    if (!updated) {
-      return res.status(409).json({
-        error: "ตรวจสอบสลิปไปแล้ว ไม่สามารถเปลี่ยนผลการตรวจสอบได้",
-      });
+      await supabase
+        .from("print_order")
+        .update({ current_status_id: targetStatus.id, work_state_id: newWorkStatus?.id })
+        .eq("id", id);
     }
 
     return res.status(200).json({
-      message: "Payment slip checked successfully",
-      data: { payment_id: updated.id, is_verified: updated.is_verified },
+      message: "Payment verified successfully",
+      is_verified,
+      new_status: nextStatusName,
     });
   } catch (err) {
     console.error("Verify Payment Error:", err);

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X, Printer, Loader2, Eye } from "lucide-react";
+import { Check, X, Printer, Loader2, Eye, Clock, Calendar } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
 
@@ -11,6 +11,8 @@ type Order = {
   shop_id: string;
   description: string | null;
   order_date: string;
+  appointment_time?: string | null;
+  receive_date?: string | null;
   total_price: number;
   latest_status?: string;
   customer?: {
@@ -32,6 +34,7 @@ type Props = {
   order: Order;
   onClick?: () => void;
   onUpdateStatus?: (orderId: string, newStatus: string) => void;
+  disabled?: boolean;
 };
 
 const API_BASE = "http://localhost:5000";
@@ -42,6 +45,7 @@ const STATUS = {
   DONE: "พิมพ์เสร็จสิ้น",
   COMPLETED: "รายการเสร็จสิ้น",
   CANCELLED: "ยกเลิกการพิมพ์",
+  AWAITING_PAYMENT: "รอการชำระเงิน",
 } as const;
 
 const STATUS_STYLE: Record<string, { badge: string; dot: string }> = {
@@ -54,8 +58,8 @@ const STATUS_STYLE: Record<string, { badge: string; dot: string }> = {
     dot: "bg-blue-500",
   },
   [STATUS.DONE]: {
-    badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    dot: "bg-emerald-500",
+    badge: "bg-blue-100 text-blue-800 border-blue-300",
+    dot: "bg-blue-700",
   },
   [STATUS.COMPLETED]: {
     badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -72,7 +76,12 @@ const FALLBACK_STYLE = {
   dot: "bg-slate-400",
 };
 
-export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
+export default function OrderCard({
+  order,
+  onClick,
+  onUpdateStatus,
+  disabled = false,
+}: Props) {
   const initialStatus =
     order.latest_status || order.current_status?.state || STATUS.PENDING;
 
@@ -84,8 +93,6 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
     order.payment?.is_verified ?? null
   );
   const [verifyingSlip, setVerifyingSlip] = useState<boolean>(false);
-
-  // State สำหรับเปิด/ปิด Pop-up แสดงรูปสลิป
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
 
   const updating = pendingAction !== null;
@@ -98,7 +105,7 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
   }, [order]);
 
   async function updateState(newStatus: string) {
-    if (updating) return;
+    if (updating || disabled) return;
 
     setPendingAction(newStatus);
     setErrorMsg(null);
@@ -125,21 +132,31 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
   }
 
   async function handleVerifySlip(isApproved: boolean) {
-    if (verifyingSlip) return;
+    if (verifyingSlip || updating || disabled) return;
 
     setVerifyingSlip(true);
     setErrorMsg(null);
 
+    const newStatus = isApproved ? STATUS.PRINTING : STATUS.AWAITING_PAYMENT;
+    const params = { params: { shop_id: order.shop_id } };
+
     try {
-      const url = `${API_BASE}/shop/orders/${order.id}/verify-payment`;
       await axios.patch(
-        url,
+        `${API_BASE}/shop/orders/${order.id}/verify-payment`,
         { is_verified: isApproved },
-        { params: { shop_id: order.shop_id } }
+        params
+      );
+      setIsVerified(isApproved);
+
+      await axios.patch(
+        `${API_BASE}/shop/orders/${order.id}/status`,
+        { status_name: newStatus },
+        params
       );
 
-      setIsVerified(isApproved);
-      setShowSlipModal(false); // ปิด Pop-up หลังตรวจสลิปเสร็จสิ้น
+      setCurrentState(newStatus);
+      setShowSlipModal(false);
+      onUpdateStatus?.(order.id, newStatus);
     } catch (err: any) {
       console.error("[OrderCard] slip verification failed:", err);
       const backendMessage =
@@ -157,10 +174,51 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
 
   const style = STATUS_STYLE[currentState] ?? FALLBACK_STYLE;
 
+  // ฟังก์ชันจัดฟอร์แมตวันเวลาสั่งซื้อ
+  const formatOrderDateTime = (dateStr: string) => {
+    if (!dateStr) return "-";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const dateFormatted = d.toLocaleDateString("th-TH", {
+      day: "numeric",
+      month: "short",
+      year: "2-digit",
+    });
+    const timeFormatted = d.toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return `${dateFormatted} (${timeFormatted} น.)`;
+  };
+
+  // ฟังก์ชันจัดฟอร์แมตวันเวลานัดรับ
+  const formatPickupDateTime = () => {
+    const timeStr = order.appointment_time || order.receive_date;
+    if (!timeStr) return null;
+    const d = new Date(timeStr);
+    if (isNaN(d.getTime())) return timeStr;
+
+    const dateFormatted = d.toLocaleDateString("th-TH", {
+      day: "numeric",
+      month: "short",
+      year: "2-digit",
+    });
+    const timeFormatted = d.toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    return `${dateFormatted} เวลา ${timeFormatted} น.`;
+  };
+
+  const pickupFormatted = formatPickupDateTime();
+
   return (
     <>
       <div
-        onClick={onClick}
+        onClick={() => {
+          if (!disabled) onClick?.();
+        }}
         className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-slate-300 hover:shadow-sm transition-all cursor-pointer flex flex-col justify-between"
       >
         <div>
@@ -170,9 +228,11 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
               <h3 className="font-semibold text-slate-900 text-base tracking-tight">
                 Order #{order.order_no || order.id.slice(0, 8)}
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {new Date(order.order_date).toLocaleDateString("th-TH")}
-              </p>
+              {/* แสดงวันเวลาสั่งซื้อ */}
+              <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-500">
+                <Calendar size={13} className="text-slate-400 shrink-0" />
+                <span>สั่งเมื่อ: {formatOrderDateTime(order.order_date)}</span>
+              </div>
             </div>
 
             <span
@@ -183,8 +243,16 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
             </span>
           </div>
 
+          {/* แสดงวันเวลานัดรับ */}
+          {pickupFormatted && (
+            <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50/80 border border-amber-200/60 px-2.5 py-1.5 rounded-lg">
+              <Clock size={14} className="text-amber-600 shrink-0" />
+              <span>เวลานัดรับ: {pickupFormatted}</span>
+            </div>
+          )}
+
           {/* Info */}
-          <div className="mt-6 mb-6 flex items-center justify-between gap-3">
+          <div className="mt-5 mb-6 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 font-medium text-slate-600 text-sm">
                 {initialLetter}
@@ -218,7 +286,6 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
         <div onClick={(e) => e.stopPropagation()}>
           {currentState === STATUS.PENDING && (
             <div className="space-y-3">
-              {/* แถบสถานะสลิป */}
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
                 <span className="text-slate-600 font-medium">
                   สลิปชำระเงิน:{" "}
@@ -233,7 +300,6 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
                   )}
                 </span>
 
-                {/* ปุ่มเปิด Pop-up ดูสลิป */}
                 {order.payment?.slip_url ? (
                   <button
                     type="button"
@@ -247,13 +313,12 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
                 )}
               </div>
 
-              {/* ปุ่มปฏิเสธ / ยืนยัน */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className={isVerified === true ? "grid grid-cols-2 gap-2" : ""}>
                 <button
                   type="button"
                   onClick={() => updateState(STATUS.CANCELLED)}
-                  disabled={updating}
-                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-rose-200 bg-white text-rose-600 text-sm font-medium hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={updating || verifyingSlip}
+                  className="flex w-full items-center justify-center gap-1.5 h-10 rounded-xl border border-rose-200 bg-white text-rose-600 text-sm font-medium hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {pendingAction === STATUS.CANCELLED ? (
                     <Loader2 size={15} className="animate-spin" />
@@ -263,24 +328,21 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
                   ปฏิเสธ
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => updateState(STATUS.PRINTING)}
-                  disabled={updating || isVerified !== true}
-                  title={
-                    isVerified !== true
-                      ? "กรุณาตรวจสอบและยืนยันสลิปชำระเงินก่อนยืนยันออเดอร์"
-                      : ""
-                  }
-                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {pendingAction === STATUS.PRINTING ? (
-                    <Loader2 size={15} className="animate-spin" />
-                  ) : (
-                    <Check size={15} />
-                  )}
-                  ยืนยัน
-                </button>
+                {isVerified === true && (
+                  <button
+                    type="button"
+                    onClick={() => updateState(STATUS.PRINTING)}
+                    disabled={updating}
+                    className="flex items-center justify-center gap-1.5 h-10 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {pendingAction === STATUS.PRINTING ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : (
+                      <Check size={15} />
+                    )}
+                    ยืนยัน
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -301,8 +363,13 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
             </button>
           )}
 
-          {(currentState === STATUS.DONE ||
-            currentState === STATUS.COMPLETED) && (
+          {currentState === STATUS.DONE && (
+            <p className="text-sm text-blue-600 font-medium text-center">
+              เสร็จสิ้นเรียบร้อยแล้ว
+            </p>
+          )}
+
+          {currentState === STATUS.COMPLETED && (
             <p className="text-sm text-emerald-600 font-medium text-center">
               เสร็จสิ้นเรียบร้อยแล้ว
             </p>
@@ -326,7 +393,6 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
             className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl relative flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
               <h4 className="font-semibold text-slate-800 text-base">
                 หลักฐานการชำระเงิน (Order #{order.order_no || order.id.slice(0, 8)})
@@ -340,7 +406,6 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
               </button>
             </div>
 
-            {/* Modal Body: รูปภาพสลิป */}
             <div className="p-4 flex items-center justify-center bg-slate-50 max-h-[60vh] overflow-auto">
               {order.payment?.slip_url ? (
                 <img
@@ -353,7 +418,6 @@ export default function OrderCard({ order, onClick, onUpdateStatus }: Props) {
               )}
             </div>
 
-            {/* Modal Footer */}
             <div className="p-4 border-t border-slate-100 flex items-center justify-between gap-3 bg-white">
               <button
                 type="button"
