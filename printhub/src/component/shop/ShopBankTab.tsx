@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Pencil,
   Landmark,
@@ -10,11 +10,34 @@ import {
   Copy,
   Loader2,
   Lock,
-  AlertTriangle,
-  X,
-  ShieldAlert,
-  Clock,
+  ChevronDown,
 } from "lucide-react";
+
+// ==========================================
+// รายชื่อธนาคารในไทยสำหรับ dropdown
+// ==========================================
+const BANK_OPTIONS = [
+  { code: "BBL", name: "ธนาคารกรุงเทพ (BBL)" },
+  { code: "KBANK", name: "ธนาคารกสิกรไทย (KBANK)" },
+  { code: "KTB", name: "ธนาคารกรุงไทย (KTB)" },
+  { code: "SCB", name: "ธนาคารไทยพาณิชย์ (SCB)" },
+  { code: "BAY", name: "ธนาคารกรุงศรีอยุธยา (BAY)" },
+  { code: "TTB", name: "ธนาคารทหารไทยธนชาต (ttb)" },
+  { code: "CIMBT", name: "ธนาคารซีไอเอ็มบี ไทย (CIMBT)" },
+  { code: "UOB", name: "ธนาคารยูโอบี (UOB)" },
+  { code: "KKP", name: "ธนาคารเกียรตินาคินภัทร (KKP)" },
+  { code: "TISCO", name: "ธนาคารทิสโก้ (TISCO)" },
+  { code: "LHFG", name: "ธนาคารแลนด์ แอนด์ เฮ้าส์ (LH Bank)" },
+  { code: "ICBC", name: "ธนาคารไอซีบีซี (ไทย) (ICBC)" },
+  { code: "BOC", name: "ธนาคารแห่งประเทศจีน (ไทย) (BOC)" },
+  { code: "SMBC", name: "ธนาคารซูมิโตโม มิตซุย แบงกิ้ง คอร์ปอเรชั่น (SMBC)" },
+  { code: "GSB", name: "ธนาคารออมสิน (GSB)" },
+  { code: "BAAC", name: "ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)" },
+  { code: "GHB", name: "ธนาคารอาคารสงเคราะห์ (ธอส.)" },
+  { code: "EXIM", name: "ธนาคารเพื่อการส่งออกและนำเข้าแห่งประเทศไทย (EXIM)" },
+  { code: "SME", name: "ธนาคารพัฒนาวิสาหกิจขนาดกลางและขนาดย่อม (SME Bank)" },
+  { code: "IBANK", name: "ธนาคารอิสลามแห่งประเทศไทย (iBank)" },
+];
 
 type Props = {
   isVerified: boolean;
@@ -28,8 +51,6 @@ type Props = {
   saving: boolean;
   hasData: boolean;
   isEditing: boolean;
-  isPending?: boolean;
-  pendingCreatedAt?: string; // เพิ่ม Prop สำหรับรับวันเวลาที่ยื่นคำขอ
   onToggleEdit: () => void;
 };
 
@@ -45,36 +66,11 @@ export default function ShopBankTab({
   saving,
   hasData,
   isEditing,
-  isPending = false,
-  pendingCreatedAt,
   onToggleEdit,
 }: Props) {
   const [copied, setCopied] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-
-  // ฟังก์ชันแปลงรูปแบบวันเวลาเป็นภาษาไทย (Timezone: Asia/Bangkok)
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr || dateStr === "-") return "";
-
-    const safeDateStr =
-      typeof dateStr === "string" && !dateStr.endsWith("Z") && !dateStr.includes("+")
-        ? `${dateStr}Z`
-        : dateStr;
-
-    const date = new Date(safeDateStr);
-    if (isNaN(date.getTime())) return "";
-
-    return date.toLocaleDateString("th-TH", {
-      timeZone: "Asia/Bangkok",
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  };
+  const [isBankMenuOpen, setIsBankMenuOpen] = useState(false);
+  const bankMenuRef = useRef<HTMLDivElement>(null);
 
   const handleCopy = async () => {
     if (!accountNumber) return;
@@ -83,64 +79,39 @@ export default function ShopBankTab({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      console.error("Copy failed:", err);
+      console.log(err)
     }
   };
 
-  // ตรวจสอบข้อมูลก่อนเปิด Modal
-  const handlePreSave = () => {
-    if (!bankName.trim() || !accountName.trim() || !accountNumber.trim()) {
-      const msg = "กรุณากรอกข้อมูลบัญชีธนาคารให้ครบทุกช่อง";
-      setErrorMessage(msg);
-      console.warn("Validation Error:", msg);
-      return;
-    }
+  // ปิด dropdown เมื่อคลิกข้างนอก
+  useEffect(() => {
+    if (!isBankMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (bankMenuRef.current && !bankMenuRef.current.contains(e.target as Node)) {
+        setIsBankMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isBankMenuOpen]);
 
-    setErrorMessage("");
-    setShowConfirmModal(true);
-  };
-
-  // กดยืนยันใน Modal
-  const handleConfirmSave = () => {
-    console.log("Submitting bank detail changes...", {
-      bankName,
-      accountName,
-      accountNumber,
-    });
-    setShowConfirmModal(false);
-    onSave();
-  };
+  // เผื่อค่าเดิมที่เคยบันทึกไว้ไม่ตรงกับตัวเลือกในลิสต์ (เช่นพิมพ์เอง
+  // มาก่อนตอนยังเป็น input ธรรมดา) ให้โชว์เป็นตัวเลือกพิเศษไว้ก่อน
+  // จะได้ไม่หายไปเงียบๆ จน dropdown ว่าง
+  const isKnownBank = BANK_OPTIONS.some((b) => b.name === bankName);
+  const bankListWithFallback =
+    bankName && !isKnownBank
+      ? [{ code: "__current__", name: bankName }, ...BANK_OPTIONS]
+      : BANK_OPTIONS;
 
   return (
-    <div className="relative space-y-4">
-      {/* Banner แจ้งเตือนเมื่อมีคำขอค้างอยู่ */}
-      {isPending && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800 space-y-1">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2 font-bold text-amber-900">
-              <ShieldAlert size={18} className="shrink-0 text-amber-600" />
-              <span>กำลังอยู่ระหว่างรออนุมัติ</span>
-            </div>
-            {pendingCreatedAt && (
-              <div className="flex items-center gap-1 rounded-full bg-amber-100/80 px-2.5 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200/60">
-                <Clock size={12} className="text-amber-700" />
-                <span>ยื่นเมื่อ: {formatDate(pendingCreatedAt)} น.</span>
-              </div>
-            )}
-          </div>
-          <p className="text-amber-800/90 leading-relaxed pl-6.5">
-            คุณได้ยื่นคำขอเปลี่ยนแปลงข้อมูลบัญชีธนาคารเรียบร้อยแล้ว ขณะนี้กำลังรอผู้ดูแลระบบ (Admin) ตรวจสอบ
-            ท่านจะไม่สามารถแก้ไขข้อมูลได้ในขณะนี้
-          </p>
-        </div>
-      )}
-
+    <div className="relative">
       <div
         className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${
           !isVerified ? "pointer-events-none blur-[2px] select-none" : ""
         }`}
       >
-        {/* View Mode */}
+        {/* Default Mode: View mode */}
         {!isEditing ? (
           <div>
             <div className="flex items-center justify-between gap-4 p-6">
@@ -160,12 +131,7 @@ export default function ShopBankTab({
               <button
                 type="button"
                 onClick={onToggleEdit}
-                disabled={isPending}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold transition-colors ${
-                  isPending
-                    ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-60"
-                    : "border-slate-200 text-[#0F2942] hover:border-[#0F2942]"
-                }`}
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-[#0F2942] transition-colors hover:border-[#0F2942]"
               >
                 <Pencil size={14} /> แก้ไขข้อมูล
               </button>
@@ -198,39 +164,74 @@ export default function ShopBankTab({
             </div>
           </div>
         ) : (
-          /* Edit / Form Mode */
+          /* Edit / Form mode */
           <div>
             <div className="space-y-5 p-6">
               <p className="text-xs leading-relaxed text-slate-400">
                 ข้อมูลบัญชีนี้จะถูกใช้เป็นช่องทางหลักสำหรับการโอนเงินรายได้จากคำสั่งพิมพ์เข้าสู่ร้านค้าของคุณ
               </p>
 
-              {errorMessage && (
-                <div className="rounded-lg bg-red-50 p-3 text-xs font-medium text-red-600 border border-red-100">
-                  {errorMessage}
-                </div>
-              )}
-
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* ธนาคาร - custom dropdown */}
                 <div>
                   <label className="text-xs font-semibold text-slate-600">
                     ธนาคาร
                   </label>
-                  <div className="relative mt-1.5">
+                  <div className="relative mt-1.5" ref={bankMenuRef}>
                     <Landmark
                       size={16}
-                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-300"
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 z-10 text-slate-300"
                     />
-                    <input
-                      type="text"
-                      value={bankName}
-                      onChange={(e) => {
-                        setBankName(e.target.value);
-                        if (errorMessage) setErrorMessage("");
-                      }}
-                      placeholder="เช่น ธนาคารกสิกรไทย"
-                      className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm text-[#0F2942] outline-none transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
-                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setIsBankMenuOpen((prev) => !prev)}
+                      className={`flex w-full items-center justify-between rounded-xl border bg-white py-2 pl-9 pr-3 text-sm outline-none transition-colors ${
+                        isBankMenuOpen
+                          ? "border-[#2F6FED] ring-2 ring-[#2F6FED]/15"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <span
+                        className={`truncate text-left ${
+                          bankName ? "text-[#0F2942]" : "text-slate-300"
+                        }`}
+                      >
+                        {bankName || "เลือกธนาคาร"}
+                      </span>
+                      <ChevronDown
+                        size={15}
+                        className={`shrink-0 text-slate-400 transition-transform ${
+                          isBankMenuOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {/* Panel: เปิดลงด้านล่างเสมอ + จำกัดความสูงแล้วเลื่อนดูได้ */}
+                    {isBankMenuOpen && (
+                      <div className="absolute left-0 right-0 top-full z-20 mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg shadow-slate-900/10">
+                        {bankListWithFallback.map((b) => (
+                          <button
+                            key={b.code}
+                            type="button"
+                            onClick={() => {
+                              setBankName(b.name);
+                              setIsBankMenuOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm transition-colors hover:bg-slate-50 ${
+                              bankName === b.name
+                                ? "font-semibold text-[#2F6FED]"
+                                : "text-slate-700"
+                            }`}
+                          >
+                            <span className="truncate">{b.name}</span>
+                            {bankName === b.name && (
+                              <Check size={14} className="shrink-0" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -246,10 +247,7 @@ export default function ShopBankTab({
                     <input
                       type="text"
                       value={accountName}
-                      onChange={(e) => {
-                        setAccountName(e.target.value);
-                        if (errorMessage) setErrorMessage("");
-                      }}
+                      onChange={(e) => setAccountName(e.target.value)}
                       placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"
                       className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm text-[#0F2942] outline-none transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
                     />
@@ -268,10 +266,7 @@ export default function ShopBankTab({
                     <input
                       type="text"
                       value={accountNumber}
-                      onChange={(e) => {
-                        setAccountNumber(e.target.value);
-                        if (errorMessage) setErrorMessage("");
-                      }}
+                      onChange={(e) => setAccountNumber(e.target.value)}
                       placeholder="xxx-x-xxxxx-x"
                       className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm tabular-nums text-[#0F2942] outline-none transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
                     />
@@ -290,8 +285,7 @@ export default function ShopBankTab({
                 ยกเลิก
               </button>
               <button
-                type="button"
-                onClick={handlePreSave}
+                onClick={onSave}
                 disabled={saving}
                 className="flex items-center gap-2 rounded-xl bg-[#0F2942] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#16385c] disabled:opacity-50"
               >
@@ -309,78 +303,9 @@ export default function ShopBankTab({
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
             <Lock size={20} />
           </div>
-          <p className="px-6 text-center text-sm font-semibold text-gray-900">
+          <p className="text-center px-6 text-sm font-semibold text-gray-900">
             คุณจะสามารถแก้ไขบัญชีธนาคารได้ เมื่อผ่านการยืนยันตัวตนจากผู้ดูแลระบบแล้ว
           </p>
-        </div>
-      )}
-
-      {/* Pop-up Modal ยืนยันก่อนบันทึก */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in zoom-in-95 duration-200">
-            <button
-              type="button"
-              onClick={() => setShowConfirmModal(false)}
-              className="absolute right-4 top-4 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="flex flex-col items-center text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 mb-4">
-                <AlertTriangle size={24} />
-              </div>
-
-              <h3 className="text-base font-bold text-[#0F2942]">
-                ยืนยันการเปลี่ยนแปลงบัญชีธนาคาร
-              </h3>
-              <p className="mt-1 text-xs text-slate-500 leading-relaxed">
-                กรุณาตรวจสอบข้อมูลบัญชีใหม่ของท่าน ข้อมูลนี้จะต้องผ่านการตรวจสอบจากผู้ดูแลระบบก่อนอนุมัติใช้งาน
-              </p>
-
-              {/* สรุปข้อมูลใหม่ */}
-              <div className="mt-4 w-full rounded-xl border border-slate-100 bg-slate-50 p-4 text-left space-y-2.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">ธนาคาร:</span>
-                  <span className="font-semibold text-[#0F2942]">{bankName}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">ชื่อบัญชี:</span>
-                  <span className="font-semibold text-[#0F2942]">{accountName}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">เลขที่บัญชี:</span>
-                  <span className="font-semibold text-[#2F6FED] tabular-nums">
-                    {accountNumber}
-                  </span>
-                </div>
-              </div>
-
-              <p className="mt-3 text-[11px] text-amber-700 text-left w-full">
-                * เมื่อส่งคำขอแล้ว จะไม่สามารถยื่นขอเปลี่ยนซ้ำได้จนกว่าผู้ดูแลระบบจะพิจารณาแล้วเสร็จ
-              </p>
-
-              <div className="mt-6 flex w-full gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmModal(false)}
-                  disabled={saving}
-                  className="flex-1 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
-                >
-                  ย้อนกลับ
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmSave}
-                  disabled={saving}
-                  className="flex-1 rounded-xl bg-[#0F2942] py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#16385c]"
-                >
-                  {saving ? "กำลังบันทึก..." : "ยืนยันส่งคำขอ"}
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>
