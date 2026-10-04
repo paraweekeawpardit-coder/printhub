@@ -52,6 +52,8 @@ type Props = {
   hasData: boolean;
   isEditing: boolean;
   onToggleEdit: () => void;
+  isPending?: boolean;
+  pendingCreatedAt?: string;
 };
 
 export default function ShopBankTab({
@@ -67,6 +69,8 @@ export default function ShopBankTab({
   hasData,
   isEditing,
   onToggleEdit,
+  isPending,
+  pendingCreatedAt,
 }: Props) {
   const [copied, setCopied] = useState(false);
   const [isBankMenuOpen, setIsBankMenuOpen] = useState(false);
@@ -79,7 +83,7 @@ export default function ShopBankTab({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      console.log(err)
+      console.log(err);
     }
   };
 

@@ -53,6 +53,10 @@ const STATUS_STYLE: Record<string, { badge: string; dot: string }> = {
     badge: "bg-amber-50 text-amber-700 border-amber-200",
     dot: "bg-amber-500",
   },
+  [STATUS.AWAITING_PAYMENT]: {
+    badge: "bg-orange-50 text-orange-700 border-orange-200",
+    dot: "bg-orange-500",
+  },
   [STATUS.PRINTING]: {
     badge: "bg-blue-50 text-blue-700 border-blue-200",
     dot: "bg-blue-500",
@@ -110,7 +114,7 @@ export default function OrderCard({
     setPendingAction(newStatus);
     setErrorMsg(null);
 
-    const url = `${API_BASE}/shop/orders/${order.id}/status`;
+    const url = `${API_BASE}/api/shop/orders/${order.id}/status`;
 
     try {
       await axios.patch(
@@ -137,26 +141,20 @@ export default function OrderCard({
     setVerifyingSlip(true);
     setErrorMsg(null);
 
-    const newStatus = isApproved ? STATUS.PRINTING : STATUS.AWAITING_PAYMENT;
-    const params = { params: { shop_id: order.shop_id } };
-
     try {
-      await axios.patch(
-        `${API_BASE}/shop/orders/${order.id}/verify-payment`,
+      // เรียกใช้ API ตรวจสอบสลิปอย่างเดียว (Backend อัปเดตสถานะให้อัตโนมัติ)
+      const res = await axios.patch(
+        `${API_BASE}/api/shop/orders/${order.id}/verify-payment`,
         { is_verified: isApproved },
-        params
+        { params: { shop_id: order.shop_id } }
       );
+
+      const updatedStatus = res.data?.new_status || (isApproved ? STATUS.PRINTING : STATUS.AWAITING_PAYMENT);
+
       setIsVerified(isApproved);
-
-      await axios.patch(
-        `${API_BASE}/shop/orders/${order.id}/status`,
-        { status_name: newStatus },
-        params
-      );
-
-      setCurrentState(newStatus);
+      setCurrentState(updatedStatus);
       setShowSlipModal(false);
-      onUpdateStatus?.(order.id, newStatus);
+      onUpdateStatus?.(order.id, updatedStatus);
     } catch (err: any) {
       console.error("[OrderCard] slip verification failed:", err);
       const backendMessage =
@@ -363,9 +361,17 @@ export default function OrderCard({
             </button>
           )}
 
+          {currentState === STATUS.AWAITING_PAYMENT && (
+            <div className="text-center py-1">
+              <p className="text-xs text-orange-600 font-medium">
+                ปฏิเสธสลิปแล้ว - รอลูกค้าชำระเงินใหม่
+              </p>
+            </div>
+          )}
+
           {currentState === STATUS.DONE && (
             <p className="text-sm text-blue-600 font-medium text-center">
-              เสร็จสิ้นเรียบร้อยแล้ว
+              พิมพ์เสร็จสิ้นเรียบร้อยแล้ว
             </p>
           )}
 
@@ -427,31 +433,29 @@ export default function OrderCard({
                 ปิด
               </button>
 
-              {isVerified === null && (
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleVerifySlip(false)}
-                    disabled={verifyingSlip}
-                    className="px-3 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    สลิปไม่ถูกต้อง
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleVerifySlip(true)}
-                    disabled={verifyingSlip}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    {verifyingSlip ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Check size={16} />
-                    )}
-                    ยืนยันสลิปถูกต้อง
-                  </button>
-                </div>
-              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleVerifySlip(false)}
+                  disabled={verifyingSlip}
+                  className="px-3 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  สลิปไม่ถูกต้อง
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleVerifySlip(true)}
+                  disabled={verifyingSlip}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {verifyingSlip ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Check size={16} />
+                  )}
+                  ยืนยันสลิปถูกต้อง
+                </button>
+              </div>
             </div>
           </div>
         </div>

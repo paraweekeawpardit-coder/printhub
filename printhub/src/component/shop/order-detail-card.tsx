@@ -51,6 +51,7 @@ type Props = {
   disabled?: boolean;
 };
 
+// ลบคีย์ซ้ำ "พิมพ์เสร็จสิ้น" ออกเรียบร้อยแล้ว
 const STATUS_CONFIG: Record<
   string,
   { dot: string; text: string; bg: string }
@@ -64,11 +65,6 @@ const STATUS_CONFIG: Record<
     dot: "bg-blue-400 animate-pulse",
     text: "text-blue-500 font-semibold",
     bg: "bg-blue-50",
-  },
-  พิมพ์เสร็จสิ้น: {
-    dot: "bg-blue-700",
-    text: "text-blue-800",
-    bg: "bg-blue-100",
   },
   พิมพ์เสร็จสิ้น: {
     dot: "bg-purple-500",
@@ -127,8 +123,11 @@ export default function OrderDetailCard({
   const items = order.items ?? [];
   const isVerified = order.payment?.is_verified ?? null;
 
+  // ปรับให้ครอบคลุมทั้งคำว่า "รอการดำเนินการ" และ "รอการดำเนินงาน" เผื่อสะกดต่างกัน
   const isDisabledFile =
-    order.status === "รอการดำเนินงาน" || order.status === "ยกเลิกการพิมพ์";
+    order.status === "รอการดำเนินการ" ||
+    order.status === "รอการดำเนินงาน" ||
+    order.status === "ยกเลิกการพิมพ์";
 
   const handleDownloadFile = async (
     e: React.MouseEvent,
@@ -232,7 +231,7 @@ export default function OrderDetailCard({
           </div>
 
           {/* Slip Status Bar */}
-          {order.status === "รอการดำเนินงาน" && (
+          {(order.status === "รอการดำเนินการ" || order.status === "รอการดำเนินงาน") && (
             <div
               onClick={(e) => e.stopPropagation()}
               className="mt-3 flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs"
