@@ -3,12 +3,12 @@
 import { useState } from "react";
 import {
   MessageCircle,
-  ExternalLink,
   Download,
   Eye,
   X,
   Check,
   Loader2,
+  Clock,
 } from "lucide-react";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
@@ -29,6 +29,7 @@ export type OrderDetail = {
   order_id: string;
   order_no?: number;
   date: string;
+  pickup_time?: string | null;
   customer_name: string;
   customer_avatar?: string;
   status: OrderStatus | string;
@@ -60,9 +61,14 @@ const STATUS_CONFIG: Record<
     bg: "bg-amber-500/10",
   },
   กำลังพิมพ์: {
-    dot: "bg-blue-600 animate-pulse",
-    text: "text-blue-700",
-    bg: "bg-blue-500/10",
+    dot: "bg-blue-400 animate-pulse",
+    text: "text-blue-500 font-semibold",
+    bg: "bg-blue-50",
+  },
+  พิมพ์เสร็จสิ้น: {
+    dot: "bg-blue-700",
+    text: "text-blue-800",
+    bg: "bg-blue-100",
   },
   พิมพ์เสร็จสิ้น: {
     dot: "bg-purple-500",
@@ -87,14 +93,18 @@ const FALLBACK_STATUS = {
   bg: "bg-slate-100",
 };
 
-function formatDate(value: string) {
+// แปลงรูปแบบวันเวลา (HH:mm น. และ DD/MM/YYYY)
+function formatDate(value?: string | null) {
+  if (!value) return "-";
   const d = new Date(value);
   if (isNaN(d.getTime())) return value;
   return d.toLocaleString("th-TH", {
-    day: "numeric",
-    month: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }
 
@@ -118,9 +128,7 @@ export default function OrderDetailCard({
   const isVerified = order.payment?.is_verified ?? null;
 
   const isDisabledFile =
-    disabled ||
-    order.status === "รอการดำเนินงาน" ||
-    order.status === "ยกเลิกการพิมพ์";
+    order.status === "รอการดำเนินงาน" || order.status === "ยกเลิกการพิมพ์";
 
   const handleDownloadFile = async (
     e: React.MouseEvent,
@@ -142,8 +150,8 @@ export default function OrderDetailCard({
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error("Download failed, fallbacking to direct URL:", error);
-      window.open(fileUrl, "_blank");
+      console.error("Download failed:", error);
+      window.open(fileUrl, "_self");
     }
   };
 
@@ -199,12 +207,18 @@ export default function OrderDetailCard({
             </span>
 
             <span className="text-[11px] font-medium text-slate-400 tracking-wider">
-              {formatDate(order.date)}
+              สั่งเมื่อ: {formatDate(order.date)}
             </span>
           </div>
 
+          {/* Time Display: แสดงเวลานัดรับบน Order Card */}
+          <div className="mt-3 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-50 text-slate-700 text-xs font-semibold">
+            <Clock size={14} className="text-blue-600 shrink-0" />
+            <span>เวลานัดรับ: {formatDate(order.pickup_time)}</span>
+          </div>
+
           {/* Order ID & Customer */}
-          <div className="mt-4 flex items-center justify-between gap-2">
+          <div className="mt-3 flex items-center justify-between gap-2">
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 ORDER
@@ -217,11 +231,11 @@ export default function OrderDetailCard({
             <CustomerBadge name={order.customer_name} />
           </div>
 
-          {/* Slip Status Badge Bar */}
+          {/* Slip Status Bar */}
           {order.status === "รอการดำเนินงาน" && (
             <div
               onClick={(e) => e.stopPropagation()}
-              className="mt-4 flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs"
+              className="mt-3 flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs"
             >
               <span className="text-slate-600 font-medium">
                 สลิปชำระเงิน:{" "}
@@ -257,7 +271,7 @@ export default function OrderDetailCard({
           )}
 
           {/* Items List */}
-          <div className="mt-5">
+          <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 รายการ ({items.length})
@@ -285,9 +299,7 @@ export default function OrderDetailCard({
                         {item.page_count && (
                           <span>· {item.page_count} หน้า</span>
                         )}
-                        <span>
-                          · ฿{item.unit_price.toLocaleString()}/ชิ้น
-                        </span>
+                        <span>· ฿{item.unit_price.toLocaleString()}/ชิ้น</span>
                       </div>
                     </div>
 
@@ -303,9 +315,9 @@ export default function OrderDetailCard({
                             handleDownloadFile(
                               e,
                               item.file_url!,
-                              `order-${order.order_no ?? "file"}-${
-                                item.category
-                              }`
+                              `order-${
+                                order.order_no ?? "file"
+                              }-${item.category}`
                             )
                           }
                           className={`flex items-center gap-1 text-[11px] font-semibold transition-all ${
@@ -313,11 +325,6 @@ export default function OrderDetailCard({
                               ? "text-slate-400 opacity-50 cursor-not-allowed"
                               : "text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
                           }`}
-                          title={
-                            isDisabledFile
-                              ? "ไม่สามารถดาวน์โหลดไฟล์ในสถานะนี้ได้"
-                              : "ดาวน์โหลดไฟล์"
-                          }
                         >
                           <Download size={12} />
                           ดาวน์โหลด
@@ -343,7 +350,6 @@ export default function OrderDetailCard({
           >
             <MessageCircle size={14} />
             <span>แชทกับลูกค้า</span>
-            <ExternalLink size={12} className="opacity-60" />
           </button>
         </div>
 
@@ -373,17 +379,16 @@ export default function OrderDetailCard({
         </div>
       </div>
 
-      {/* Pop-up Modal รูปภาพสลิป */}
+      {/* Slip Modal */}
       {showSlipModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={() => setShowSlipModal(false)}
         >
           <div
             className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl relative flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <h4 className="font-bold text-slate-900 text-base">
                 หลักฐานการชำระเงิน (Order #{order.order_no ?? order.order_id.slice(0, 8)})
@@ -397,7 +402,6 @@ export default function OrderDetailCard({
               </button>
             </div>
 
-            {/* Modal Body: รูปสลิป */}
             <div className="p-4 flex items-center justify-center bg-slate-50 max-h-[60vh] overflow-auto">
               {order.payment?.slip_url ? (
                 <img
@@ -412,7 +416,6 @@ export default function OrderDetailCard({
               )}
             </div>
 
-            {/* Modal Footer */}
             <div className="p-4 border-t border-slate-100 flex items-center justify-between gap-3 bg-white">
               <button
                 type="button"

@@ -20,7 +20,9 @@ export default function OrderActions({
   disabled,
 }: Props) {
   if (status === "รอการดำเนินงาน") {
-    const canAccept = isVerified === true; // รับงานได้เมื่อสลิปถูกต้องแล้วเท่านั้น
+    // การรับออเดอร์ทำผ่านการกด "ยืนยันสลิปถูกต้อง" ในหน้าตรวจสลิป
+    // ปุ่ม "รับออเดอร์" เหลือไว้เฉพาะออเดอร์เก่าที่สลิป verified แล้วแต่ยังค้างรอดำเนินงาน
+    const showLegacyAccept = isVerified === true;
 
     return (
       <div className="flex gap-2">
@@ -33,16 +35,17 @@ export default function OrderActions({
           <X size={14} />
           ปฏิเสธ
         </button>
-        <button
-          type="button"
-          onClick={() => onUpdateStatus?.("กำลังพิมพ์")}
-          disabled={disabled || !canAccept} // 👈 Disabled ถ้าสลิปยังไม่ถูกตรวจ
-          title={!canAccept ? "กรุณาตรวจสอบสลิปชำระเงินก่อนยืนยันออเดอร์" : ""}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Check size={14} />
-          รับออเดอร์
-        </button>
+        {showLegacyAccept && (
+          <button
+            type="button"
+            onClick={() => onUpdateStatus?.("กำลังพิมพ์")}
+            disabled={disabled}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Check size={14} />
+            รับออเดอร์
+          </button>
+        )}
       </div>
     );
   }
@@ -50,15 +53,6 @@ export default function OrderActions({
   if (status === "กำลังพิมพ์" || status === "In Progress") {
     return (
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onUpdateStatus?.("ยกเลิกการพิมพ์")}
-          disabled={disabled}
-          title="ยกเลิกออเดอร์"
-          className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-500 text-xs font-bold transition-all disabled:opacity-50"
-        >
-          <X size={14} />
-        </button>
         <button
           type="button"
           onClick={() => onUpdateStatus?.("พิมพ์เสร็จสิ้น")}
@@ -74,7 +68,7 @@ export default function OrderActions({
 
   if (status === "พิมพ์เสร็จสิ้น") {
     return (
-      <div className="w-full text-center py-2.5 text-xs font-bold text-emerald-600 bg-emerald-50/60 rounded-xl">
+      <div className="w-full text-center py-2.5 text-xs font-bold text-blue-600 bg-blue-50 rounded-xl">
         ✓ ดำเนินการเสร็จสิ้น
       </div>
     );
