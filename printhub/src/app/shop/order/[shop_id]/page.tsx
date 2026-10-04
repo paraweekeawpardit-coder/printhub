@@ -115,6 +115,33 @@ export default function OrderPage() {
     [shopId, getOrder, isSuspended]
   );
 
+  // ตรวจสลิป:
+  // - ถูกต้อง = เปลี่ยนสถานะเป็น "กำลังพิมพ์" (เท่ากับกดยืนยันรับออเดอร์ทันที)
+  // - ไม่ถูกต้อง = เปลี่ยนสถานะเป็น "รอการชำระเงิน" (จะถูกกรองออก ไม่แสดงบนหน้าเว็บฝั่ง Shop)
+  const handleVerifyPayment = useCallback(
+    async (orderId: string, isVerified: boolean) => {
+      const newStatus = isVerified ? "กำลังพิมพ์" : "รอการชำระเงิน";
+      const config = { params: { shop_id } };
+
+      try {
+        await axios.patch(
+          `${API_BASE}/shop/orders/${orderId}/verify-payment`,
+          { is_verified: isVerified },
+          config
+        );
+        await axios.patch(
+          `${API_BASE}/shop/orders/${orderId}/status`,
+          { status_name: newStatus },
+          config
+        );
+        await getOrder();
+      } catch (error) {
+        console.error("Verify payment and update status error:", error);
+      }
+    },
+    [shop_id, getOrder]
+  );
+
   return (
     <div className="min-h-screen bg-slate-100">
       <ShopNavbar />
@@ -148,6 +175,7 @@ export default function OrderPage() {
                   disabled={isSuspended}
                   onClick={() => router.push(`/shop/detail/${order.order_id}`)}
                   onUpdateStatus={handleUpdateStatus}
+                  onVerifyPayment={handleVerifyPayment}
                 />
               ))
             ) : (
