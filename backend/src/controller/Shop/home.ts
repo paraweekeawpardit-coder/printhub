@@ -283,7 +283,7 @@ export const getTopOrder = async (
 
     await syncAutoStatuses(shop_id);
 
-    // ดึงออเดอร์ของร้านค้าทั้งหมด (เรียงจากล่าสุด)
+    // ดึงออเดอร์ทั้งหมดของร้านค้า
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(
@@ -329,35 +329,26 @@ export const getTopOrder = async (
       return res.status(200).json([]);
     }
 
-    // Helper เช็คว่าเป็น "วันนี้" ตามเวลาไทย (YYYY-MM-DD)
-    const isTodayInThailand = (dateStr: string | null | undefined) => {
-      if (!dateStr) return false;
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return false;
-
-      // แปลงเวลาให้เป็น String รูปแบบ YYYY-MM-DD ของ Thailand (Asia/Bangkok)
-      const targetDateStr = d.toLocaleDateString("en-CA", {
-        timeZone: "Asia/Bangkok",
-      });
-      const todayDateStr = new Date().toLocaleDateString("en-CA", {
-        timeZone: "Asia/Bangkok",
-      });
-
-      return targetDateStr === todayDateStr;
+    // Helper: แปลง Date/ISO String ให้เหลือแค่ "YYYY-MM-DD" ในโซนเวลาไทย
+    const getThailandDateString = (dateInput?: string | Date | null) => {
+      if (!dateInput) return "";
+      const d = new Date(dateInput);
+      if (isNaN(d.getTime())) return "";
+      return d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }); // ได้ผลลัพธ์เป็น "YYYY-MM-DD"
     };
 
-    // กรองเอาเฉพาะออเดอร์ที่:
-    // 1. สั่งวันนี้ (order_date เป็นวันนี้) OR นัดรับวันนี้ (appointment_time/receive_date เป็นวันนี้)
-    // 2. ไม่ใช่สถานะ "รอการชำระเงิน"
+    // วันนี้ในรูปแบบ "YYYY-MM-DD" ตามเวลาไทย
+    const todayStr = getThailandDateString(new Date());
+
+    // กรองเอาเฉพาะออเดอร์ที่สั่งซื้อใน "วันเดียวกัน" เท่านั้น
     const todayOrders = orders.filter((order: any) => {
+      // 1. กรองสถานะ "รอการชำระเงิน" ออก
       const state = order.current_status?.state;
       if (state === "รอการชำระเงิน") return false;
 
-      const isOrderToday = isTodayInThailand(order.order_date);
-      const isAppointmentToday = isTodayInThailand(order.appointment_time);
-      const isReceiveToday = isTodayInThailand(order.receive_date);
-
-      return isOrderToday || isAppointmentToday || isReceiveToday;
+      // 2. เช็คเฉพาะวันที่สั่งซื้อ (order_date) ตรงกับวันที่ปัจจุบันแบบเป๊ะๆ (ตัดเรื่องชั่วโมงออก)
+      const orderDateStr = getThailandDateString(order.order_date);
+      return orderDateStr === todayStr;
     });
 
     const now = Date.now();
@@ -391,7 +382,7 @@ export const getTopOrder = async (
       };
     });
 
-    // ลำดับสถานะในการเรียง
+    // ลำดับการจัดเรียงสถานะ
     const STATUS_RANK: Record<string, number> = {
       "รอการดำเนินการ": 0,
       "รอการดำเนินงาน": 0,

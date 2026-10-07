@@ -36,6 +36,8 @@ import {
   getCustomerDashboard
 } from '../controller/customerController.js';
 
+import { getCustomerProfile, updateCustomerProfile } from '../controller/settingController.js';
+
 const router = express.Router();
 
 // ==========================================
@@ -127,4 +129,10 @@ router.post("/upload-file", upload.single("file"), async (req, res) => {
   }
 });
 
+
+router.get('/profile', getCustomerProfile);
+router.put('/profile', updateCustomerProfile);
+
 export default router;
+
+
