@@ -24,10 +24,46 @@ export default function AdminSlipsPage() {
       }
 
       const responseData = await res.json();
-      const dataList = Array.isArray(responseData)
+      const rawList = Array.isArray(responseData)
         ? responseData
         : responseData.data || [];
-      setTransactions(dataList);
+
+      // Mapping ข้อมูลรองรับ platform_fee จากตาราง print_order
+      const mappedData: TransactionItem[] = rawList.map((tx: any) => {
+        // ดึงค่า total_amount หรือ amount
+        const totalAmount = Number(
+          tx.amount ?? tx.order?.total_amount ?? tx.order?.total_price ?? 0
+        );
+
+        // ดึง platform_fee จาก print_order (หรือ payment ถ้ามี)
+        const platformFee = Number(
+          tx.platform_fee ?? tx.order?.platform_fee ?? 0
+        );
+
+        // คำนวณ net_amount (ยอดที่ร้านค้าได้รับสุทธิ)
+        const netAmount = Number(
+          tx.net_amount ?? tx.shop_income ?? (totalAmount - platformFee)
+        );
+
+        return {
+          ...tx,
+          id: tx.id,
+          order_id: tx.order_id || tx.order?.id,
+          order_no: tx.order_no || tx.order?.order_no ? `#${tx.order_no || tx.order?.order_no}` : "-",
+          amount: totalAmount,
+          platform_fee: platformFee,
+          net_amount: netAmount,
+          payment_method: tx.payment_method || "PromptPay",
+          payment_date: tx.payment_date || tx.created_at || tx.order?.order_date,
+          status: tx.status || "completed",
+          slip_url: tx.slip_url || tx.order?.payment?.slip_url || "",
+          customer_name: tx.customer_name || 
+            (tx.order?.customer ? `${tx.order.customer.first_name || ""} ${tx.order.customer.last_name || ""}`.trim() : "ลูกค้าทั่วไป"),
+          shop_name: tx.shop_name || tx.order?.shop?.shop_name || "-",
+        };
+      });
+
+      setTransactions(mappedData);
     } catch (error) {
       console.warn("API Error, using fallback data for slips/transactions:", error);
       setTransactions([
@@ -69,12 +105,16 @@ export default function AdminSlipsPage() {
     const orderId = String(tx.order_id || "").toLowerCase();
     const txId = String(tx.id || "").toLowerCase();
     const method = String(tx.payment_method || "").toLowerCase();
+    const customer = String(tx.customer_name || "").toLowerCase();
+    const shop = String(tx.shop_name || "").toLowerCase();
 
     return (
       orderNo.includes(searchLower) ||
       orderId.includes(searchLower) ||
       txId.includes(searchLower) ||
-      method.includes(searchLower)
+      method.includes(searchLower) ||
+      customer.includes(searchLower) ||
+      shop.includes(searchLower)
     );
   });
 
@@ -104,7 +144,7 @@ export default function AdminSlipsPage() {
         <div className="w-full sm:w-72">
           <input
             type="text"
-            placeholder="ค้นหา Order ID หรือ Transaction ID..."
+            placeholder="ค้นหา Order ID, ชื่อลูกค้า หรือ ร้านค้า..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"

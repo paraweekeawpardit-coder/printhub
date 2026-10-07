@@ -18,13 +18,13 @@ export const getPendingShops = async (
 
     if (error) {
       console.error("GetPendingShops Error:", error.message);
-      return res.status(200).json([]);
+      return res.status(500).json({ error: error.message });
     }
 
     return res.status(200).json(shops ?? []);
   } catch (err: any) {
     console.error("GetPendingShops Exception:", err.message || err);
-    return res.status(200).json([]);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
@@ -45,13 +45,13 @@ export const getAllShops = async (
 
     if (error) {
       console.error("GetAllShops Error:", error.message);
-      return res.status(200).json([]);
+      return res.status(500).json({ error: error.message });
     }
 
     return res.status(200).json(shops ?? []);
   } catch (err: any) {
     console.error("GetAllShops Exception:", err.message || err);
-    return res.status(200).json([]);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
@@ -83,7 +83,7 @@ export const verifyShop = async (
         .from("admin")
         .select("id")
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (adminData) {
         adminId = adminData.id;
@@ -289,7 +289,7 @@ export const approveOrRejectBankAccount = async (
         .from("bank_account")
         .select("shop_id")
         .eq("id", targetBankId)
-        .single();
+        .maybeSingle();
 
       if (bankRecord) {
         targetShopId = bankRecord.shop_id;
@@ -467,33 +467,70 @@ export const getShopAppeals = async (
 
     if (error) {
       console.error("GetShopAppeals Error:", error.message);
-      return res.status(200).json([]);
+      return res.status(500).json({ error: error.message });
     }
 
     return res.status(200).json(appeals ?? []);
   } catch (err: any) {
     console.error("GetShopAppeals Exception:", err.message || err);
-    return res.status(200).json([]);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
-export const nudgeShopAppeal = async (req: Request, res: Response): Promise<Response> => {
+/**
+ * PATCH /api/admin/shop-appeal/nudge
+ * อัปเดตการสะกิด/เร่งติดตามคำร้องปลดระงับ
+ */
+export const nudgeShopAppeal = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
   try {
-    const { appeal_id } = req.body;
-    if (!appeal_id) {
-      return res.status(400).json({ success: false, message: "Appeal ID is required" });
+    // 📌 1. ดึง ID จาก Request Body ให้ยืดหยุ่น (รองรับ appeal_id, id, shop_id)
+    const targetId = req.body.appeal_id || req.body.id || req.body.appealId;
+    const shopId = req.body.shop_id || req.body.shopId;
+
+    if (!targetId && !shopId) {
+      return res.status(400).json({
+        success: false,
+        message: "กรุณาระบุ appeal_id หรือ shop_id",
+      });
     }
 
-    const { error } = await supabase
+    // 📌 2. สร้าง Query แบบยืดหยุ่น หาจาก ID คำร้อง หรือ shop_id ที่ยัง pending อยู่
+    let query = supabase
       .from("shop_appeals")
-      .update({ is_nudge: true, updated_at: new Date().toISOString() })
-      .eq("id", appeal_id);
+      .update({
+        is_nudge: true,
+        updated_at: new Date().toISOString(),
+      });
 
-    if (error) throw error;
+    if (targetId) {
+      query = query.eq("id", targetId);
+    } else if (shopId) {
+      query = query.eq("shop_id", shopId).eq("status", "pending");
+    }
 
-    return res.status(200).json({ success: true, message: "Nudge updated successfully" });
+    const { data, error } = await query.select().maybeSingle();
+
+    if (error) {
+      console.error("Nudge DB Error:", error.message);
+      return res.status(400).json({
+        success: false,
+        message: `ไม่สามารถอัปเดตสถานะได้: ${error.message}`,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ส่งสัญญาณเร่งติดตามคำร้องเรียบร้อยแล้ว",
+      data,
+    });
   } catch (err: any) {
-    console.error("Nudge Error:", err);
-    return res.status(500).json({ success: false, message: "Internal Server Error" });
+    console.error("Nudge Exception:", err.message || err);
+    return res.status(500).json({
+      success: false,
+      message: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์",
+    });
   }
 };
