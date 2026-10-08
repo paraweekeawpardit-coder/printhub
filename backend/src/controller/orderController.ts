@@ -4,12 +4,21 @@ import supabase from '../config/supabase.js';
 
 export const upload = multer({ storage: multer.memoryStorage() });
 
-// Helper Function คำนวณราคา
+// Helper Function คำนวณราคา (ปรับแก้ไขให้นับจำนวนหน้า)
 export const calculateOrderPricing = (items: Array<any>) => {
   const subtotal = items.reduce((sum, item) => {
-    const itemSubtotal = item.subtotal !== undefined && item.subtotal !== null
-      ? Number(item.subtotal)
-      : (Number(item.unit_price) || 0) * (Number(item.quantity) || 1);
+    let itemSubtotal = 0;
+
+    if (item.subtotal !== undefined && item.subtotal !== null && Number(item.subtotal) > 0) {
+      itemSubtotal = Number(item.subtotal);
+    } else {
+      const unitPrice = Number(item.unit_price) || 0;
+      const quantity = Number(item.quantity) || 1;
+      const pageCount = Number(item.page_count || item.total_pages) || 1;
+
+      // 🌟 คำนวณ: ราคาต่อหน่วย/หน้า * จำนวนหน้า * จำนวนชุด
+      itemSubtotal = unitPrice * pageCount * quantity;
+    }
 
     return sum + itemSubtotal;
   }, 0);
@@ -50,6 +59,13 @@ const parseSafeTime = (dateStr?: string | null) => {
   }
   const parsed = new Date(cleaned).getTime();
   return isNaN(parsed) ? null : parsed;
+};
+
+// 🛠️ Helper สำหรับแปลงเวลา "HH:mm" หรือ "HH:mm:ss" เป็นนาที
+const timeToMinutes = (timeStr: string) => {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
+  return h * 60 + m;
 };
 
 // ==========================================
@@ -94,8 +110,21 @@ export const createOrder = async (req: Request, res: Response) => {
       }
 
       if (shop.open_time && shop.close_time) {
-        const reqTime = new Date(appointment_time).toTimeString().slice(0, 8);
-        if (reqTime < shop.open_time || reqTime > shop.close_time) {
+        const reqTime = new Date(appointment_time).toTimeString().slice(0, 5);
+        const selMin = timeToMinutes(reqTime);
+        const openMin = timeToMinutes(shop.open_time);
+        const closeMin = timeToMinutes(shop.close_time);
+
+        let isWithinHours = false;
+        if (closeMin < openMin) {
+          // ร้านเปิดข้ามเที่ยงคืน (เช่น 09:30 - 02:00 น.)
+          isWithinHours = selMin >= openMin || selMin <= closeMin;
+        } else {
+          // ร้านเปิด-ปิดวันเดียวกัน (เช่น 08:00 - 18:00 น.)
+          isWithinHours = selMin >= openMin && selMin <= closeMin;
+        }
+
+        if (!isWithinHours) {
           return res.status(400).json({
             success: false,
             message: `เวลานัดหมายต้องอยู่ระหว่างเวลาทำการของร้าน (${shop.open_time.slice(0, 5)} - ${shop.close_time.slice(0, 5)} น.)`,
@@ -162,8 +191,8 @@ export const createOrder = async (req: Request, res: Response) => {
       category: item.category,
       quantity: item.quantity,
       unit_price: item.unit_price,
-      subtotal: item.subtotal || item.quantity * item.unit_price,
-      page_count: item.page_count || 1,
+      subtotal: item.subtotal || (Number(item.unit_price || 0) * Number(item.page_count || item.total_pages || 1) * Number(item.quantity || 1)),
+      page_count: item.page_count || item.total_pages || 1,
       describe: [
         item.selected_size,
         item.color_type,
@@ -234,7 +263,7 @@ export const createOrder = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. ดึงประวัติคำสั่งซื้อ
+// 2. ดึงประวัติคำสั่งซื้อ (ปรับแก้ไขจุด Relation Ambiguity)
 // ==========================================
 export const getCustomerOrders = async (req: Request, res: Response) => {
   try {
@@ -249,6 +278,7 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
     const PENDING_STATUS_ID = "8c416cf8-140c-4563-a912-6a4a6c0a4d9f";
     const PRINTING_STATUS_ID = "adce12c6-d8cd-4c2e-b7ca-e69fe603a8a0";
 
+    // 🌟 ระบุ Foreign Key payment!order_id (*) เพื่อป้องกัน 500 Error
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(`
@@ -256,7 +286,7 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
         current_status:current_status_id (id, state),
         shop:shop_id (id, shop_name),
         print_order_item (*),
-        payment (*)
+        payment!order_id (*)
       `)
       .eq("customer_id", customerId)
       .order("order_date", { ascending: false });
@@ -309,10 +339,11 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      data: orders,
+      data: orders || [],
     });
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message });
+    console.error("getCustomerOrders error:", err.message || err);
+    return res.status(500).json({ success: false, message: err.message || "Internal Server Error" });
   }
 };
 
