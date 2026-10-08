@@ -15,6 +15,7 @@ export interface CartItem {
   subtotal: number;
   file_url?: string;
   total_pages?: number;
+  page_count?: number;
 }
 
 interface ShopCartDrawerProps {
@@ -32,6 +33,38 @@ interface ShopCartDrawerProps {
   }) => void;
   isSubmitting?: boolean;
 }
+
+// 🛠️ Helper แปลงเวลา "HH:mm" เป็นนาที
+const timeToMinutes = (timeStr: string) => {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
+  return h * 60 + m;
+};
+
+// 🛠️ Helper ตรวจสอบว่าเวลาอยู่ในช่วงเปิดทำการหรือไม่ (รองรับเปิดข้ามเที่ยงคืน)
+const isWithinShopHours = (selectedTime: string, openTime: string, closeTime: string) => {
+  const selMin = timeToMinutes(selectedTime);
+  const openMin = timeToMinutes(openTime);
+  const closeMin = timeToMinutes(closeTime);
+
+  if (closeMin < openMin) {
+    // ร้านเปิดข้ามเที่ยงคืน เช่น 09:30 ถึง 02:00 น.
+    return selMin >= openMin || selMin <= closeMin;
+  }
+  // ร้านเปิด-ปิดปกติในวันเดียวกัน เช่น 08:00 ถึง 18:00 น.
+  return selMin >= openMin && selMin <= closeMin;
+};
+
+// 🛠️ Helper คำนวณราคาย่อยของแต่ละรายการในตะกร้า
+const getItemSubtotal = (item: CartItem) => {
+  if (item.subtotal !== undefined && item.subtotal !== null && Number(item.subtotal) > 0) {
+    return Number(item.subtotal);
+  }
+  const pages = Number(item.total_pages || item.page_count) || 1;
+  const unitPrice = Number(item.unit_price) || 0;
+  const qty = Number(item.quantity) || 1;
+  return unitPrice * pages * qty;
+};
 
 export default function ShopCartDrawer({
   shop,
@@ -62,8 +95,9 @@ export default function ShopCartDrawer({
 
   if (!cartItems || cartItems.length === 0) return null;
 
+  // 🌟 คำนวณราคารวมในตะกร้าแบบคิดจำนวนหน้าถูกต้อง
   const totalCartPrice = cartItems.reduce(
-    (sum, item) => sum + Number(item.subtotal || item.quantity * item.unit_price),
+    (sum, item) => sum + getItemSubtotal(item),
     0
   );
 
@@ -73,7 +107,6 @@ export default function ShopCartDrawer({
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const currentTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
-    // เวลาขั้นต่ำล่วงหน้า 30 นาที
     const minTimeObj = new Date(now.getTime() + 31 * 60 * 1000);
     const minDateStr = `${minTimeObj.getFullYear()}-${String(minTimeObj.getMonth() + 1).padStart(2, "0")}-${String(minTimeObj.getDate()).padStart(2, "0")}`;
     const minAllowedTimeStr = `${String(minTimeObj.getHours()).padStart(2, "0")}:${String(minTimeObj.getMinutes()).padStart(2, "0")}`;
@@ -103,8 +136,8 @@ export default function ShopCartDrawer({
     const shopClose = shop?.close_time ? shop.close_time.slice(0, 5) : "18:00";
     const selectedTime = appointmentTime.slice(0, 5);
 
-    // ตรวจสอบเวลาทำการของร้าน
-    if (selectedTime < shopOpen || selectedTime > shopClose) {
+    // 🌟 ตรวจสอบเวลาทำการของร้านแบบรองรับ Overnight
+    if (!isWithinShopHours(selectedTime, shopOpen, shopClose)) {
       setTimeError(`เวลานัดรับต้องอยู่ระหว่างเวลาทำการ (${shopOpen} - ${shopClose} น.)`);
       return;
     }
@@ -127,7 +160,7 @@ export default function ShopCartDrawer({
 
     if (diffInMinutes < 30) {
       setTimeError(
-        `กรุณาเลือกเวลานัดรับตั้งแต่ ${minAllowedTimeStr} น. เป็นต้นไป (ล่วงหน้าอย่างน้อย 30 นาที))`
+        `กรุณาเลือกเวลานัดรับตั้งแต่ ${minAllowedTimeStr} น. เป็นต้นไป (ล่วงหน้าอย่างน้อย 30 นาที)`
       );
       return;
     }
@@ -135,23 +168,16 @@ export default function ShopCartDrawer({
     setTimeError("");
     onProceedToPayment({
       receive_date: appointmentDate,
-      appointment_time: `${appointmentDate}T${appointmentTime}:00`,
+      appointment_time: `${appointmentDate}T${selectedTime}:00`,
       description: orderNote,
       total_price: totalCartPrice,
     });
   };
 
-  const { todayStr, minAllowedTimeStr } = getNowInfo();
+  const { todayStr } = getNowInfo();
   const shopOpen = shop?.open_time ? shop.open_time.slice(0, 5) : "08:00";
   const shopClose = shop?.close_time ? shop.close_time.slice(0, 5) : "18:00";
-
-  // คำนวณเวลาเริ่มต้นที่ยอมให้เลือกในช่อง input type="time"
-  const calculatedMinTime =
-    appointmentDate === todayStr
-      ? minAllowedTimeStr > shopOpen
-        ? minAllowedTimeStr
-        : shopOpen
-      : shopOpen;
+  const isOpenOvernight = timeToMinutes(shopClose) < timeToMinutes(shopOpen);
 
   return (
     <>
@@ -233,46 +259,51 @@ export default function ShopCartDrawer({
                 {cartItems.length === 0 ? (
                   <p className="text-center py-6 text-slate-400 text-xs">ไม่มีสินค้าในตะกร้า</p>
                 ) : (
-                  cartItems.map((item, idx) => (
-                    <div
-                      key={item.id || idx}
-                      className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between text-xs group"
-                    >
-                      <div className="flex-1 pr-2">
-                        <span className="font-bold text-slate-800 block">
-                          {item.category} ({item.selected_size})
-                        </span>
-                        <span className="text-[11px] text-slate-400 block">
-                          {[item.color_type, item.paper_type, item.finishing_option]
-                            .filter((val) => val && val.trim() !== "" && val !== "-")
-                            .join(" • ")}
-                        </span>
-                        {item.file_url && (
-                          <span className="text-[10px] text-slate-500 block truncate max-w-[200px]">
-                            {item.file_url}
+                  cartItems.map((item, idx) => {
+                    const itemPages = Number(item.total_pages || item.page_count) || 1;
+                    const itemSubtotal = getItemSubtotal(item);
+
+                    return (
+                      <div
+                        key={item.id || idx}
+                        className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between text-xs group"
+                      >
+                        <div className="flex-1 pr-2">
+                          <span className="font-bold text-slate-800 block">
+                            {item.category} ({item.selected_size})
                           </span>
-                        )}
-                        <span className="text-blue-600 font-bold mt-0.5 block">
-                          จำนวน {item.quantity} ชุด
-                        </span>
-                      </div>
+                          <span className="text-[11px] text-slate-400 block">
+                            {[item.color_type, item.paper_type, item.finishing_option]
+                              .filter((val) => val && val.trim() !== "" && val !== "-")
+                              .join(" • ")}
+                          </span>
+                          {item.file_url && (
+                            <span className="text-[10px] text-slate-500 block truncate max-w-[200px]">
+                              {item.file_url}
+                            </span>
+                          )}
+                          <span className="text-blue-600 font-bold mt-0.5 block">
+                            {itemPages > 1 ? `${itemPages} หน้า • ` : ""}จำนวน {item.quantity} ชุด
+                          </span>
+                        </div>
 
-                      <div className="flex items-center gap-3">
-                        <span className="font-extrabold text-slate-900 text-sm">
-                          ฿{Number(item.subtotal || item.quantity * item.unit_price).toFixed(2)}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="font-extrabold text-slate-900 text-sm">
+                            ฿{itemSubtotal.toFixed(2)}
+                          </span>
 
-                        <button
-                          type="button"
-                          onClick={() => onRemoveItem && onRemoveItem(item.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                          title="ลบรายการนี้"
-                        >
-                          <Trash2 className="w-4 h-4 text-rose-500" />
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => onRemoveItem && onRemoveItem(item.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="ลบรายการนี้"
+                          >
+                            <Trash2 className="w-4 h-4 text-rose-500" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
@@ -305,8 +336,7 @@ export default function ShopCartDrawer({
                     </label>
                     <input
                       type="time"
-                      min={calculatedMinTime}
-                      max={shopClose}
+                      max={isOpenOvernight ? undefined : shopClose}
                       value={appointmentTime}
                       onChange={(e) => {
                         setAppointmentTime(e.target.value);

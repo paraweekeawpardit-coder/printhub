@@ -68,16 +68,22 @@ export default function ServiceOptionModal({
     };
   }, []);
 
+  // 🌟 Helper ตรวจสอบว่าเป็นกลุ่มประเภท "ค่าบริการต่อชุด/ค่าปก/ค่าเข้าเล่ม" หรือไม่
+  const checkIsPerSetGroup = (groupName: string) => {
+    const lower = groupName.toLowerCase();
+    return (
+      lower.includes("เข้าเล่ม") ||
+      lower.includes("ปก") ||
+      lower.includes("ตกแต่ง") ||
+      lower.includes("finishing") ||
+      lower.includes("เย็บมุม") ||
+      lower.includes("รูปแบบ")
+    );
+  };
+
   const requiredGroups = useMemo(() => {
     const allGroups = Array.from(new Set(rawOptions.map((o) => o.group_type)));
-    return allGroups.filter((g) => {
-      const lower = g.toLowerCase();
-      return (
-        !lower.includes("เข้าเล่ม") &&
-        !lower.includes("ตกแต่ง") &&
-        !lower.includes("finishing")
-      );
-    });
+    return allGroups.filter((g) => !checkIsPerSetGroup(g));
   }, [rawOptions]);
 
   const missingGroups = useMemo(() => {
@@ -103,38 +109,33 @@ export default function ServiceOptionModal({
   };
 
   const priceCalculations = useMemo(() => {
-    let perPageOptionsSum = 0;
-    let finishingOptionsSum = 0;
+    let perPageOptionsSum = 0; // ราคารวมตัวเลือกที่ต้องคูณจำนวนหน้า (เช่น ชนิดกระดาษ, สี)
+    let perSetOptionsSum = 0;  // ราคารวมตัวเลือกที่คิดเป็นต่อชุด (เช่น ปกรายงาน, การเข้าเล่ม)
 
     Object.entries(modalOptions).forEach(([groupName, item]) => {
       const price = Number(item.unit_price ?? item.price ?? 0);
-      const lowerGroup = groupName.toLowerCase();
 
-      if (
-        lowerGroup.includes("เข้าเล่ม") ||
-        lowerGroup.includes("ตกแต่ง") ||
-        lowerGroup.includes("finishing")
-      ) {
-        finishingOptionsSum += price;
+      if (checkIsPerSetGroup(groupName)) {
+        perSetOptionsSum += price;
       } else {
         perPageOptionsSum += price;
       }
     });
 
-    const pricePerPage = perPageOptionsSum;
-    
-    const singleSetPrice = serviceTypeName === "เอกสาร" 
-      ? (pricePerPage * totalPages) + finishingOptionsSum
-      : (pricePerPage + finishingOptionsSum);
+    const effectivePages = totalPages > 0 ? totalPages : 1;
 
+    // 🌟 สูตรราคาสุทธิ 1 ชุด = (ราคาต่อหน้า * จำนวนหน้าจริง) + ราคาบวกเพิ่มต่อชุด
+    const singleSetPrice = (perPageOptionsSum * effectivePages) + perSetOptionsSum;
+
+    // ราคารวมตามจำนวนชุดที่สั่งซื้อ
     const finalTotalPrice = singleSetPrice * quantity;
 
     return {
-      pricePerPage,
+      pricePerPage: perPageOptionsSum,
       singleSetPrice,
       finalTotalPrice,
     };
-  }, [modalOptions, serviceTypeName, totalPages, quantity]);
+  }, [modalOptions, totalPages, quantity]);
 
   const countPdfPages = async (file: File): Promise<number> => {
     try {
@@ -148,7 +149,6 @@ export default function ServiceOptionModal({
     }
   };
 
-  // 🌟 ตรวจสอบขนาดและจำกัดจำนวนไฟล์ตาม FR-2.2 และ FR-2.3
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError("");
     const files = e.target.files;
@@ -221,11 +221,9 @@ export default function ServiceOptionModal({
     return fallback;
   };
 
-  // 🌟 ฟังก์ชันอัปโหลดไฟล์ไปยัง Supabase Storage และคืนค่าเป็น Public URLs
   const uploadFilesToSupabase = async (): Promise<string[]> => {
     const urls: string[] = [];
 
-    // เปลี่ยนจาก files เป็น uploadedFiles ตามชื่อ state จริง
     for (const item of uploadedFiles) {
       const formData = new FormData();
       formData.append("file", item.file);
@@ -252,27 +250,25 @@ export default function ServiceOptionModal({
       setIsUploading(true);
       setFileError("");
 
-      // 1. อัปโหลดไฟล์ขึ้น Supabase Storage และรับ URL จริง
       const fileUrls = await uploadFilesToSupabase();
       const combinedFileUrls = fileUrls.join(", ");
 
-      // 2. ส่งข้อมูลสินค้าและ URL ของไฟล์ไปยังตะกร้า
       onAddToCart({
         category: serviceTypeName,
         selected_size: getOptionValue(["ขนาด", "ขนาดกระดาษ", "ขนาดมาตรฐาน", "size"], "A4"),
         color_type: getOptionValue(["ระบบสี", "รูปแบบสีการพิมพ์", "color", "สี"], ""),
-        paper_type: getOptionValue(["วัสดุ", "ความหนาและชนิดกระดาษ", "paper", "กระดาษ"], ""),
-        finishing_option: `${getOptionValue(["การเข้าเล่มและตกแต่ง", "รูปแบบการเข้าเล่ม/ตกแต่ง", "finishing", "เข้าเล่ม"], "ไม่มี")}${
-          serviceTypeName === "เอกสาร" && isDoubleSided ? " (พิมพ์หน้า-หลัง)" : ""
+        paper_type: getOptionValue(["วัสดุ", "ความหนาและชนิดกระดาษ", "paper", "กระดาษ", "ปกรายงาน"], ""),
+        finishing_option: `${getOptionValue(["การเข้าเล่มและตกแต่ง", "รูปแบบการเข้าเล่ม/ตกแต่ง", "finishing", "เข้าเล่ม", "เย็บมุม", "รูปแบบการเข้าเล่ม", "ปกรายงาน"], "ไม่มี")}${
+          isDoubleSided ? " (พิมพ์หน้า-หลัง)" : ""
         }`,
         quantity: Number(quantity),
         unit_price: priceCalculations.singleSetPrice,
         subtotal: priceCalculations.finalTotalPrice,
         file_url: combinedFileUrls,
         
-        page_count: totalPages,       // สำหรับบันทึกในตาราง DB (print_order_item)
-        total_pages: totalPages,      // สำหรับ Cart state
-        pages_per_set: totalPages,    // เผื่อใช้สำหรับคำนวณราคาต่อหน้า
+        page_count: totalPages,
+        total_pages: totalPages,
+        pages_per_set: totalPages,
       });
     } catch (err: any) {
       setFileError(err.message || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
@@ -439,50 +435,42 @@ export default function ServiceOptionModal({
 
           {/* ฝั่งขวา: กำหนดสเปก */}
           <div className="md:col-span-6 p-5 sm:p-6 overflow-y-auto space-y-4 bg-white">
-            {serviceTypeName === "เอกสาร" && (
-              <div className="space-y-1.5 bg-blue-50/60 p-3.5 rounded-2xl border border-blue-100">
-                <span className="text-xs font-bold text-blue-900 block">หน้าที่ต้องการพิมพ์</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsDoubleSided(false)}
-                    className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                      !isDoubleSided
-                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    พิมพ์หน้าเดียว 
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsDoubleSided(true)}
-                    className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                      isDoubleSided
-                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    พิมพ์หน้า-หลัง
-                  </button>
-                </div>
+            <div className="space-y-1.5 bg-blue-50/60 p-3.5 rounded-2xl border border-blue-100">
+              <span className="text-xs font-bold text-blue-900 block">หน้าที่ต้องการพิมพ์</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDoubleSided(false)}
+                  className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                    !isDoubleSided
+                      ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  พิมพ์หน้าเดียว 
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDoubleSided(true)}
+                  className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                    isDoubleSided
+                      ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  พิมพ์หน้า-หลัง
+                </button>
               </div>
-            )}
+            </div>
 
             {/* แสดงตัวเลือกย่อยจาก Supabase */}
             {(() => {
-              // ดึงกลุ่มทั้งหมด และจัดเรียงให้กลุ่มเข้าเล่ม/ตกแต่งไปอยู่ท้ายสุดเสมอ
               const groups = Array.from(new Set(rawOptions.map((o) => o.group_type)))
                 .sort((a, b) => {
-                  const lowerA = a.toLowerCase();
-                  const lowerB = b.toLowerCase();
+                  const isFinishingA = checkIsPerSetGroup(a);
+                  const isFinishingB = checkIsPerSetGroup(b);
 
-                  const isFinishingA = lowerA.includes("เข้าเล่ม") || lowerA.includes("ตกแต่ง") || lowerA.includes("finishing");
-                  const isFinishingB = lowerB.includes("เข้าเล่ม") || lowerB.includes("ตกแต่ง") || lowerB.includes("finishing");
-
-                  // ถ้า A เป็นตัวเลือกเข้าเล่ม/ตกแต่ง ให้ไปอยู่ข้างหลัง
                   if (isFinishingA && !isFinishingB) return 1;
-                  // ถ้า B เป็นตัวเลือกเข้าเล่ม/ตกแต่ง ให้ B ไปอยู่ข้างหลัง
                   if (!isFinishingA && isFinishingB) return -1;
 
                   return 0;
@@ -490,10 +478,7 @@ export default function ServiceOptionModal({
 
               return groups.map((group) => {
                 const groupItems = rawOptions.filter((o) => o.group_type === group);
-                const isOptionalGroup =
-                  group.includes("เข้าเล่ม") ||
-                  group.includes("ตกแต่ง") ||
-                  group.includes("finishing");
+                const isOptionalGroup = checkIsPerSetGroup(group);
 
                 return (
                   <div key={group} className="space-y-1.5">
@@ -567,9 +552,7 @@ export default function ServiceOptionModal({
         <div className="p-4 sm:px-6 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
             <span className="text-[11px] text-slate-400 block">
-              {serviceTypeName === "เอกสาร"
-                ? `ราคาคำนวณ (${totalPages} หน้า × ${quantity} ชุด)`
-                : "ราคาคำนวณสุทธิ"}
+              ราคาคำนวณ ({totalPages} หน้า × {quantity} ชุด)
             </span>
             <span className="text-base font-extrabold text-blue-600">
               ฿{priceCalculations.finalTotalPrice.toFixed(2)}
