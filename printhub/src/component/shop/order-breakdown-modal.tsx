@@ -13,7 +13,6 @@ type Props = {
     daily: TrendItem[];
     weekly: TrendItem[];
     monthly: TrendItem[];
-    yearly: TrendItem[];
   };
   onOrderClick: (id: string) => void;
 };
@@ -26,7 +25,7 @@ export default function OrderBreakdownModal({
   onOrderClick,
 }: Props) {
   const [selectedStatus, setSelectedStatus] = useState<string>("ทั้งหมด");
-  const [timeframe, setTimeframe] = useState<"daily" | "weekly" | "monthly" | "yearly">("yearly");
+  const [timeframe, setTimeframe] = useState<"daily" | "weekly" | "monthly">("monthly");
   
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -58,10 +57,10 @@ export default function OrderBreakdownModal({
   const filteredOrders = orders.filter((o) => {
     const matchStatus = selectedStatus === "ทั้งหมด" || o.latest_status === selectedStatus;
     const customerName = `${o.customer?.first_name || ""} ${o.customer?.last_name || ""}`.toLowerCase();
-    const orderId = (o.id || "").toLowerCase();
+    const orderDisplayNo = (o.order_no ? String(o.order_no) : o.id || "").toLowerCase();
     const matchSearch =
       customerName.includes(searchTerm.toLowerCase()) ||
-      orderId.includes(searchTerm.toLowerCase());
+      orderDisplayNo.includes(searchTerm.toLowerCase());
     return matchStatus && matchSearch;
   });
 
@@ -75,7 +74,6 @@ export default function OrderBreakdownModal({
     daily: ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."].map((l) => ({ label: l, count: 0 })),
     weekly: ["สัปดาห์ 1", "สัปดาห์ 2", "สัปดาห์ 3", "สัปดาห์ 4"].map((l) => ({ label: l, count: 0 })),
     monthly: ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."].map((l) => ({ label: l, count: 0 })),
-    yearly: ["2565", "2566", "2567", "2568", "2569"].map((l) => ({ label: l, count: 0 })),
   };
 
   const currentChartData: TrendItem[] =
@@ -175,18 +173,9 @@ export default function OrderBreakdownModal({
             >
               เดือน
             </button>
-            <button
-              onClick={() => setTimeframe("yearly")}
-              className={`rounded-md px-2.5 py-1 transition-all ${
-                timeframe === "yearly" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              รายปี (5 ปีย้อนหลัง)
-            </button>
           </div>
         </div>
 
-        {/* แสดงแท่งกราฟตลอดเวลาโดยไม่ซ้อน Overlay */}
         <div className="flex h-36 items-end justify-between gap-1.5 overflow-x-auto pt-4 pb-1">
           {currentChartData.map((item, idx) => {
             const heightPercent = Math.round((item.count / maxChartCount) * 100);
@@ -248,7 +237,7 @@ export default function OrderBreakdownModal({
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="ค้นหาเลข Order หรือชื่อลูกค้า..."
+            placeholder="ค้นหาหมายเลข Order หรือชื่อลูกค้า..."
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -258,7 +247,7 @@ export default function OrderBreakdownModal({
           />
         </div>
 
-        {/* List ของออเดอร์ */}
+        {/* List ของออเดอร์: ยังส่ง o.id ไปที่ onOrderClick เหมือนเดิม แต่แสดงข้อความด้วย o.order_no */}
         <div className="divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white">
           {paginatedOrders.length > 0 ? (
             paginatedOrders.map((o) => (
@@ -268,10 +257,10 @@ export default function OrderBreakdownModal({
                 className="group flex cursor-pointer items-center justify-between p-3 transition-colors hover:bg-slate-50"
               >
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    Order #{o.id.slice(0, 8)}
+                  <p className="text-sm font-bold text-slate-800">
+                    Order #{o.order_no || o.id?.slice(0, 8)}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 mt-0.5">
                     {o.customer?.first_name} {o.customer?.last_name} •{" "}
                     {new Date(o.order_date).toLocaleDateString("th-TH")}
                   </p>

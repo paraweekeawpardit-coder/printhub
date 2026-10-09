@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Receipt, XCircle, AlertTriangle, ShieldCheck, Eye, Loader2, X } from "lucide-react";
+import { Receipt, XCircle, AlertTriangle, ShieldCheck, Loader2, X } from "lucide-react";
 
 interface SlipModalProps {
   isOpen: boolean;
@@ -79,47 +79,6 @@ export function ActionConfirmModal({
             {isUpdating ? <Loader2 size={16} className="animate-spin" /> : confirmText}
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-interface WarnModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onViewSlip: () => void;
-  slipUrl: string | null;
-  slipVerdict: boolean | null;
-}
-
-export function WarnModal({ isOpen, onClose, onViewSlip, slipUrl, slipVerdict }: WarnModalProps) {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-6 text-center" onClick={(e) => e.stopPropagation()}>
-        <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-4">
-          <AlertTriangle className="text-amber-600" size={22} />
-        </div>
-        <h3 className="text-base font-semibold text-gray-900 mb-1">ยังไม่สามารถดำเนินการได้</h3>
-        <p className="text-sm text-gray-500 mb-6">
-          {slipVerdict === false
-            ? "สลิปถูกทำเครื่องหมายว่าไม่ถูกต้อง ระบบจะเปลี่ยนสถานะเป็น 'รอการชำระเงิน' เพื่อรอสลิปใหม่"
-            : "คุณยังไม่ได้ตรวจสอบสลิปโอนเงิน กรุณาเปิดดูสลิปและเลือกผลการตรวจสอบก่อน"}
-        </p>
-        {slipVerdict === false ? (
-          <button type="button" onClick={onClose} className="w-full py-2.5 rounded-xl bg-[#12356b] text-white text-sm font-medium">
-            รับทราบ
-          </button>
-        ) : (
-          <div className="grid grid-cols-2 gap-2.5">
-            <button type="button" onClick={onClose} className="py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 text-sm font-medium">
-              ปิด
-            </button>
-            <button type="button" onClick={() => { onClose(); onViewSlip(); }} disabled={!slipUrl} className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[#12356b] text-white text-sm font-medium disabled:opacity-50">
-              <Eye size={15} /> ดูสลิป
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

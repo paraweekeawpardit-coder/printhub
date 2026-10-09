@@ -1,6 +1,16 @@
 "use client";
 
-import { Camera, Clock, Pencil, Lock } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Camera,
+  Clock,
+  Pencil,
+  Lock,
+  ChevronDown,
+  Check,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 
 type AddressData = {
   detail: string;
@@ -22,6 +32,9 @@ type Props = {
   phone: string;
   setPhone: (v: string) => void;
   email: string;
+  profileImage: string | null;
+  onUploadImage: (file: File) => Promise<string | null>;
+  uploadingImage: boolean;
   openTime: string;
   setOpenTime: (v: string) => void;
   closeTime: string;
@@ -35,6 +48,266 @@ type Props = {
   onToggleEdit: () => void;
 };
 
+// ==========================================
+// รูปโปรไฟล์ร้าน: แสดงรูป + กดเพื่อเปลี่ยนรูปได้ (ไม่มีปุ่มลบ เพราะร้านต้องมีรูปเสมอ)
+// ==========================================
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_IMAGE_MB = 5;
+
+function ShopAvatar({
+  src,
+  name,
+  uploading,
+  onSelectFile,
+}: {
+  src: string | null;
+  name: string;
+  uploading: boolean;
+  onSelectFile: (file: File) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [failed, setFailed] = useState(false);
+
+  // เปลี่ยนรูปใหม่แล้วให้ลองโหลดใหม่
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  const showImage = !!src && !failed;
+  const openPicker = () => inputRef.current?.click();
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={openPicker}
+        disabled={uploading}
+        aria-label="เปลี่ยนรูปโปรไฟล์ร้านค้า"
+        className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#EAF1FF] text-xl font-bold text-[#2F6FED] ring-1 ring-slate-200 transition-shadow hover:ring-2 hover:ring-[#2F6FED]/40 disabled:cursor-wait"
+      >
+        {showImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src as string}
+            alt={`รูปโปรไฟล์ ${name}`}
+            onError={() => setFailed(true)}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          name ? name.charAt(0) : "S"
+        )}
+        {uploading && (
+          <span className="absolute inset-0 flex items-center justify-center bg-white/70">
+            <Loader2 size={18} className="animate-spin text-[#2F6FED]" />
+          </span>
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={openPicker}
+        disabled={uploading}
+        aria-label="เลือกรูปใหม่"
+        className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#0F2942] text-white transition-colors hover:bg-[#16385c] disabled:opacity-50"
+      >
+        <Camera size={13} />
+      </button>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ""; // เลือกไฟล์เดิมซ้ำได้
+          if (file) onSelectFile(file);
+        }}
+      />
+    </div>
+  );
+}
+
+// ==========================================
+// TimePicker: เลือกเวลาแบบ 24 ชั่วโมง (00-23) ให้เข้ากับธีม
+// value / onChange ใช้รูปแบบ "HH:mm" เหมือนที่เก็บในฐานข้อมูล
+// ==========================================
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+const parseTime = (value: string) => {
+  const [h, m] = (value || "").split(":");
+  const hour = Math.min(23, Math.max(0, parseInt(h, 10) || 0));
+  const minute = Math.min(59, Math.max(0, parseInt(m, 10) || 0));
+  return { hour, minute };
+};
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+const timeItemClass = (selected: boolean) =>
+  `flex h-9 w-full items-center justify-center rounded-lg text-sm tabular-nums transition-colors ${
+    selected
+      ? "bg-[#2F6FED] font-semibold text-white"
+      : "text-slate-700 hover:bg-slate-100"
+  }`;
+
+function TimePicker({
+  value,
+  onChange,
+  ariaLabel,
+  align = "left",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  ariaLabel: string;
+  align?: "left" | "right";
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const hourListRef = useRef<HTMLDivElement>(null);
+  const minuteListRef = useRef<HTMLDivElement>(null);
+
+  const { hour, minute } = parseTime(value);
+
+  // นาทีทุก 5 นาที (ถ้าค่าเดิมในระบบไม่ลงตัว เช่น 09:07 ให้แสดงค่านั้นด้วย จะได้ไม่หาย)
+  const minutes = useMemo(() => {
+    const base = Array.from({ length: 12 }, (_, i) => i * 5);
+    return base.includes(minute)
+      ? base
+      : [...base, minute].sort((a, b) => a - b);
+  }, [minute]);
+
+  // ปิดเมื่อคลิกข้างนอก หรือกด Esc
+  useEffect(() => {
+    if (!open) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  // เปิดมาแล้วเลื่อนให้ค่าที่เลือกอยู่กลางรายการ
+  useEffect(() => {
+    if (!open) return;
+    [hourListRef.current, minuteListRef.current].forEach((list) => {
+      const el = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (list && el) {
+        list.scrollTop = el.offsetTop - list.clientHeight / 2 + el.clientHeight / 2;
+      }
+    });
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative flex-1">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`flex w-full items-center gap-2 rounded-xl border bg-white px-3.5 py-2 text-left text-sm text-[#0F2942] outline-none transition-colors ${
+          open
+            ? "border-[#2F6FED] ring-2 ring-[#2F6FED]/15"
+            : "border-slate-200 hover:border-slate-300"
+        }`}
+      >
+        <Clock size={16} className="text-slate-400" />
+        <span className="flex-1 tabular-nums">
+          {pad2(hour)}:{pad2(minute)} น.
+        </span>
+        <ChevronDown
+          size={15}
+          className={`shrink-0 text-slate-400 transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {open && (
+        <div
+          className={`absolute top-full z-20 mt-1.5 w-60 rounded-xl border border-slate-200 bg-white p-3 shadow-lg shadow-slate-900/10 ${
+            align === "right" ? "right-0" : "left-0"
+          }`}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-1.5 text-center text-xs font-semibold text-slate-400">
+                ชั่วโมง
+              </p>
+              <div
+                ref={hourListRef}
+                role="listbox"
+                aria-label="ชั่วโมง"
+                className="relative max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-100 p-1"
+              >
+                {HOURS.map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    role="option"
+                    aria-selected={h === hour}
+                    onClick={() => onChange(`${pad2(h)}:${pad2(minute)}`)}
+                    className={timeItemClass(h === hour)}
+                  >
+                    {pad2(h)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-center text-xs font-semibold text-slate-400">
+                นาที
+              </p>
+              <div
+                ref={minuteListRef}
+                role="listbox"
+                aria-label="นาที"
+                className="relative max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-100 p-1"
+              >
+                {minutes.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="option"
+                    aria-selected={m === minute}
+                    onClick={() => onChange(`${pad2(hour)}:${pad2(m)}`)}
+                    className={timeItemClass(m === minute)}
+                  >
+                    {pad2(m)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
+            <span className="text-sm font-semibold tabular-nums text-[#0F2942]">
+              {pad2(hour)}:{pad2(minute)} น.
+            </span>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg bg-[#0F2942] px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#16385c]"
+            >
+              ตกลง
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ShopProfileTab({
   isVerified,
   isOpen,
@@ -47,6 +320,9 @@ export default function ShopProfileTab({
   phone,
   setPhone,
   email,
+  profileImage,
+  onUploadImage,
+  uploadingImage,
   openTime,
   setOpenTime,
   closeTime,
@@ -68,6 +344,63 @@ export default function ShopProfileTab({
   ]
     .filter(Boolean)
     .join(" ");
+
+  const [imageMessage, setImageMessage] = useState<{
+    type: "error" | "success";
+    text: string;
+  } | null>(null);
+
+  // ข้อความ "เปลี่ยนรูปแล้ว" หายเองหลัง 3 วินาที
+  useEffect(() => {
+    if (imageMessage?.type !== "success") return;
+    const timer = setTimeout(() => setImageMessage(null), 3000);
+    return () => clearTimeout(timer);
+  }, [imageMessage]);
+
+  const handleSelectImage = async (file: File) => {
+    setImageMessage(null);
+
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      setImageMessage({ type: "error", text: "รองรับเฉพาะไฟล์ JPG, PNG หรือ WebP" });
+      return;
+    }
+    if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
+      setImageMessage({ type: "error", text: `ไฟล์ต้องมีขนาดไม่เกิน ${MAX_IMAGE_MB} MB` });
+      return;
+    }
+
+    const error = await onUploadImage(file);
+    setImageMessage(
+      error
+        ? { type: "error", text: error }
+        : { type: "success", text: "เปลี่ยนรูปร้านเรียบร้อยแล้ว" }
+    );
+  };
+
+  const imageFeedback = (
+    <>
+      {imageMessage && (
+        <p
+          role={imageMessage.type === "error" ? "alert" : "status"}
+          className={`mt-1.5 flex items-center gap-1 text-xs font-medium ${
+            imageMessage.type === "error" ? "text-rose-500" : "text-emerald-600"
+          }`}
+        >
+          {imageMessage.type === "error" ? (
+            <AlertCircle size={12} className="shrink-0" />
+          ) : (
+            <Check size={12} className="shrink-0" />
+          )}
+          {imageMessage.text}
+        </p>
+      )}
+      {!profileImage && !imageMessage && (
+        <p className="mt-1.5 text-xs font-medium text-amber-600">
+          ร้านของคุณยังไม่มีรูปโปรไฟล์ กรุณากดที่รูปเพื่ออัปโหลด
+        </p>
+      )}
+    </>
+  );
 
   return (
     <div className="relative">
@@ -118,12 +451,16 @@ export default function ShopProfileTab({
           <div className="space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#EAF1FF] text-xl font-bold text-[#2F6FED]">
-                  {shopName ? shopName.charAt(0) : "S"}
-                </div>
+                <ShopAvatar
+                  src={profileImage}
+                  name={shopName}
+                  uploading={uploadingImage}
+                  onSelectFile={handleSelectImage}
+                />
                 <div>
                   <p className="text-sm font-bold text-[#0F2942]">{shopName || "-"}</p>
                   <p className="text-xs text-slate-400">เจ้าของร้าน: {ownerName || "-"}</p>
+                  {imageFeedback}
                 </div>
               </div>
               <button
@@ -148,7 +485,7 @@ export default function ShopProfileTab({
                 <p className="text-xs font-semibold text-slate-400">เวลาทำการ</p>
                 <p className="mt-1 text-sm text-[#0F2942] flex items-center gap-1.5">
                   <Clock size={14} className="text-slate-400" />
-                  {openTime} — {closeTime}
+                  {openTime} — {closeTime} น.
                 </p>
               </div>
             </div>
@@ -163,20 +500,21 @@ export default function ShopProfileTab({
           <div className="space-y-6">
             {/* Profile Image */}
             <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
-              <div className="relative">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#EAF1FF] text-xl font-bold text-[#2F6FED]">
-                  {shopName ? shopName.charAt(0) : "S"}
-                </div>
-                <button
-                  type="button"
-                  className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#0F2942] text-white hover:bg-[#16385c] transition-colors"
-                >
-                  <Camera size={12} />
-                </button>
-              </div>
+              <ShopAvatar
+                src={profileImage}
+                name={shopName}
+                uploading={uploadingImage}
+                onSelectFile={handleSelectImage}
+              />
               <div>
                 <p className="text-sm font-bold text-[#0F2942]">รูปโปรไฟล์ร้านค้า</p>
-                <p className="text-xs text-slate-400">แนะนำขนาด 400 x 400 px</p>
+                <p className="text-xs text-slate-400">
+                    JPG, PNG, WebP ไม่เกิน {MAX_IMAGE_MB} MB
+                </p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  กดที่รูปเพื่อเปลี่ยน (รูปจะถูกบันทึกทันที ไม่ต้องกดบันทึกข้อมูลร้าน)
+                </p>
+                {imageFeedback}
               </div>
             </div>
 
@@ -227,25 +565,18 @@ export default function ShopProfileTab({
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-2 block">เวลาทำการ</label>
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 flex-1 rounded-xl border border-slate-200 px-3.5 py-2">
-                  <Clock size={16} className="text-slate-400" />
-                  <input
-                    type="time"
-                    value={openTime}
-                    onChange={(e) => setOpenTime(e.target.value)}
-                    className="w-full text-sm text-[#0F2942] outline-none bg-transparent"
-                  />
-                </div>
+                <TimePicker
+                  value={openTime}
+                  onChange={setOpenTime}
+                  ariaLabel="เวลาเปิดร้าน"
+                />
                 <span className="text-slate-400">—</span>
-                <div className="flex items-center gap-2 flex-1 rounded-xl border border-slate-200 px-3.5 py-2">
-                  <Clock size={16} className="text-slate-400" />
-                  <input
-                    type="time"
-                    value={closeTime}
-                    onChange={(e) => setCloseTime(e.target.value)}
-                    className="w-full text-sm text-[#0F2942] outline-none bg-transparent"
-                  />
-                </div>
+                <TimePicker
+                  value={closeTime}
+                  onChange={setCloseTime}
+                  ariaLabel="เวลาปิดร้าน"
+                  align="right"
+                />
               </div>
             </div>
 
