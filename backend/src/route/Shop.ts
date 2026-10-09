@@ -48,10 +48,17 @@ router.get("/getFinancialOverview", Home.getFinancialOverview);
 router.get("/getOrderStatusBreakdown", Home.getOrderStatusBreakdown);
 router.get("/getComplaintsAndReviews", Home.getComplaintsAndReviews);
 
-// Orders
+// ==================== Orders ====================
 router.get("/getOrderByStatus", Order.getOrdersByStatus);
-router.get("/orders/:id", Detail.getOrder);
-router.patch("/orders/:id/status", Detail.updateOrderStatus);
+
+// 🟢 ปรับแก้ Path ให้ตรงกับ Frontend (/orders/...)
+router.get("/orders/:orderId", Order.getOrderById);
+
+// 🟢 อัปเดตสถานะออเดอร์
+router.patch("/orders/:orderId/status", Order.updateOrderStatus);
+
+// 🟢 ตรวจสอบสลิปและการชำระเงิน (รองรับทั้งสองแบบ)
+router.patch("/orders/:id/paymentstatus", Detail.verifyPayment);
 router.patch("/orders/:id/verify-payment", Detail.verifyPayment);
 
 // Shop Profile & Settings (แก้ไขส่วนนี้)

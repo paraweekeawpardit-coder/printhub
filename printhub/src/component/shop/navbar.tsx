@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
+import NotificationBell from "@/component/NotificationBell";
 
 const API_BASE = "http://localhost:5000/shop";
 // หน้าตั้งค่าร้านส่ง event นี้หลังเปลี่ยนรูปสำเร็จ เพื่อให้ navbar อัปเดตรูปทันที
@@ -72,8 +73,8 @@ export default function ShopNavbar() {
   const showProfileImage = !!profileImage && !imageFailed;
 
   const isHomeActive = pathname === "/shop";
-  const isOrderActive = pathname.startsWith("/shop/order");
-  const isChatActive = pathname.startsWith("/shop/chat");
+  const isOrderActive = pathname.startsWith("/shop/order") && !pathname.endsWith("/chat");
+  const isChatActive = pathname.includes("/chat");
   const isSettingActive = pathname.startsWith("/shop/setting");
 
   const goTo = (path: string) => {
@@ -82,18 +83,27 @@ export default function ShopNavbar() {
       alert("ไม่พบข้อมูลร้านค้า กรุณาล็อกอินใหม่อีกครั้ง");
       return;
     }
+
+    if (path === "chat") {
+      router.push(`/shop/order/${shopId}/chat?from=navbar`);
+      return;
+    }
+
+    if (path === "order") {
+      router.push(`/shop/order/${shopId}`);
+      return;
+    }
+
     router.push(`/shop/${path}/${shopId}`);
   };
 
-
   const handleLogout = () => {
-      localStorage.removeItem("shop_id");
-      localStorage.removeItem("shop_name");
-      localStorage.removeItem("token");
-      localStorage.clear();
+    localStorage.removeItem("shop_id");
+    localStorage.removeItem("shop_name");
+    localStorage.removeItem("token");
+    localStorage.clear();
 
-
-      router.push("/auth");
+    router.push("/auth");
   };
 
   return (
@@ -102,7 +112,7 @@ export default function ShopNavbar() {
         {/* Logo / Home */}
         <button
           onClick={() => router.push("/shop")}
-          className="flex items-center gap-2 pl-1 cursor-pointer text-left focus:outline-none"
+          className="logout-btn flex items-center gap-2 pl-1 cursor-pointer text-left focus:outline-none"
         >
           <div className="w-10 h-10 rounded-full bg-[#0F2942] flex items-center justify-center">
             <Printer size={18} className="text-white" />
@@ -163,8 +173,11 @@ export default function ShopNavbar() {
           </button>
         </div>
 
-        {/* Setting & Logout Section */}
+        {/* Setting, Notification & Logout Section */}
         <div className="flex items-center gap-2">
+          {/* NotificationBell */}
+          {shopId && <NotificationBell userId={shopId} role="shop" />}
+
           {/* Setting / Profile Button */}
           <button
             onClick={() => goTo("setting")}
@@ -200,11 +213,11 @@ export default function ShopNavbar() {
           {/* เส้นคั่นแบ่งสัดส่วน */}
           <div className="h-5 w-[1px] bg-slate-200 my-auto" />
 
-          {/* ปุ่มออกจากระบบ (Logout Button) */}
+          {/* ปุ่มออกจากระบบ (Logout Button - ใส่ logout-btn เพิ่มที่นี่) */}
           <button
             onClick={handleLogout}
             title="ออกจากระบบ"
-            className="flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 transition-colors cursor-pointer focus:outline-none"
+            className="logout-btn flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 transition-colors cursor-pointer focus:outline-none"
           >
             <LogOut size={15} />
             <span className="hidden sm:inline">ออกจากระบบ</span>

@@ -8,8 +8,25 @@ export const getShopProfile = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
+/**
+ * Helper Check สถานะการยืนยันตัวตนของร้าน
+ */
+const checkShopVerification = async (shop_id: string): Promise<boolean> => {
+  const { data: shop } = await supabase
+    .from("print_shop")
+    .select("is_verify")
+    .eq("id", shop_id)
+    .maybeSingle();
+
+  return Boolean(shop?.is_verify);
+};
+
+/**
+ * GET /api/shop/profile/:shop_id
+ */
+export const getProfile = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { shop_id } = req.params;
+    const shop_id = req.params.shop_id as string;
 
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
@@ -17,14 +34,50 @@ export const getShopProfile = async (
 
     const { data: shop, error } = await supabase
       .from("print_shop")
-      .select(
-        `
-        id,
+      .select(`
+        *,
+        address (*)
+      `)
+      .eq("id", shop_id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("GetProfile Error:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({ data: shop });
+  } catch (err: any) {
+    console.error("GetProfile Exception:", err.message || err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+/**
+ * PUT /api/shop/profile/:shop_id
+ */
+export const updateProfile = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const shop_id = req.params.shop_id as string;
+    const { shop_name, owner_name, phone, open_time, close_time, address } = req.body;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    // 🔒 ตรวจสอบการอนุมัติร้านค้า
+    const isVerified = await checkShopVerification(shop_id);
+    if (!isVerified) {
+      return res.status(403).json({ error: "ร้านค้าของคุณยังไม่ได้รับการอนุมัติ ไม่สามารถแก้ไขข้อมูลได้" });
+    }
+
+    // 1. อัปเดตข้อมูลร้านค้า
+    const { error: shopError } = await supabase
+      .from("print_shop")
+      .update({
         shop_name,
         owner_name,
-        email,
         phone,
-        profile_image,
         open_time,
         close_time,
         is_verify,
@@ -44,41 +97,165 @@ export const getShopProfile = async (
       .eq("id", shop_id)
       .single();
 
-    if (error || !shop) {
-      return res.status(404).json({ error: "Shop not found" });
+    if (shopError) {
+      return res.status(400).json({ error: shopError.message });
     }
 
-    return res.status(200).json({ data: shop });
-  } catch (err) {
-    console.error("Get Shop Profile Error:", err);
+    // 2. อัปเดตหรือเพิ่มที่อยู่
+    if (address) {
+      if (address.id) {
+        const { error: addrError } = await supabase
+          .from("address")
+          .update({
+            detail: address.detail,
+            subdistrict: address.subdistrict,
+            district: address.district,
+            province: address.province,
+            postcode: address.postcode,
+          })
+          .eq("id", address.id);
+
+        if (addrError) {
+          return res.status(400).json({ error: addrError.message });
+        }
+      } else {
+        const { error: addrError } = await supabase.from("address").insert({
+          shop_id,
+          detail: address.detail,
+          subdistrict: address.subdistrict,
+          district: address.district,
+          province: address.province,
+          postcode: address.postcode,
+        });
+
+        if (addrError) {
+          return res.status(400).json({ error: addrError.message });
+        }
+      }
+    }
+
+    return res.status(200).json({ success: true, message: "Profile updated successfully" });
+  } catch (err: any) {
+    console.error("UpdateProfile Exception:", err.message || err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
 
-export const getBankAccount = async (
-  req: Request,
-  res: Response
-): Promise<Response> => {
+/**
+ * GET /api/shop/bank-account/:shop_id
+ */
+export const getBankAccount = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { shop_id } = req.params;
+    const shop_id = req.params.shop_id as string;
 
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
     }
 
-    const { data: bankAccount, error } = await supabase
+    const { data: bankAccounts, error } = await supabase
       .from("bank_account")
-      .select("id, bank_name, account_name, account_number")
+      .select("*")
       .eq("shop_id", shop_id)
-      .maybeSingle();
+      .order("id", { ascending: false });
 
     if (error) {
+      console.error("GetBankAccount Error:", error.message);
       return res.status(400).json({ error: error.message });
     }
 
-    return res.status(200).json({ data: bankAccount });
-  } catch (err) {
-    console.error("Get Bank Account Error:", err);
+    if (!bankAccounts || bankAccounts.length === 0) {
+      return res.status(200).json({ data: null });
+    }
+
+    const pendingAccount = bankAccounts.find((acc) => acc.status === "pending");
+    if (pendingAccount) {
+      return res.status(200).json({
+        data: {
+          ...pendingAccount,
+          is_pending: true,
+        },
+      });
+    }
+
+    const approvedAccount = bankAccounts.find((acc) => acc.status === "approved");
+    if (approvedAccount) {
+      return res.status(200).json({
+        data: {
+          ...approvedAccount,
+          is_pending: false,
+        },
+      });
+    }
+
+    return res.status(200).json({ data: null });
+  } catch (err: any) {
+    console.error("GetBankAccount Exception:", err.message || err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+/**
+ * PUT /api/shop/bank-account/:shop_id
+ */
+export const updateBankAccount = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const shop_id = req.params.shop_id as string;
+    const { bank_name, account_name, accountNumber, account_number } = req.body;
+
+    const targetAccountNumber = account_number || accountNumber;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    // 🔒 ตรวจสอบการอนุมัติร้านค้า
+    const isVerified = await checkShopVerification(shop_id);
+    if (!isVerified) {
+      return res.status(403).json({ error: "ร้านค้าของคุณยังไม่ได้รับการอนุมัติ ไม่สามารถยื่นเปลี่ยนบัญชีได้" });
+    }
+
+    if (!bank_name || !account_name || !targetAccountNumber) {
+      return res.status(400).json({ error: "กรุณากรอกข้อมูลบัญชีธนาคารให้ครบถ้วน" });
+    }
+
+    const { data: existingPending } = await supabase
+      .from("bank_account")
+      .select("id")
+      .eq("shop_id", shop_id)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    if (existingPending) {
+      return res.status(400).json({
+        error: "คุณมีคำขอเปลี่ยนบัญชีธนาคารที่กำลังรอดำเนินการอยู่ ไม่สามารถส่งคำขอเพิ่มได้ในขณะนี้",
+      });
+    }
+
+    const { data: newBank, error } = await supabase
+      .from("bank_account")
+      .insert({
+        shop_id,
+        bank_name,
+        account_name,
+        account_number: targetAccountNumber,
+        status: "pending",
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("UpdateBankAccount Error:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ยื่นคำขอเปลี่ยนบัญชีธนาคารเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ",
+      data: newBank,
+    });
+  } catch (err: any) {
+    console.error("UpdateBankAccount Exception:", err.message || err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
@@ -89,7 +266,8 @@ export const getShopServices = async (
   res: Response
 ): Promise<Response> => {
   try {
-    const { shop_id } = req.params;
+    const shop_id = req.params.shop_id as string;
+    const { is_open } = req.body;
 
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
@@ -138,12 +316,12 @@ export const getShopServices = async (
   }
 };
 
-export const checkShopVerified = async (
-  req: Request,
-  res: Response
-): Promise<Response> => {
+/**
+ * GET /api/shop/verify-status/:shop_id
+ */
+export const getVerifyStatus = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { shop_id } = req.params;
+    const shop_id = req.params.shop_id as string;
 
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
@@ -151,57 +329,54 @@ export const checkShopVerified = async (
 
     const { data: shop, error } = await supabase
       .from("print_shop")
-      .select("id, is_verify, verified_by")
+      .select("is_verify, status")
       .eq("id", shop_id)
-      .single();
+      .maybeSingle();
 
-    if (error || !shop) {
-      return res.status(404).json({ error: "Shop not found" });
+    if (error) {
+      return res.status(400).json({ error: error.message });
     }
 
     return res.status(200).json({
       data: {
-        is_verify: Boolean(shop.is_verify),
-        verified_by: shop.verified_by ?? null,
+        is_verify: shop?.is_verify ?? false,
+        status: shop?.status ?? "pending",
       },
     });
-  } catch (err) {
-    console.error("Check Shop Verified Error:", err);
+  } catch (err: any) {
+    console.error("GetVerifyStatus Exception:", err.message || err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
 
-export const setShopOpenStatus = async (
-  req: Request,
-  res: Response
-): Promise<Response> => {
+/**
+ * GET /api/shop/services/:shop_id
+ */
+export const getShopServices = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { shop_id } = req.params;
-    const { is_open } = req.body;
+    const shop_id = req.params.shop_id as string;
 
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
     }
 
-    if (typeof is_open !== "boolean") {
-      return res.status(400).json({ error: "is_open must be true or false" });
+    const { data: serviceTypes, error } = await supabase
+      .from("service_type")
+      .select(`
+        id,
+        type,
+        service_detail (*)
+      `)
+      .eq("shop_id", shop_id);
+
+    if (error) {
+      console.error("GetShopServices Error:", error.message);
+      return res.status(400).json({ error: error.message });
     }
 
-    const { data: shop, error } = await supabase
-      .from("print_shop")
-      .update({ is_open })
-      .eq("id", shop_id)
-      .select("id, is_open")
-      .single();
-
-    if (error || !shop) {
-      console.error("Set shop open status error:", error);
-      return res.status(404).json({ error: "Shop not found" });
-    }
-
-    return res.status(200).json({ data: shop });
-  } catch (err) {
-    console.error("Set Shop Open Status Error:", err);
+    return res.status(200).json({ data: serviceTypes ?? [] });
+  } catch (err: any) {
+    console.error("GetShopServices Exception:", err.message || err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
@@ -232,11 +407,17 @@ export const saveShopServices = async (
     const { services } = req.body;
 
     if (!shop_id) {
-      return res.status(400).json({ error: "shop_id is required" });
+      return res.status(400).json({ error: "shop_id header is required" });
+    }
+
+    // 🔒 ตรวจสอบการอนุมัติร้านค้า
+    const isVerified = await checkShopVerification(shop_id);
+    if (!isVerified) {
+      return res.status(403).json({ error: "ร้านค้าของคุณยังไม่ได้รับการอนุมัติ ไม่สามารถแก้ไขบริการได้" });
     }
 
     if (!Array.isArray(services)) {
-      return res.status(400).json({ error: "Invalid services format" });
+      return res.status(400).json({ error: "Invalid services payload" });
     }
 
     // 1) เตรียมข้อมูล: รวม type ชื่อซ้ำ + กัน detail ซ้ำ (group_type + detail) ใน payload

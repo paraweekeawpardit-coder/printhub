@@ -326,9 +326,11 @@ export const getTopOrder = async (
     const todayStr = getThailandDateString(new Date());
 
     const todayOrders = orders.filter((order: any) => {
+      // 1. กรองสถานะ "รอการชำระเงิน" ออก
       const state = order.current_status?.state;
       if (state === "รอการชำระเงิน") return false;
 
+      // 2. เช็คเฉพาะวันที่สั่งซื้อ (order_date) ตรงกับวันที่ปัจจุบันแบบเป๊ะๆ (ตัดเรื่องชั่วโมงออก)
       const orderDateStr = getThailandDateString(order.order_date);
       return orderDateStr === todayStr;
     });
@@ -364,6 +366,7 @@ export const getTopOrder = async (
       };
     });
 
+    // ลำดับการจัดเรียงสถานะ
     const STATUS_RANK: Record<string, number> = {
       "รอการดำเนินการ": 0,
       "รอการดำเนินงาน": 0,

@@ -85,8 +85,9 @@ export const getOrdersByStatus = async (
         id,
         order_no,
         order_date,
-        appointment_time,
         receive_date,
+        appointment_time,
+        total_price,
         total_amount,
         payment_id,
         customer:customer_id (
@@ -114,6 +115,16 @@ export const getOrdersByStatus = async (
         `
       )
       .eq("shop_id", shop_id);
+
+    // 2. ถ้ามีการส่ง status ที่ไม่ใช่ "ทั้งหมด" ให้ Filter ตั้งแต่ชั้น Query
+    if (status !== "ทั้งหมด") {
+      query = query.eq("current_status.state", status);
+    }
+
+    // สั่ง Query ข้อมูลและเรียงลำดับ order_date
+    const { data: orders, error } = await query.order("order_date", {
+      ascending: false,
+    });
 
     if (error) {
       console.error("Get orders error:", error);
@@ -182,7 +193,7 @@ export const getOrdersByStatus = async (
             customer?.last_name ?? ""
           }`.trim() || "ลูกค้าทั่วไป",
           status: computedStatus,
-          amount: Number(order.total_amount || 0),
+          amount: Number(order.total_amount || order.total_price || 0),
           items,
           pickup_time:
             order.appointment_time || order.receive_date || order.order_date || null,
@@ -237,6 +248,201 @@ export const getOrdersByStatus = async (
     });
   } catch (err) {
     console.error("Backend Error:", err);
+    return res.status(500).json({
+      error: "Server Error",
+    });
+  }
+};
+
+// ==========================================
+// Update Order Status (Check Suspended)
+// ==========================================
+
+export const updateOrderStatus = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { orderId } = req.params;
+    const { newStatus } = req.body;
+    const shop_id = (req.headers.shop_id ||
+      req.query.shop_id ||
+      req.body.shop_id) as string;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    const { data: shop, error: shopError } = await supabase
+      .from("print_shop")
+      .select("status")
+      .eq("id", shop_id)
+      .single();
+
+    if (shopError || !shop) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลร้านค้า" });
+    }
+
+    if (shop.status === "suspended") {
+      return res.status(403).json({
+        error: "บัญชีของคุณถูกระงับการใช้งาน ไม่สามารถเปลี่ยนสถานะออเดอร์ได้",
+      });
+    }
+
+    const { data: statusData, error: statusError } = await supabase
+      .from("status")
+      .select("id")
+      .eq("state", newStatus)
+      .single();
+
+    if (statusError || !statusData) {
+      return res.status(400).json({ error: "ไม่พบสถานะออเดอร์ที่ระบุ" });
+    }
+
+    const { error: updateError } = await supabase
+      .from("print_order")
+      .update({ current_status_id: statusData.id })
+      .eq("id", orderId)
+      .eq("shop_id", shop_id);
+
+    if (updateError) {
+      console.error("Update order status error:", updateError);
+      return res.status(400).json({ error: updateError.message });
+    }
+
+    return res.status(200).json({
+      message: "อัปเดตสถานะออเดอร์เรียบร้อยแล้ว",
+    });
+  } catch (err) {
+    console.error("Update order status server error:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// ==========================================
+// Get Single Order By ID (for shop detail page)
+// ==========================================
+
+export const getOrderById = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({
+        error: "orderId is required",
+      });
+    }
+
+    const { data: order, error } = await supabase
+      .from("print_order")
+      .select(
+        `
+        id,
+        order_no,
+        order_date,
+        receive_date,
+        appointment_time,
+        total_price,
+        total_amount,
+        payment_id,
+
+        customer:customer_id (
+          first_name,
+          last_name,
+          contact
+        ),
+
+        current_status:current_status_id (
+          id,
+          state
+        ),
+
+        payment:payment_id (
+          id,
+          slip_url,
+          is_verified,
+          amount,
+          payment_date
+        ),
+
+        print_order_item (
+          id,
+          category,
+          describe,
+          file_url,
+          quantity,
+          unit_price,
+          subtotal,
+          page_count
+        )
+        `
+      )
+      .eq("id", orderId)
+      .single();
+
+    if (error || !order) {
+      console.error("Get order detail error:", error);
+      return res.status(404).json({
+        error: "ไม่พบข้อมูลรายการสั่งซื้อ",
+      });
+    }
+
+    const customer = Array.isArray(order.customer)
+      ? order.customer[0]
+      : order.customer;
+
+    const currentStatus = Array.isArray(order.current_status)
+      ? order.current_status[0]
+      : order.current_status;
+
+    const payment = Array.isArray(order.payment)
+      ? order.payment[0]
+      : order.payment;
+
+    const items: OrderItemDetail[] = (order.print_order_item || []).map(
+      (item: any) => ({
+        id: item.id,
+        category: item.category || "รายการพิมพ์",
+        describe: item.describe || "",
+        file_url: item.file_url || null,
+        quantity: item.quantity,
+        unit_price: Number(item.unit_price || 0),
+        subtotal: Number(item.subtotal || 0),
+        page_count: item.page_count ?? null,
+      })
+    );
+
+    const resultOrder = {
+      order_id: order.id,
+      order_no: order.order_no,
+      date: order.order_date,
+      appointment_time: order.appointment_time || order.receive_date,
+      customer_name: `${customer?.first_name ?? ""} ${
+        customer?.last_name ?? ""
+      }`.trim(),
+      customer_contact: customer?.contact || "",
+      status: currentStatus?.state || "รอการดำเนินการ",
+      amount: Number(order.total_amount || order.total_price || 0),
+      items,
+      payment: payment
+        ? {
+            id: payment.id,
+            slip_url: payment.slip_url || null,
+            is_verified: payment.is_verified ?? null,
+            amount: Number(payment.amount || 0),
+            payment_date: payment.payment_date || null,
+          }
+        : null,
+    };
+
+    return res.status(200).json({
+      order: resultOrder,
+    });
+  } catch (err) {
+    console.error("Get order by ID server error:", err);
     return res.status(500).json({
       error: "Server Error",
     });
