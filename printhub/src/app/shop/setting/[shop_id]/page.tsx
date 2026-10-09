@@ -334,10 +334,19 @@ export default function ShopSettingsPage() {
 
   const handleToggleOpen = async () => {
     if (!shopId) return;
-    if (isSuspended) {
-      console.warn("[Action Blocked] Shop is suspended. Cannot update services.");
-      return;
+    const nextValue = !isOpen;
+    try {
+      setTogglingOpen(true);
+      await axios.patch(`${API_BASE}/profile/${shopId}/open-status`, {
+        is_open: nextValue,
+      });
+      setIsOpen(nextValue);
+    } catch (err) {
+      console.error("Toggle shop open status error:", err);
+    } finally {
+      setTogglingOpen(false);
     }
+  };
 
   const handleSaveServices = async (): Promise<boolean> => {
     if (!shopId) return false;
