@@ -42,7 +42,6 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
       );
 
       if (res.data.message) {
-        alert("สมัครสมาชิกสำเร็จ!");
         setRegis(false);
       } else {
         setMessage(res.data.error || "ไม่สามารถสมัครสมาชิกได้");

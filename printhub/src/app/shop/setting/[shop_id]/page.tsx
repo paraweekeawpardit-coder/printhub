@@ -7,12 +7,14 @@ import { Store, Printer, Landmark, Loader2 } from "lucide-react";
 
 import ShopNavbar from "../../../../component/shop/navbar";
 import ShopProfileTab from "../../../../component/shop/ShopProfileTab";
-import ShopServicesTab from "../../../../component/shop/ShopServiceTab";
+import ShopServicesTab, {
+  type ServiceTypeGroup,
+} from "../../../../component/shop/ShopServiceTab";
 import ShopBankTab from "../../../../component/shop/ShopBankTab";
+import ShopLocationConfirmModal from "../../../../component/shop/Shoplocationcomfirmmodal";
 
 const API_BASE = "http://localhost:5000/shop";
 
-// 🛠️ ตรงนี้ต้องตรงกับ key ที่ใช้ตอน login แล้วเก็บ shop_id ลง localStorage จริงๆ
 const SHOP_ID_STORAGE_KEY = "shop_id";
 
 type AddressData = {
@@ -23,22 +25,6 @@ type AddressData = {
   postcode: string;
 };
 
-type ServiceItem = {
-  id?: string;
-  detail: string;
-  group_type: string;
-  price: string;
-};
-
-type ServiceTypeGroup = {
-  id?: string;
-  type: string;
-  items: ServiceItem[];
-};
-
-// shop_id เป็น uuid (string) ไม่ใช่เลข ห้าม parseInt/Number เด็ดขาด
-// รองรับกรณี localStorage เก็บเป็น id ดิบๆ ("cd04a0a0-...")
-// หรือเก็บเป็น JSON object ทั้งก้อน (เช่น '{"id":"cd04a0a0-...", ...}')
 function resolveShopId(raw: string | null): string | null {
   if (!raw) return null;
 
@@ -48,16 +34,14 @@ function resolveShopId(raw: string | null): string | null {
     if (parsed && typeof parsed === "object" && parsed.id != null) {
       return String(parsed.id);
     }
-  } catch {
-    // raw ไม่ใช่ JSON แปลว่าเป็น id ดิบๆ อยู่แล้ว
+  } catch (err) {
+    console.log(err)
   }
 
   return raw;
 }
 
 export default function ShopSettingsPage() {
-  // 🛠️ ถ้าโฟลเดอร์จริงไม่ได้ชื่อ [shop_id] (เช่นเป็น [shopId] แทน)
-  // ต้องเปลี่ยน params?.shop_id ตรงนี้ให้ตรงชื่อโฟลเดอร์ด้วย
   const params = useParams();
   const searchParams = useSearchParams();
 
@@ -89,7 +73,7 @@ export default function ShopSettingsPage() {
   // Verification State
   const [isVerified, setIsVerified] = useState<boolean>(false);
 
-  // Shop Open/Closed State (ปิดร้านชั่วคราว)
+  // Shop Open/Closed State
   const [isOpen, setIsOpen] = useState<boolean>(true);
   const [togglingOpen, setTogglingOpen] = useState<boolean>(false);
 
@@ -107,6 +91,8 @@ export default function ShopSettingsPage() {
   const [email, setEmail] = useState<string>("");
   const [openTime, setOpenTime] = useState<string>("09:00");
   const [closeTime, setCloseTime] = useState<string>("18:00");
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState<boolean>(false);
   const [addressId, setAddressId] = useState<string | null>(null);
   const [address, setAddress] = useState<AddressData>({
     detail: "",
@@ -115,6 +101,18 @@ export default function ShopSettingsPage() {
     province: "",
     postcode: "",
   });
+
+  // พิกัดร้านเดิม + ที่อยู่ที่บันทึกล่าสุด (ใช้เช็คว่ามีการแก้ที่อยู่หรือไม่)
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [savedAddress, setSavedAddress] = useState<AddressData>({
+    detail: "",
+    subdistrict: "",
+    district: "",
+    province: "",
+    postcode: "",
+  });
+  const [showLocationModal, setShowLocationModal] = useState<boolean>(false);
 
   // Services State
   const [services, setServices] = useState<ServiceTypeGroup[]>([]);
@@ -141,19 +139,6 @@ export default function ShopSettingsPage() {
         axios.get(`${API_BASE}/verify-status/${shopId}`),
       ]);
 
-      if (profileRes.status === "rejected") {
-        console.error("Fetch profile failed:", profileRes.reason);
-      }
-      if (bankRes.status === "rejected") {
-        console.error("Fetch bank-account failed:", bankRes.reason);
-      }
-      if (servicesRes.status === "rejected") {
-        console.error("Fetch services failed:", servicesRes.reason);
-      }
-      if (verifyRes.status === "rejected") {
-        console.error("Fetch verify-status failed:", verifyRes.reason);
-      }
-
       const shop =
         profileRes.status === "fulfilled" ? profileRes.value.data?.data : null;
       const bankAccount =
@@ -169,19 +154,29 @@ export default function ShopSettingsPage() {
         setOwnerName(shop.owner_name ?? "");
         setPhone(shop.phone ?? "");
         setEmail(shop.email ?? "");
-        setOpenTime(shop.open_time ?? "09:00");
-        setCloseTime(shop.close_time ?? "18:00");
+        // Postgres ส่ง time เป็น "09:00:00" แต่ <input type="time"> ใช้ "09:00"
+        setOpenTime((shop.open_time ?? "09:00").slice(0, 5));
+        setCloseTime((shop.close_time ?? "18:00").slice(0, 5));
         setIsOpen(shop.is_open ?? true);
+        setProfileImage(shop.profile_image ?? null);
 
         if (shop.address) {
           setAddressId(shop.address.id ?? null);
-          setAddress({
+          const loaded: AddressData = {
             detail: shop.address.detail ?? "",
             subdistrict: shop.address.subdistrict ?? "",
             district: shop.address.district ?? "",
             province: shop.address.province ?? "",
             postcode: shop.address.postcode ?? "",
-          });
+          };
+          setAddress(loaded);
+          setSavedAddress(loaded);
+          setLatitude(
+            shop.address.latitude != null ? Number(shop.address.latitude) : null
+          );
+          setLongitude(
+            shop.address.longitude != null ? Number(shop.address.longitude) : null
+          );
         }
 
         setHasProfileData(Boolean(shop.shop_name));
@@ -195,8 +190,9 @@ export default function ShopSettingsPage() {
         const normalizedServices: ServiceTypeGroup[] = shopServices.map((group: any) => ({
           id: group.id,
           type: group.type ?? "",
-          items: (group.service_detail ?? []).map((d: any) => ({
+          items: (group.items ?? []).map((d: any) => ({
             id: d.id,
+            category: d.category ?? "",
             detail: d.detail ?? "",
             group_type: d.group_type ?? "",
             price: d.price != null ? String(d.price) : "",
@@ -226,8 +222,17 @@ export default function ShopSettingsPage() {
     fetchShopSettings();
   }, [fetchShopSettings]);
 
-  const handleSaveProfile = async () => {
-    if (!shopId) return;
+  // เช็คว่าที่อยู่ถูกแก้ไขจากค่าที่บันทึกไว้หรือไม่
+  const isAddressChanged = () =>
+    (Object.keys(address) as (keyof AddressData)[]).some(
+      (k) => (address[k] ?? "").trim() !== (savedAddress[k] ?? "").trim()
+    );
+
+  // บันทึกจริง: ถ้าส่ง coords มาจะบันทึกพิกัดใหม่ไปพร้อมที่อยู่ด้วย
+  const submitProfile = async (
+    coords?: { lat: number; lng: number }
+  ): Promise<boolean> => {
+    if (!shopId) return false;
     try {
       setSaving(true);
       await axios.put(`${API_BASE}/profile/${shopId}`, {
@@ -239,19 +244,63 @@ export default function ShopSettingsPage() {
         address: {
           id: addressId,
           ...address,
+          ...(coords && { latitude: coords.lat, longitude: coords.lng }),
         },
       });
       setHasProfileData(true);
       setIsEditingProfile(false);
       await fetchShopSettings();
+      return true;
     } catch (err) {
       console.error("Save profile error:", err);
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  // เปิด/ปิดร้านชั่วคราว
+  // กดบันทึก: ถ้าแก้ที่อยู่ → เปิดแผนที่ให้ยืนยันตำแหน่งก่อน, ถ้าไม่ → บันทึกเลย
+  const handleSaveProfile = () => {
+    if (!shopId) return;
+    if (isAddressChanged()) {
+      setShowLocationModal(true);
+      return;
+    }
+    submitProfile();
+  };
+
+  const handleConfirmLocation = async (loc: { lat: number; lng: number }) => {
+    const ok = await submitProfile(loc);
+    if (ok) setShowLocationModal(false);
+  };
+
+  // อัปโหลดรูปโปรไฟล์ร้าน: คืนค่า null เมื่อสำเร็จ หรือข้อความ error เมื่อไม่สำเร็จ
+  const handleUploadProfileImage = async (file: File): Promise<string | null> => {
+    if (!shopId) return "ไม่พบ shop_id ของร้านค้า";
+    try {
+      setUploadingImage(true);
+      const formData = new FormData();
+      formData.append("image", file);
+      // ไม่ต้องตั้ง Content-Type เอง เบราว์เซอร์/axios จะใส่ boundary ให้
+      const res = await axios.put(`${API_BASE}/profile/${shopId}/image`, formData);
+      const newImage: string | null = res.data?.data?.profile_image ?? null;
+      setProfileImage(newImage);
+      // แจ้ง navbar ให้เปลี่ยนรูปทันที ไม่ต้องรีเฟรช
+      window.dispatchEvent(
+        new CustomEvent("shop-profile-image-updated", {
+          detail: { profile_image: newImage },
+        })
+      );
+      return null;
+    } catch (err: any) {
+      const data = err?.response?.data;
+      console.error("Upload profile image error:", err?.response?.status, data ?? err.message);
+      return data?.error ?? "อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleToggleOpen = async () => {
     if (!shopId) return;
     const nextValue = !isOpen;
@@ -268,33 +317,36 @@ export default function ShopSettingsPage() {
     }
   };
 
-  const handleSaveServices = async () => {
-    if (!shopId) return;
+  const handleSaveServices = async (): Promise<boolean> => {
+    if (!shopId) return false;
     try {
       setSaving(true);
 
       const payloadServices = services.map((s) => ({
         type: s.type,
-        service_detail: s.items.map((item) => ({
+        items: s.items.map((item) => ({
+          category: item.category || s.type,
           detail: item.detail,
           group_type: item.group_type,
           price: item.price,
         })),
       }));
 
-      await axios.post(
-        `${API_BASE}/services`,
-        { services: payloadServices },
-        {
-          headers: {
-            shop_id: shopId,
-          },
-        }
-      );
+      // ส่ง shop_id ทาง body อย่างเดียว (custom header อาจติด CORS preflight / โดน proxy ตัด underscore)
+      await axios.post(`${API_BASE}/services`, {
+        shop_id: shopId,
+        services: payloadServices,
+      });
 
       await fetchShopSettings();
-    } catch (err) {
-      console.error("Save services error:", err);
+      return true;
+    } catch (err: any) {
+      const data = err?.response?.data;
+      console.error("Save services error:", err?.response?.status, data ?? err.message);
+      alert(
+        `บันทึกบริการพิมพ์ไม่สำเร็จ\n${data?.detail ?? data?.error ?? err.message}\n[backend: ${data?.debug?.version ?? "ไม่พบ version = โค้ดเก่า/ยังไม่ restart?"}]`
+      );
+      return false;
     } finally {
       setSaving(false);
     }
@@ -384,6 +436,9 @@ export default function ShopSettingsPage() {
                 ownerName={ownerName} setOwnerName={setOwnerName}
                 phone={phone} setPhone={setPhone}
                 email={email}
+                profileImage={profileImage}
+                onUploadImage={handleUploadProfileImage}
+                uploadingImage={uploadingImage}
                 openTime={openTime} setOpenTime={setOpenTime}
                 closeTime={closeTime} setCloseTime={setCloseTime}
                 address={address} setAddress={setAddress}
@@ -415,6 +470,19 @@ export default function ShopSettingsPage() {
           </div>
         )}
       </div>
+
+      {showLocationModal && (
+        <ShopLocationConfirmModal
+          initialLocation={
+            latitude != null && longitude != null
+              ? { lat: latitude, lng: longitude }
+              : null
+          }
+          saving={saving}
+          onConfirm={handleConfirmLocation}
+          onCancel={() => setShowLocationModal(false)}
+        />
+      )}
     </div>
   );
 }

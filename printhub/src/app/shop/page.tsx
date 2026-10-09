@@ -271,6 +271,7 @@ export default function ShopPage() {
             <ReviewComplaintModal
               reviews={reviewData.reviews}
               complaints={reviewData.complaints}
+              onOrderClick={handleOrderClick}
             />
           </div>
         )}

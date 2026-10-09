@@ -20,8 +20,9 @@ import {
   ShieldCheck,
   X,
   FileText,
+  AlertTriangle,
 } from "lucide-react";
-import { SlipModal, ActionConfirmModal, WarnModal } from "@/src/component/shop/OrderModals";
+import { SlipModal, ActionConfirmModal } from "@/src/component/shop/OrderModals";
 
 export default function OrderDetailPage() {
   const params = useParams();
@@ -35,11 +36,13 @@ export default function OrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const [slipViewed, setSlipViewed] = useState<boolean>(false);
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
-  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
-  const [showWarnModal, setShowWarnModal] = useState<boolean>(false);
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+
+  // Modals สำหรับยืนยันผลตรวจสลิป
+  const [showVerifyValidModal, setShowVerifyValidModal] = useState<boolean>(false);
+  const [showVerifyInvalidModal, setShowVerifyInvalidModal] = useState<boolean>(false);
 
   const fetchOrder = async (silent = false) => {
     if (!orderId) return;
@@ -83,10 +86,7 @@ export default function OrderDetailPage() {
     }
   };
 
-  // ตรวจสลิป: Correct = เปลี่ยนเป็น "กำลังพิมพ์", Incorrect = เปลี่ยนเป็น "รอการชำระเงิน"
   const handleVerifySlip = async (isVerified: boolean) => {
-    if (!slipViewed) return;
-
     try {
       setIsUpdating(true);
       setActionError(null);
@@ -100,11 +100,6 @@ export default function OrderDetailPage() {
     } finally {
       setIsUpdating(false);
     }
-  };
-
-  const handleViewSlip = () => {
-    setShowSlipModal(true);
-    setSlipViewed(true);
   };
 
   const handleDownloadFile = async (fileUrl: string, filename: string, fileId: string) => {
@@ -155,11 +150,38 @@ export default function OrderDetailPage() {
     );
   }
 
-  const isConfirmed = order.status_state !== "รอการดำเนินงาน" && order.status_state !== "ยกเลิกการพิมพ์" && order.status_state !== "รอการชำระเงิน";
+  const statusState = order.status_state;
+  const isCancelled = statusState === "ยกเลิกการพิมพ์";
+  const isCompleted = statusState === "รายการเสร็จสิ้น";
+  const isConfirmed = statusState !== "รอการดำเนินงาน" && !isCancelled && statusState !== "รอการชำระเงิน";
+
   const allFiles = order.files || [];
   const payment = order.payment;
   const slipUrl: string | null = payment?.slip_url || null;
   const slipVerdict: boolean | null = payment?.is_verified ?? null;
+
+  // 🔒 กำหนดให้สามารถกด "กดตรวจสลิป" ได้เฉพาะเมื่อ:
+  // 1. สถานะออเดอร์อยู่ใน "รอการดำเนินงาน"
+  // 2. ยังไม่เคยตรวจสลิป (slipVerdict === null)
+  // 3. มี URL สลิปแนบมา
+  const canVerifySlip = statusState === "รอการดำเนินงาน" && slipVerdict === null && !!slipUrl;
+
+  const renderStatusBadge = () => {
+    switch (statusState) {
+      case "รอการดำเนินงาน":
+        return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">{statusState}</span>;
+      case "กำลังพิมพ์":
+        return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-blue-200">{statusState}</span>;
+      case "พิมพ์เสร็จสิ้น":
+        return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200">{statusState}</span>;
+      case "รายการเสร็จสิ้น":
+        return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">{statusState}</span>;
+      case "ยกเลิกการพิมพ์":
+        return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 ring-1 ring-red-200">{statusState}</span>;
+      default:
+        return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-50 text-gray-700 ring-1 ring-gray-200">{statusState}</span>;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-16">
@@ -182,11 +204,11 @@ export default function OrderDetailPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-xs mb-6">
           <div className="flex items-center gap-3">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">รายละเอียดคำสั่งพิมพ์</h1>
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-blue-200">{order.status_state}</span>
+            {renderStatusBadge()}
           </div>
 
           <div className="flex items-center gap-2.5">
-            {order.status_state === "รอการดำเนินงาน" && (
+            {statusState === "รอการดำเนินงาน" && (
               <>
                 <button
                   onClick={() => setShowRejectModal(true)}
@@ -196,7 +218,7 @@ export default function OrderDetailPage() {
                   <XCircle size={16} /> ปฏิเสธ
                 </button>
                 <button
-                  onClick={() => (slipVerdict === true ? setShowConfirmModal(true) : setShowWarnModal(true))}
+                  onClick={() => setShowConfirmModal(true)}
                   disabled={isUpdating}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium shadow-xs disabled:opacity-50"
                 >
@@ -205,7 +227,7 @@ export default function OrderDetailPage() {
               </>
             )}
 
-            {order.status_state === "กำลังพิมพ์" && (
+            {statusState === "กำลังพิมพ์" && (
               <button
                 onClick={() => handleUpdateStatus("พิมพ์เสร็จสิ้น")}
                 disabled={isUpdating}
@@ -225,8 +247,10 @@ export default function OrderDetailPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
+          {/* Main Content (ฝั่งซ้าย) */}
           <div className="lg:col-span-2 flex flex-col gap-6">
+            
+            {/* 1. รายการออเดอร์ย่อย */}
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
               <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 mb-5 pb-3 border-b border-gray-100">
                 <Layers size={18} className="text-blue-600" /> รายการออเดอร์ย่อย ({order.items?.length || 0} รายการ)
@@ -240,7 +264,6 @@ export default function OrderDetailPage() {
 
                   return (
                     <div key={item.id || index} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                      {/* ส่วนหัวของออเดอร์ย่อย */}
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="bg-blue-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-md">
@@ -251,7 +274,6 @@ export default function OrderDetailPage() {
                         <p className="font-bold text-slate-800">฿{item.subtotal.toLocaleString()}</p>
                       </div>
 
-                      {/* รายละเอียดสเปกการพิมพ์ (Describe) และตัวเลขกำกับ */}
                       {item.describe && (
                         <div className="p-3 bg-white rounded-lg border border-slate-200 text-xs text-gray-700 space-y-1.5">
                           <p className="font-semibold text-gray-900 flex items-center gap-1">
@@ -267,7 +289,6 @@ export default function OrderDetailPage() {
                         </div>
                       )}
 
-                      {/* ส่วนดาวน์โหลดไฟล์ */}
                       <div className="pt-2 border-t border-slate-200">
                         {!isConfirmed ? (
                           <div className="p-2.5 bg-amber-50 rounded-lg text-center text-xs text-amber-700 flex items-center justify-center gap-1.5">
@@ -297,21 +318,66 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
-              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 mb-4">
-                <Clock size={18} className="text-blue-600" /> เวลานัดหมาย
-              </h2>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <p className="text-xs text-gray-400">วันที่สั่งซื้อ</p>
-                  <p className="font-medium">{order.order_date ? new Date(order.order_date).toLocaleString("th-TH") : "-"}</p>
+            {/* 2. หลักฐานการชำระเงิน / ตรวจสอบสลิป */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+              <div className="bg-[#12356b] p-5 text-white flex justify-between items-center">
+                <div>
+                  <p className="text-xs text-blue-100 flex items-center gap-1.5"><Receipt size={14} /> หลักฐานการชำระเงิน</p>
+                  <p className="text-2xl font-bold mt-1">฿{Number(payment?.amount ?? order.total_amount ?? 0).toLocaleString()}</p>
                 </div>
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <p className="text-xs text-gray-400">เวลานัดรับงาน</p>
-                  <p className="font-semibold text-blue-700">{order.receive_date ? new Date(order.receive_date).toLocaleString("th-TH") : "-"}</p>
-                </div>
+                {/* ปุ่มดูสลิปเปิดให้กดดูได้เสมอตามคำขอ */}
+                <button
+                  type="button"
+                  onClick={() => setShowSlipModal(true)}
+                  disabled={!slipUrl}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-blue-900 bg-white hover:bg-blue-50 disabled:opacity-50 shadow-xs cursor-pointer"
+                >
+                  <Eye size={15} className="inline mr-1.5" /> {slipUrl ? "ดูสลิปโอนเงิน" : "ยังไม่มีสลิป"}
+                </button>
+              </div>
+
+              <div className="p-5 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-700 mb-3">ผลการตรวจสอบสลิปโอนเงิน</p>
+                
+                {/* 🔴 หากออเดอร์ยกเลิกการพิมพ์แล้ว ล็อกทันที */}
+                {isCancelled ? (
+                  <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 text-center flex items-center justify-center gap-1.5">
+                    <Lock size={15} /> ออเดอร์นี้ถูกยกเลิกแล้ว ไม่สามารถตรวจสอบสลิปได้
+                  </div>
+                ) : slipVerdict === true ? (
+                  /* สถานะ 1: สลิปถูกต้องแล้ว */
+                  <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 text-center flex items-center justify-center gap-1.5">
+                    <ShieldCheck size={16} /> สลิปถูกต้อง (ยืนยันรับออเดอร์แล้ว)
+                  </div>
+                ) : slipVerdict === false ? (
+                  /* สถานะ 2: สลิปถูกปฏิเสธแล้ว (is_verified === false) */
+                  <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 text-center flex items-center justify-center gap-1.5">
+                    <AlertTriangle size={16} /> ปฏิเสธหลักฐานแล้ว (รอผู้ใช้อัปโหลดสลิปใหม่)
+                  </div>
+                ) : (
+                  /* สถานะ 3: สลิปยังไม่ได้ตรวจ (is_verified === null) */
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowVerifyInvalidModal(true)}
+                      disabled={!canVerifySlip || isUpdating}
+                      className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      หลักฐานไม่ถูกต้อง
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowVerifyValidModal(true)}
+                      disabled={!canVerifySlip || isUpdating}
+                      className="flex-1 py-2.5 rounded-xl bg-[#12356b] text-white text-xs font-semibold hover:bg-[#0e2b57] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
+                    >
+                      สลิปถูกต้อง
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
+
           </div>
 
           {/* Right Sidebar */}
@@ -324,49 +390,18 @@ export default function OrderDetailPage() {
               <p className="text-xs text-gray-500 mt-1">{order.customer?.contact || "-"}</p>
             </div>
 
-            {/* Verification & Slip */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
-              <div className="bg-[#12356b] p-5 text-white">
-                <p className="text-xs text-blue-100 flex items-center gap-1.5"><Receipt size={14} /> หลักฐานการชำระเงิน</p>
-                <p className="text-2xl font-bold mt-1">฿{Number(payment?.amount ?? order.total_amount ?? 0).toLocaleString()}</p>
-              </div>
-
-              <div className="p-5 space-y-4">
-                <button
-                  type="button"
-                  onClick={handleViewSlip}
-                  disabled={!slipUrl}
-                  className="w-full py-2.5 rounded-xl text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 disabled:opacity-50"
-                >
-                  <Eye size={15} className="inline mr-1.5" /> {slipUrl ? "ดูสลิปโอนเงิน" : "ยังไม่มีสลิป"}
-                </button>
-
-                <div className="pt-3 border-t border-gray-100">
-                  <p className="text-xs font-medium text-gray-700 mb-2">ผลการตรวจสอบสลิป</p>
-                  {slipVerdict === true ? (
-                    <div className="w-full py-2 rounded-xl text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 text-center">
-                      <ShieldCheck size={14} className="inline mr-1" /> สลิปถูกต้อง (รับออเดอร์แล้ว)
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleVerifySlip(false)}
-                        disabled={!slipViewed || !slipUrl || isUpdating}
-                        className="py-2 rounded-xl border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 disabled:opacity-50"
-                      >
-                        ไม่ถูกต้อง
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleVerifySlip(true)}
-                        disabled={!slipViewed || !slipUrl || isUpdating}
-                        className="py-2 rounded-xl bg-[#12356b] text-white text-xs font-medium hover:bg-[#0e2b57] disabled:opacity-50"
-                      >
-                        ถูกต้อง
-                      </button>
-                    </div>
-                  )}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-4">
+                <Clock size={17} className="text-blue-600" /> เวลานัดหมาย
+              </h2>
+              <div className="space-y-3 text-sm">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <p className="text-xs text-gray-400">วันที่สั่งซื้อ</p>
+                  <p className="font-medium text-gray-800 mt-0.5">{order.order_date ? new Date(order.order_date).toLocaleString("th-TH") : "-"}</p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <p className="text-xs text-gray-400">เวลานัดรับงาน</p>
+                  <p className="font-semibold text-blue-700 mt-0.5">{order.receive_date ? new Date(order.receive_date).toLocaleString("th-TH") : "-"}</p>
                 </div>
               </div>
             </div>
@@ -376,31 +411,53 @@ export default function OrderDetailPage() {
 
       {/* Modals */}
       <SlipModal isOpen={showSlipModal} onClose={() => setShowSlipModal(false)} slipUrl={slipUrl} />
+
       <ActionConfirmModal
         isOpen={showRejectModal}
         onClose={() => setShowRejectModal(false)}
         onConfirm={async () => { await handleUpdateStatus("ยกเลิกการพิมพ์"); setShowRejectModal(false); }}
         title="ปฏิเสธออเดอร์"
-        description="คุณต้องการปฏิเสธรายการนี้ใช่หรือไม่?"
+        description="คุณต้องการปฏิเสธรายการคำสั่งพิมพ์นี้ใช่หรือไม่?"
         confirmText="ปฏิเสธ"
         isDanger
         isUpdating={isUpdating}
       />
+
       <ActionConfirmModal
         isOpen={showConfirmModal}
         onClose={() => setShowConfirmModal(false)}
         onConfirm={async () => { await handleUpdateStatus("กำลังพิมพ์"); setShowConfirmModal(false); }}
         title="ยืนยันการรับงาน"
-        description="ยืนยันรับออเดอร์นี้เข้าสู่สถานะกำลังพิมพ์ใช่หรือไม่?"
+        description="ยืนยันรับรายงานคำสั่งพิมพ์นี้ใช่หรือไม่?"
         confirmText="ยืนยัน"
         isUpdating={isUpdating}
       />
-      <WarnModal
-        isOpen={showWarnModal}
-        onClose={() => setShowWarnModal(false)}
-        onViewSlip={handleViewSlip}
-        slipUrl={slipUrl}
-        slipVerdict={slipVerdict}
+
+      <ActionConfirmModal
+        isOpen={showVerifyValidModal}
+        onClose={() => setShowVerifyValidModal(false)}
+        onConfirm={async () => {
+          await handleVerifySlip(true);
+          setShowVerifyValidModal(false);
+        }}
+        title="ยืนยันสลิปถูกต้อง"
+        description="หากยืนยันสลิปถูกต้อง ระบบจะทำการยืนยันรายการคำสั่งพิมพ์นี้ทันทีคุณยืนยันใช่หรือไม่"
+        confirmText="ยืนยันสลิปถูกต้อง"
+        isUpdating={isUpdating}
+      />
+
+      <ActionConfirmModal
+        isOpen={showVerifyInvalidModal}
+        onClose={() => setShowVerifyInvalidModal(false)}
+        onConfirm={async () => {
+          await handleVerifySlip(false);
+          setShowVerifyInvalidModal(false);
+        }}
+        title="ยืนยันปฏิเสธสลิป"
+        description="คุณยืนยันว่าหลักฐานไม่ถูกต้องใช่หรือไม่? หากยืนยันแล้วคุณจะไม่สามารถเปลี่ยนแปลงผลได้จนกว่าลูกค้าจะส่งสลิปมาใหม่"
+        confirmText="ยืนยันปฏิเสธ"
+        isDanger
+        isUpdating={isUpdating}
       />
     </div>
   );

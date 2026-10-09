@@ -17,6 +17,21 @@ export const getDayBounds = (dateInput: Date | string) => {
   };
 };
 
+// Helper: หาเวลานัดรับงาน
+// - ถ้า receive_date เป็น date-only และ appointment_time เป็น time-only ให้รวมเป็นค่าเดียว
+// - ถ้าไม่ใช่ ใช้ appointment_time ก่อน แล้วค่อย fallback ไปที่ receive_date
+const resolveReceiveDate = (receiveDate?: string | null, appointmentTime?: string | null) => {
+  const isDateOnly = (v?: string | null) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const isTimeOnly = (v?: string | null) => !!v && /^\d{2}:\d{2}(:\d{2})?$/.test(v);
+
+  if (isDateOnly(receiveDate) && isTimeOnly(appointmentTime)) {
+    return `${receiveDate}T${appointmentTime}`;
+  }
+  // appointment_time คือเวลานัดรับจริงที่ลูกค้าเลือก (ตรงกับหน้า list)
+  // ส่วน receive_date อาจเก็บแค่วันที่ (เวลา 00:00:00) จึงใช้เป็นตัวสำรอง
+  return appointmentTime || receiveDate || null;
+};
+
 export const getOrder = async (
   req: Request,
   res: Response
@@ -79,7 +94,7 @@ export const getOrder = async (
         id: order.id,
         order_no: order.order_no,
         order_date: order.order_date,
-        receive_date: order.receive_date || order.appointment_time,
+        receive_date: resolveReceiveDate(order.receive_date, order.appointment_time),
         description: order.description,
         subtotal_price: Number(order.subtotal_price || 0),
         small_order_fee: Number(order.small_order_fee || 0),
@@ -150,7 +165,7 @@ export const updateOrderStatus = async (
 
     await supabase
       .from("print_order")
-      .update({ current_status_id: statusData.id, work_state_id: newWorkStatus.id })
+      .update({ current_status_id: statusData.id, work_state_id: newWorkStatus?.id })
       .eq("id", id);
 
     return res.status(200).json({ message: "Status updated", data: { status_state: statusData.state } });

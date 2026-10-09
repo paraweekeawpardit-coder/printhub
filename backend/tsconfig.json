@@ -16,5 +16,6 @@
     "sourceMap": true
   },
 
-  "include": ["src"]
+  "include": ["src", "../printhub/src/lib/Authsession.ts", "../printhub/src/lib/Supabaseclient.ts"]
+
 }

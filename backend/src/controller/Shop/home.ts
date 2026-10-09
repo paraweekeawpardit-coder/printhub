@@ -10,18 +10,14 @@ interface PaymentRow {
   shop_income: number | null;
 }
 
-
 // ==========================================
 // Sync สถานะอัตโนมัติลง DB (ให้ทุก endpoint เห็นตรงกัน)
 //  - รอดำเนินงาน/กำลังพิมพ์ แล้วเลยเวลารับ        -> ยกเลิกการพิมพ์
 //  - พิมพ์เสร็จสิ้น แล้วเลยเวลารับเกิน 24 ชม.      -> รายการเสร็จสิ้น
-//  - หลังลูกค้าสั่ง 10 นาที ถ้าสถานะยังเป็น "รอการชำระเงิน" -> ยกเลิกการพิมพ์
 // เรียกพร้อมกันหลาย endpoint ได้ (ใช้ promise ร่วมกันต่อร้าน)
 // ==========================================
-const PENDING_STATES = ["รอการดำเนินงาน", "รอการดำเนินการ", "กำลังพิมพ์"];
+const PENDING_STATES = ["รอการดำเนินงาน", "กำลังพิมพ์"];
 
-// กฎ: หลังลูกค้าสั่ง 10 นาที ถ้าสถานะยังเป็น "รอการชำระเงิน" -> ยกเลิกทันที
-export const UNPAID_TIMEOUT_MS = 10 * 60 * 1000;
 const inflightSync = new Map<string, Promise<void>>();
 
 export function syncAutoStatuses(shop_id: string): Promise<void> {
@@ -64,15 +60,6 @@ async function runSyncAutoStatuses(shop_id: string): Promise<void> {
 
   for (const o of orders as any[]) {
     const state: string = o.current_status?.state || "";
-
-    // ครบ 10 นาทีหลังสั่ง แต่สถานะยังเป็น "รอการชำระเงิน" -> ยกเลิก
-    if (state === "รอการชำระเงิน") {
-      const orderT = new Date(o.order_date).getTime();
-      if (!isNaN(orderT) && now > orderT + UNPAID_TIMEOUT_MS) {
-        toCancel.push(o.id);
-        continue;
-      }
-    }
 
     const timeStr = o.appointment_time || o.receive_date;
     if (!timeStr) continue;
@@ -180,7 +167,6 @@ export const getTodayInCome = async (
 
     await syncAutoStatuses(shop_id);
 
-    // 1. ดึง id ของสถานะ "รายการเสร็จสิ้น"
     const { data: statusData, error: statusError } = await supabase
       .from("status")
       .select("id")
@@ -189,9 +175,8 @@ export const getTodayInCome = async (
 
     if (statusError || !statusData) {
       return res.status(200).json({ income: 0, orderCount: 0 });
-    }
+    }  
 
-    // 2. ดึงคำสั่งซื้อที่เสร็จสิ้นแล้วทั้งหมดของร้าน
     const { data: orders, error: orderError } = await supabase
       .from("print_order")
       .select("total_price")
@@ -267,8 +252,9 @@ export const getNumOrderUnAccept = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
+
 // ==========================================
-// Get Top Orders
+// Get Top Orders 
 // ==========================================
 export const getTopOrder = async (
   req: Request,
@@ -283,7 +269,7 @@ export const getTopOrder = async (
 
     await syncAutoStatuses(shop_id);
 
-    // ดึงออเดอร์ของร้านค้าทั้งหมด (เรียงจากล่าสุด)
+    // ดึงออเดอร์ทั้งหมดของร้านค้า
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(
@@ -329,35 +315,22 @@ export const getTopOrder = async (
       return res.status(200).json([]);
     }
 
-    // Helper เช็คว่าเป็น "วันนี้" ตามเวลาไทย (YYYY-MM-DD)
-    const isTodayInThailand = (dateStr: string | null | undefined) => {
-      if (!dateStr) return false;
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return false;
-
-      // แปลงเวลาให้เป็น String รูปแบบ YYYY-MM-DD ของ Thailand (Asia/Bangkok)
-      const targetDateStr = d.toLocaleDateString("en-CA", {
-        timeZone: "Asia/Bangkok",
-      });
-      const todayDateStr = new Date().toLocaleDateString("en-CA", {
-        timeZone: "Asia/Bangkok",
-      });
-
-      return targetDateStr === todayDateStr;
+    // Helper: แปลง Date/ISO String ให้เหลือแค่ "YYYY-MM-DD" ในโซนเวลาไทย
+    const getThailandDateString = (dateInput?: string | Date | null) => {
+      if (!dateInput) return "";
+      const d = new Date(dateInput);
+      if (isNaN(d.getTime())) return "";
+      return d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
     };
 
-    // กรองเอาเฉพาะออเดอร์ที่:
-    // 1. สั่งวันนี้ (order_date เป็นวันนี้) OR นัดรับวันนี้ (appointment_time/receive_date เป็นวันนี้)
-    // 2. ไม่ใช่สถานะ "รอการชำระเงิน"
+    const todayStr = getThailandDateString(new Date());
+
     const todayOrders = orders.filter((order: any) => {
       const state = order.current_status?.state;
       if (state === "รอการชำระเงิน") return false;
 
-      const isOrderToday = isTodayInThailand(order.order_date);
-      const isAppointmentToday = isTodayInThailand(order.appointment_time);
-      const isReceiveToday = isTodayInThailand(order.receive_date);
-
-      return isOrderToday || isAppointmentToday || isReceiveToday;
+      const orderDateStr = getThailandDateString(order.order_date);
+      return orderDateStr === todayStr;
     });
 
     const now = Date.now();
@@ -391,7 +364,6 @@ export const getTopOrder = async (
       };
     });
 
-    // ลำดับสถานะในการเรียง
     const STATUS_RANK: Record<string, number> = {
       "รอการดำเนินการ": 0,
       "รอการดำเนินงาน": 0,
@@ -442,7 +414,6 @@ export const getFinancialOverview = async (
 
     await syncAutoStatuses(shop_id);
 
-    // 1. ดึง id ของสถานะ "รายการเสร็จสิ้น" จากตาราง status
     const { data: statusData, error: statusError } = await supabase
       .from("status")
       .select("id")
@@ -450,7 +421,6 @@ export const getFinancialOverview = async (
       .single();
 
     if (statusError || !statusData) {
-      // หากไม่พบสถานะ ให้คืนค่าเปล่าเป็น 0
       return res.status(200).json({
         totalGross: 0,
         totalFee: 0,
@@ -465,7 +435,6 @@ export const getFinancialOverview = async (
       });
     }
 
-    // 2. ดึงเฉพาะรายการสั่งซื้อที่มี current_status_id เป็น "รายการเสร็จสิ้น"
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(`
@@ -481,8 +450,6 @@ export const getFinancialOverview = async (
     if (error) return res.status(400).json({ error: error.message });
 
     const orderList = orders ?? [];
-    
-    // อัตราค่าธรรมเนียมแพลตฟอร์ม (เช่น 5%)
     const FEE_RATE = 0.05;
 
     let totalGross = 0;
@@ -531,7 +498,6 @@ export const getFinancialOverview = async (
       return isNaN(d.getTime()) ? -1 : d.getMonth();
     };
 
-    // 1. รายวัน (จ.-อา.)
     const daysName = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
     const currDay = now.getDay();
     const mondayOffset = currDay === 0 ? -6 : 1 - currDay;
@@ -548,7 +514,6 @@ export const getFinancialOverview = async (
       dailyTrend.push({ label: daysName[targetDate.getDay()], amount });
     }
 
-    // 2. รายสัปดาห์
     const weeklyTrend = [];
     for (let w = 1; w <= 4; w++) {
       const startDay = (w - 1) * 7 + 1;
@@ -566,7 +531,6 @@ export const getFinancialOverview = async (
       weeklyTrend.push({ label: `สัปดาห์ ${w}`, amount });
     }
 
-    // 3. รายเดือน
     const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
     const monthlyTrend = monthNames.map((mName, mIdx) => {
       const amount = transactions
@@ -576,7 +540,6 @@ export const getFinancialOverview = async (
       return { label: mName, amount };
     });
 
-    // 4. รายปี (5 ย้อนหลัง)
     const yearlyTrend = [];
     for (let i = 4; i >= 0; i--) {
       const targetYear = currentYear - i;
@@ -635,24 +598,21 @@ export const getOrderStatusBreakdown = async (
 
     if (error) return res.status(400).json({ error: error.message });
 
-    // ซ่อนออเดอร์ที่ยังรอชำระเงิน (ยังไม่ใช่งานของร้าน)
     const orderList = (orders ?? []).filter(
       (o: any) => o.current_status?.state !== "รอการชำระเงิน"
     );
 
     const counts: Record<string, number> = {
-      "รอการดำเนินการ": 0,
+      "รอการดำเนินงาน": 0,
       "กำลังพิมพ์": 0,
       "พิมพ์เสร็จสิ้น": 0,
       "รายการเสร็จสิ้น": 0,
       "ยกเลิกการพิมพ์": 0,
     };
 
-    // Helper: แปลง และ Normalize ให้เป็น Date Object ใน ค.ศ. ชัวร์ 100%
     const parseSafeDate = (dateStr: any) => {
       if (!dateStr) return null;
       
-      // กรณีเป็น String เช่น "2026-09-28" หรือ "2569-09-28"
       const cleanStr = String(dateStr).split("T")[0];
       const parts = cleanStr.split(/[-/]/);
       
@@ -661,7 +621,6 @@ export const getOrderStatusBreakdown = async (
         let month = parseInt(parts[1], 10) - 1;
         let day = parseInt(parts[2], 10);
 
-        // ถ้าเก็บปีเป็น พ.ศ. (เช่น > 2400) ให้แปลงเป็น ค.ศ.
         if (year > 2400) year -= 543;
 
         return new Date(year, month, day);
@@ -679,9 +638,8 @@ export const getOrderStatusBreakdown = async (
     });
 
     const now = new Date();
-    const currentYear = now.getFullYear(); // เช่น 2026
+    const currentYear = now.getFullYear();
 
-    // 1. รายวัน (จันทร์ - อาทิตย์ ของสัปดาห์นี้)
     const daysName = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
     const currDay = now.getDay();
     const mondayOffset = currDay === 0 ? -6 : 1 - currDay;
@@ -703,7 +661,6 @@ export const getOrderStatusBreakdown = async (
       dailyData.push({ label: daysName[targetDate.getDay()], count });
     }
 
-    // 2. รายสัปดาห์ (สัปดาห์ 1 - 4 ของเดือนปัจจุบัน)
     const weeklyData: { label: string; count: number }[] = [];
     for (let w = 1; w <= 4; w++) {
       const startDay = (w - 1) * 7 + 1;
@@ -723,7 +680,6 @@ export const getOrderStatusBreakdown = async (
       weeklyData.push({ label: `สัปดาห์ ${w}`, count });
     }
 
-    // 3. รายเดือน (ม.ค. - ธ.ค. ของปีปัจจุบัน)
     const monthNames = [
       "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
       "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
@@ -737,7 +693,6 @@ export const getOrderStatusBreakdown = async (
       return { label: mName, count };
     });
 
-    // 4. รายปี (5 ปีย้อนหลังนับจากปีปัจจุบัน)
     const yearlyData: { label: string; count: number }[] = [];
     for (let i = 4; i >= 0; i--) {
       const yr = currentYear - i;
@@ -747,7 +702,7 @@ export const getOrderStatusBreakdown = async (
         return od.getFullYear() === yr;
       }).length;
       
-      yearlyData.push({ label: `${yr + 543}`, count }); // แสดงเป็น พ.ศ. บนแท่งกราฟ
+      yearlyData.push({ label: `${yr + 543}`, count });
     }
 
     return res.status(200).json({
@@ -769,7 +724,40 @@ export const getOrderStatusBreakdown = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
- 
+
+// ==========================================
+// Get Complaints & Reviews
+// ==========================================
+const HIDDEN_REPORT_STATUSES = ["pending"];
+
+// ดึง print_order + print_order_item แล้วทำเป็น Map ตาม order_id
+async function fetchOrderMap(orderIds: string[]) {
+  const map = new Map<string, any>();
+  if (orderIds.length === 0) return map;
+
+  const [{ data: orders }, { data: items }] = await Promise.all([
+    supabase
+      .from("print_order")
+      .select("id, order_no, description, total_price")
+      .in("id", orderIds),
+    supabase
+      .from("print_order_item")
+      .select("id, order_id, category, quantity, describe")
+      .in("order_id", orderIds),
+  ]);
+
+  (orders ?? []).forEach((o) => map.set(o.id, { ...o, items: [] }));
+  (items ?? []).forEach((it) => {
+    map.get(it.order_id)?.items.push({
+      id: it.id,
+      category: it.category,
+      quantity: it.quantity,
+      describe: it.describe,
+    });
+  });
+
+  return map;
+}
 
 export const getComplaintsAndReviews = async (
   req: Request,
@@ -782,41 +770,51 @@ export const getComplaintsAndReviews = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
-    // 1. ดึงรีวิวทั้งหมด
     const { data: reviews, error: revErr } = await supabase
       .from("review")
-      .select(
-        `
-        *,
-        customer (first_name, last_name)
-        `
-      )
+      .select(`*, customer (first_name, last_name)`)
       .eq("shop_id", shop_id)
       .order("created_at", { ascending: false });
 
     if (revErr) return res.status(400).json({ error: revErr.message });
 
-    // 2. ดึงรายการร้องเรียน
     const { data: reports, error: repErr } = await supabase
       .from("report")
-      .select(
-        `
-        *,
-        customer (first_name, last_name)
-        `
-      )
+      .select(`*, customer (first_name, last_name)`)
       .eq("shop_id", shop_id)
       .order("created_at", { ascending: false });
 
     if (repErr) console.error("Report Fetch Error:", repErr.message);
 
-    const safeReviews = reviews ?? [];
-    const safeReports = reports ?? [];
+    // ไม่แสดง report ที่ยัง pending (หรือยังไม่มี status)
+    const visibleReports = (reports ?? []).filter((r) => {
+      const st = (r.status ?? "").toLowerCase().trim();
+      return st !== "" && !HIDDEN_REPORT_STATUSES.includes(st);
+    });
 
-    // 3. คำนวณ สรุปผลรีวิว (Summary) สำหรับแสดงผลส่วนดาวบน UI
+    const rawReviews = reviews ?? [];
+
+    // ดึงรายละเอียด order ของทั้ง review และ report ในครั้งเดียว
+    const orderIds = [
+      ...new Set(
+        [...rawReviews, ...visibleReports]
+          .map((x) => x.order_id)
+          .filter(Boolean) as string[]
+      ),
+    ];
+    const orderMap = await fetchOrderMap(orderIds);
+
+    const safeReviews = rawReviews.map((r) => ({
+      ...r,
+      print_order: r.order_id ? orderMap.get(r.order_id) ?? null : null,
+    }));
+    const safeReports = visibleReports.map((r) => ({
+      ...r,
+      print_order: r.order_id ? orderMap.get(r.order_id) ?? null : null,
+    }));
+
     const total_reviews = safeReviews.length;
 
-    // นับจำนวนรีวิวแยกตามดาว (1-5 ดาว)
     const rating_counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     let sumRating = 0;
 
@@ -828,26 +826,18 @@ export const getComplaintsAndReviews = async (
       }
     });
 
-    // คำนวณคะแนนเฉลี่ย
-    const average_rating = total_reviews > 0 ? Number((sumRating / total_reviews).toFixed(1)) : 0;
+    const average_rating =
+      total_reviews > 0 ? Number((sumRating / total_reviews).toFixed(1)) : 0;
 
-    // สรุปสถิติเปอร์เซ็นต์แต่ละดาวสำหรับ Progress Bar
     const rating_breakdown = [5, 4, 3, 2, 1].map((stars) => {
       const count = rating_counts[stars] || 0;
-      const percentage = total_reviews > 0 ? Number(((count / total_reviews) * 100).toFixed(1)) : 0;
-      return {
-        stars,
-        count,
-        percentage,
-      };
+      const percentage =
+        total_reviews > 0 ? Number(((count / total_reviews) * 100).toFixed(1)) : 0;
+      return { stars, count, percentage };
     });
 
     return res.status(200).json({
-      summary: {
-        average_rating,
-        total_reviews,
-        rating_breakdown,
-      },
+      summary: { average_rating, total_reviews, rating_breakdown },
       reviews: safeReviews,
       complaints: safeReports,
     });
