@@ -13,7 +13,6 @@ import ShopServicesTab, {
 import ShopBankTab from "../../../../component/shop/ShopBankTab";
 import ShopLocationConfirmModal from "../../../../component/shop/Shoplocationcomfirmmodal";
 
-const API_BASE = "http://localhost:5000/shop";
 
 const SHOP_ID_STORAGE_KEY = "shop_id";
 const API_BASE =
