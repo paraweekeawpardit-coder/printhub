@@ -61,6 +61,8 @@ router.patch("/orders/:orderId/status", Order.updateOrderStatus);
 router.patch("/orders/:id/paymentstatus", Detail.verifyPayment);
 router.patch("/orders/:id/verify-payment", Detail.verifyPayment);
 
+router.patch("/orders/:id/verify-payment", Detail.verifyPayment);
+
 // Shop Profile & Settings (แก้ไขส่วนนี้)
 router.get("/profile/:shop_id", Setting.getShopProfile);
 router.put("/profile/:shop_id", Setting.updateShopProfile); // 👈 เพิ่ม
