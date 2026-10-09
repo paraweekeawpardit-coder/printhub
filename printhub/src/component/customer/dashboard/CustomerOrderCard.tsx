@@ -351,7 +351,7 @@ export default function CustomerOrderCard({
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => router.push(`/customer/review?order_id=${order.id}&shop_id=${shopId}`)}
+                    onClick={() => router.push(`/customer/orders/${order.id}/review`)}
                     className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
                   >
                     <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
@@ -360,7 +360,7 @@ export default function CustomerOrderCard({
 
                   <button
                     type="button"
-                    onClick={() => onReportClick?.(order)}
+                    onClick={() => router.push(`/customer/orders/${order.id}/report`)}
                     className="px-2.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
                   >
                     <AlertTriangle className="w-3.5 h-3.5" />
