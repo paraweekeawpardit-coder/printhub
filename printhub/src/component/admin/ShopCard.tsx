@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, Check, X } from "lucide-react";
+import { Eye } from "lucide-react";
 
 export interface Shop {
   id?: string;
@@ -17,38 +17,39 @@ export interface Shop {
   close_time?: string;
   openTime?: string;
   closeTime?: string;
-  address?: string;
+  address?: any;
   description?: string;
   documentUrl?: string;
   is_verify?: boolean;
   status?: string;
   created_at?: string;
+  bank_account?: any;
+  tax_id?: string;
+  id_card_number?: string;
+  services?: any[];
 }
 
 interface ShopCardProps {
   shop: Shop;
-  onVerify: (shop_id: string, action: "approve" | "reject") => void;
+  onVerify?: (shop_id: string, action: "approve" | "reject") => void;
   onSelectShop?: (shop: Shop) => void;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
-// Helper ฟังก์ชันแปลง Image Path ให้เป็น Absolute URL เสมอ
 const getImageUrl = (url?: string) => {
   if (!url) return undefined;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  
-  // ตัด Slash นำหน้าออกก่อนนำมาเชื่อมต่อ
   const cleanPath = url.startsWith("/") ? url.slice(1) : url;
   return `${BACKEND_URL}/${cleanPath}`;
 };
 
-export default function ShopCard({ shop, onVerify, onSelectShop }: ShopCardProps) {
+export default function ShopCard({ shop, onSelectShop }: ShopCardProps) {
   const shopId = shop.id || shop._id || "";
   const shopName = shop.shop_name || shop.name || "ไม่ระบุชื่อร้าน";
   const ownerName = shop.owner_name || shop.ownerName || "ไม่ระบุ";
-  
-  // แปลง Path รูปภาพผ่าน Helper Function
+
   const rawImageSrc = shop.profile_image || shop.logoUrl;
   const imageSrc = getImageUrl(rawImageSrc);
 
@@ -60,234 +61,74 @@ export default function ShopCard({ shop, onVerify, onSelectShop }: ShopCardProps
     return timeStr.slice(0, 5) + " น.";
   };
 
-  const handleApprove = () => {
-    console.log(`Approving shop ID: ${shopId}`);
-    onVerify(shopId, "approve");
-  };
-
-  const handleReject = () => {
-    console.log(`Rejecting shop ID: ${shopId}`);
-    onVerify(shopId, "reject");
-  };
-
   return (
-    <div className="shop-card">
-      <div className="card-top">
-        <div className="avatar-wrapper">
-          {imageSrc ? (
-            <img src={imageSrc} alt={shopName} className="avatar-img" />
-          ) : (
-            <div className="avatar-placeholder">
-              {shopName.charAt(0) || "S"}
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col justify-between transition-all duration-200 shadow-2xs hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300">
+      {/* Card Header */}
+      <div>
+        <div className="flex justify-between items-start mb-4">
+          <div className="w-14 h-14 rounded-xl overflow-hidden bg-sky-50 shrink-0">
+            {imageSrc ? (
+              <img
+                src={imageSrc}
+                alt={shopName}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-sky-100 text-sky-600 text-2xl font-bold">
+                {shopName.charAt(0) || "S"}
+              </div>
+            )}
+          </div>
+          <span className="bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1 rounded-full uppercase">
+            รอดำเนินการ
+          </span>
+        </div>
+
+        {/* Card Body */}
+        <div>
+          <h3 className="text-lg font-bold text-slate-900 mb-1 line-clamp-1">
+            {shopName}
+          </h3>
+          <p className="text-sm text-slate-500">
+            เจ้าของร้าน: <span className="text-slate-700 font-semibold">{ownerName}</span>
+          </p>
+
+          <div className="h-px bg-slate-100 my-4" />
+
+          <div className="flex flex-col gap-2.5 text-xs sm:text-sm">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 font-medium">อีเมล</span>
+              <span className="text-slate-700 font-medium break-all max-w-[65%] text-right">
+                {shop.email || "-"}
+              </span>
             </div>
-          )}
-        </div>
-        <span className="status-pill">Pending</span>
-      </div>
-
-      <div className="card-body">
-        <h3 className="shop-name">{shopName}</h3>
-        <p className="owner-name">
-          เจ้าของร้าน: <span>{ownerName}</span>
-        </p>
-
-        <div className="info-divider" />
-
-        <div className="info-list">
-          <div className="info-item">
-            <span className="info-label">อีเมล</span>
-            <span className="info-value">{shop.email || "-"}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">เบอร์โทรศัพท์</span>
-            <span className="info-value">{shop.phone || "-"}</span>
-          </div>
-          <div className="info-item">
-            <span className="info-label">เวลาทำการ</span>
-            <span className="info-value highlight">
-              {formatTime(openTime)} - {formatTime(closeTime)}
-            </span>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 font-medium">เบอร์โทรศัพท์</span>
+              <span className="text-slate-700 font-medium">{shop.phone || "-"}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 font-medium">เวลาทำการ</span>
+              <span className="text-sky-950 font-semibold">
+                {formatTime(openTime)} - {formatTime(closeTime)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="card-actions-container">
+      {/* Action Button: เปิด Modal ตรวจสอบข้อมูลก่อน */}
+      <div className="mt-5 pt-2">
         {onSelectShop && (
           <button
             type="button"
-            className="btn btn-detail"
             onClick={() => onSelectShop(shop)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-100 hover:bg-sky-600 hover:text-white text-slate-700 text-xs sm:text-sm font-semibold rounded-xl transition-all duration-150 cursor-pointer active:scale-[0.98]"
           >
-            <Eye className="w-4 h-4 inline-block mr-1" size={16} />
-            <span>ดูรายละเอียดข้อมูลร้าน</span>
+            <Eye className="w-4 h-4 shrink-0" />
+            <span>ดูรายละเอียดข้อมูลร้านเพื่อดำเนินการ</span>
           </button>
         )}
-
-        <div className="card-actions">
-          <button
-            type="button"
-            className="btn btn-reject"
-            onClick={handleReject}
-          >
-            <X size={16} />
-            <span>ปฏิเสธ</span>
-          </button>
-          <button
-            type="button"
-            className="btn btn-approve"
-            onClick={handleApprove}
-          >
-            <Check size={16} />
-            <span>อนุมัติร้านค้า</span>
-          </button>
-        </div>
       </div>
-
-      <style jsx>{`
-        .shop-card {
-          background-color: #ffffff;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          transition: all 0.2s ease;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
-        }
-        .shop-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-          border-color: #cbd5e1;
-        }
-        .card-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 16px;
-        }
-        .avatar-wrapper {
-          width: 56px;
-          height: 56px;
-          border-radius: 14px;
-          overflow: hidden;
-          background-color: #f0f8ff;
-        }
-        .avatar-img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .avatar-placeholder {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background-color: #e0f2fe;
-          color: #0284c7;
-          font-size: 1.5rem;
-          font-weight: 700;
-        }
-        .status-pill {
-          background-color: #fef3c7;
-          color: #d97706;
-          font-size: 0.75rem;
-          font-weight: 700;
-          padding: 4px 12px;
-          border-radius: 20px;
-          text-transform: uppercase;
-        }
-        .shop-name {
-          font-size: 1.15rem;
-          font-weight: 700;
-          color: #0f172a;
-          margin: 0 0 4px 0;
-        }
-        .owner-name {
-          font-size: 0.88rem;
-          color: #64748b;
-          margin: 0;
-        }
-        .owner-name span {
-          color: #334155;
-          font-weight: 600;
-        }
-        .info-divider {
-          height: 1px;
-          background-color: #f1f5f9;
-          margin: 16px 0;
-        }
-        .info-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-        .info-item {
-          display: flex;
-          justify-content: space-between;
-          font-size: 0.85rem;
-        }
-        .info-label {
-          color: #94a3b8;
-        }
-        .info-value {
-          color: #334155;
-          font-weight: 500;
-        }
-        .info-value.highlight {
-          color: #003554;
-          font-weight: 600;
-        }
-        .card-actions-container {
-          margin-top: 20px;
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        .card-actions {
-          display: flex;
-          gap: 12px;
-        }
-        .btn {
-          padding: 10px;
-          border-radius: 10px;
-          font-size: 0.88rem;
-          font-weight: 600;
-          cursor: pointer;
-          border: none;
-          transition: background-color 0.15s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-        }
-        .btn-detail {
-          width: 100%;
-          background-color: #f1f5f9;
-          color: #334155;
-        }
-        .btn-detail:hover {
-          background-color: #e2e8f0;
-        }
-        .btn-approve {
-          flex: 1;
-          background-color: #003554;
-          color: white;
-        }
-        .btn-approve:hover {
-          background-color: #002238;
-        }
-        .btn-reject {
-          flex: 1;
-          background-color: #fff5f5;
-          color: #e11d48;
-          border: 1px solid #fecdd3;
-        }
-        .btn-reject:hover {
-          background-color: #ffe4e6;
-        }
-      `}</style>
     </div>
   );
 }

@@ -116,7 +116,11 @@ export default function AdminNavbar() {
     }
   };
 
-  const isFinanceActive = pathname === "/admin/slips" || pathname === "/admin/refunds";
+  // เช็ค Active State ของกลุ่มการเงิน
+  const isFinanceActive =
+    pathname === "/admin/slips" ||
+    pathname === "/admin/refunds" ||
+    pathname === "/admin/payouts";
 
   return (
     <nav className="sticky top-0 z-50 flex h-14 w-full items-center justify-between bg-slate-900 px-6 shadow-sm">
@@ -218,7 +222,7 @@ export default function AdminNavbar() {
           )}
 
           {showFinanceMenu && (
-            <div className="absolute left-0 top-12 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg z-50 text-slate-800">
+            <div className="absolute left-0 top-12 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg z-50 text-slate-800">
               <Link
                 href="/admin/slips"
                 className={`block px-4 py-2 text-xs hover:bg-slate-50 ${
@@ -233,7 +237,15 @@ export default function AdminNavbar() {
                   pathname === "/admin/refunds" ? "font-bold text-sky-600 bg-sky-50/50" : ""
                 }`}
               >
-                รายการคืนเงิน
+                รายการคืนเงินลูกค้า
+              </Link>
+              <Link
+                href="/admin/payouts"
+                className={`block px-4 py-2 text-xs hover:bg-slate-50 border-t border-slate-100 ${
+                  pathname === "/admin/payouts" ? "font-bold text-sky-600 bg-sky-50/50" : ""
+                }`}
+              >
+                รายการโอนเงินให้ร้านค้า
               </Link>
             </div>
           )}

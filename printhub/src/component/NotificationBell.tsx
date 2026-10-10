@@ -52,18 +52,27 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
     setIsOpen(false);
 
+    // 🟢 Routing แยกตาม Role และ Link / Type
+    if (noti.link) {
+      router.push(noti.link);
+      return;
+    }
+
     const orderId = noti.order_id;
     const type = noti.type;
 
-    // 🟢 Routing แยกตาม Role
     if (role === "admin") {
-      if (type === "report_issue" || noti.title?.includes("ร้องเรียน")) {
-        router.push("/admin/issues");
+      if (type === "report_issue" || noti.title?.includes("ร้องเรียน") || noti.title?.includes("รายงาน")) {
+        router.push("/admin/reports");
       } else {
         router.push("/admin/support");
       }
     } else if (role === "shop") {
-      if (orderId) router.push(`/shop/detail/${orderId}`);
+      if (orderId) {
+        router.push(`/shop/detail/${orderId}`);
+      } else {
+        router.push(`/shop/setting/${userId}`);
+      }
     } else {
       if (orderId) router.push(`/customer/orders?highlight=${orderId}`);
     }
@@ -79,17 +88,37 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     }
   };
 
+  const formatDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return "";
+      return date.toLocaleString("th-TH", {
+        day: "2-digit",
+        month: "short",
+        year: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "";
+    }
+  };
+
   return (
     <div className="relative" ref={dropdownRef}>
       {/* ปุ่มกระดิ่ง */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-slate-700 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-all cursor-pointer focus:outline-none"
+        className={`relative p-2 rounded-full transition-all cursor-pointer focus:outline-none ${
+          role === "admin"
+            ? "text-slate-200 hover:text-white hover:bg-slate-800"
+            : "text-slate-700 hover:text-blue-600 hover:bg-slate-100"
+        }`}
         title="การแจ้งเตือน"
       >
         <Bell size={22} strokeWidth={2.2} />
         {unreadCount > 0 && (
-          <span className="absolute top-0.5 right-0.5 bg-rose-500 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-pulse">
+          <span className="absolute top-0.5 right-0.5 bg-rose-500 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-sm animate-pulse">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -146,7 +175,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
                     {noti.message}
                   </p>
                   <span className="text-[10px] text-slate-400 block font-normal">
-                    {new Date(noti.created_at).toLocaleString("th-TH")}
+                    {formatDate(noti.created_at)}
                   </span>
                 </div>
               ))

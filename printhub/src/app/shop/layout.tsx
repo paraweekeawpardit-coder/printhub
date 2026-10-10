@@ -25,7 +25,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
   const checkStatus = useCallback(async (): Promise<boolean | null> => {
     try {
-      const res = await axios.get(`${API_BASE}/shop/status`);
+      const res = await axios.get("http://localhost:5000/api/shop/status")
       setBan(res.data.isBanned ? { reason: res.data.reason ?? null } : null);
       return !!res.data.isBanned;
     } catch (err: any) {

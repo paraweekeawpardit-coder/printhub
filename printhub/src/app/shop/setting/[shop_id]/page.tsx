@@ -14,8 +14,6 @@ import ShopBankTab from "../../../../component/shop/ShopBankTab";
 import ShopLocationConfirmModal from "../../../../component/shop/Shoplocationcomfirmmodal";
 import ShopBankConfirmModal from "../../../../component/shop/Shopbankconfirmmodal";
 
-
-const SHOP_ID_STORAGE_KEY = "shop_id";
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/shop";
 
@@ -26,22 +24,6 @@ type AddressData = {
   province: string;
   postcode: string;
 };
-
-function resolveShopId(raw: string | null): string | null {
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "string") return parsed;
-    if (parsed && typeof parsed === "object" && parsed.id != null) {
-      return String(parsed.id);
-    }
-  } catch (err) {
-    console.log(err);
-  }
-
-  return raw;
-}
 
 export default function ShopSettingsPage() {
   const params = useParams();
@@ -145,7 +127,7 @@ export default function ShopSettingsPage() {
       const verifyStatus =
         verifyRes.status === "fulfilled" ? verifyRes.value.data?.data : null;
 
-      // Profile Data
+      // 1. Profile Data
       if (shop) {
         if (shop.status === "suspended") {
           setIsSuspended(true);
@@ -184,10 +166,10 @@ export default function ShopSettingsPage() {
         setHasProfileData(Boolean(shop.shop_name || shop.name));
       }
 
-      // Verification Status
+      // 2. Verification Status
       setIsVerified(Boolean(verifyStatus?.is_verify));
 
-      // Services Data
+      // 3. Services Data
       if (shopServices) {
         const normalizedServices: ServiceTypeGroup[] = shopServices.map((group: any) => ({
           id: group.id,
@@ -233,7 +215,6 @@ export default function ShopSettingsPage() {
         if (pendingStatus) {
           setIsEditingBank(false);
         }
-      }
       } else {
         setBankAccountId(null);
         setBankName("");
@@ -384,7 +365,7 @@ export default function ShopSettingsPage() {
       const data = err?.response?.data;
       console.error("Save services error:", err?.response?.status, data ?? err.message);
       alert(
-        `บันทึกบริการพิมพ์ไม่สำเร็จ\n${data?.detail ?? data?.error ?? err.message}\n[backend: ${data?.debug?.version ?? "ไม่พบ version = โค้ดเก่า/ยังไม่ restart?"}]`
+        `บันทึกบริการพิมพ์ไม่สำเร็จ\n${data?.detail ?? data?.error ?? err.message}`
       );
       return false;
     } finally {

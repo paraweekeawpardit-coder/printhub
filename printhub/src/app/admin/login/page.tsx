@@ -52,7 +52,7 @@ export default function AdminLoginPage() {
         window.dispatchEvent(new Event("userProfileUpdated"));
 
         // 3. ใช้ window.location.href แทน router.push เพื่อให้ Next.js รีเฟรช State ทั้งหมด
-        window.location.href = "/admin/shops";
+        window.location.href = "/admin";
       } else {
         setError("ไม่พบ Token ตอบกลับจากเซิร์ฟเวอร์");
       }

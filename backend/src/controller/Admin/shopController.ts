@@ -3,25 +3,59 @@ import supabase from "../../config/supabase.js";
 
 /**
  * GET /api/admin/shops/pending
- * ดึงรายการร้านค้าที่รออนุมัติ (is_verify = false) พร้อมข้อมูลที่อยู่ (address)
+ * ดึงรายการร้านค้าที่รออนุมัติ (is_verify = false) พร้อมข้อมูลที่อยู่ (address) และบัญชีธนาคาร (bank_account)
  */
 export const getPendingShops = async (
-  req: Request,
+  _req: Request,
   res: Response
 ): Promise<Response> => {
   try {
-    const { data: shops, error } = await supabase
+    const { data: shops, error: shopError } = await supabase
       .from("print_shop")
       .select("*, address:address_id(*)")
       .eq("is_verify", false)
       .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("GetPendingShops Error:", error.message);
-      return res.status(500).json({ error: error.message });
+    if (shopError) {
+      console.error("GetPendingShops Error:", shopError.message);
+      return res.status(500).json({ error: shopError.message });
     }
 
-    return res.status(200).json(shops ?? []);
+    if (!shops || shops.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    const { data: allBankAccounts } = await supabase
+      .from("bank_account")
+      .select("*");
+
+    const formattedShops = shops.map((shop: any) => {
+      let foundBank = allBankAccounts?.find(
+        (b: any) => b.shop_id === shop.id
+      );
+
+      if (!foundBank && (shop.owner_name || shop.ownerName)) {
+        const owner = (shop.owner_name || shop.ownerName).trim();
+        foundBank = allBankAccounts?.find(
+          (b: any) =>
+            b.account_name &&
+            b.account_name.trim().toLowerCase() === owner.toLowerCase()
+        );
+      }
+
+      return {
+        ...shop,
+        bank_account: foundBank || null,
+        bank_name: foundBank?.bank_name || shop.bank_name || null,
+        account_number: foundBank?.account_number || shop.account_number || null,
+        account_name: foundBank?.account_name || shop.account_name || null,
+        bank_account_no: foundBank?.account_number || null,
+        bank_account_name: foundBank?.account_name || null,
+        tax_id: shop.tax_id || shop.id_card_number || null,
+      };
+    });
+
+    return res.status(200).json(formattedShops);
   } catch (err: any) {
     console.error("GetPendingShops Exception:", err.message || err);
     return res.status(500).json({ error: "Internal Server Error" });
@@ -30,7 +64,7 @@ export const getPendingShops = async (
 
 /**
  * GET /api/admin/shops/all
- * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่อนุมัติแล้ว (is_verify = true) พร้อมข้อมูลที่อยู่ (address)
+ * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่อนุมัติแล้ว (is_verify = true)
  */
 export const getAllShops = async (
   req: Request,
@@ -39,7 +73,7 @@ export const getAllShops = async (
   try {
     const { data: shops, error } = await supabase
       .from("print_shop")
-      .select("*, address:address_id(*)")
+      .select("*, address:address_id(*), bank_account(*)")
       .eq("is_verify", true)
       .order("created_at", { ascending: false });
 
@@ -48,7 +82,27 @@ export const getAllShops = async (
       return res.status(500).json({ error: error.message });
     }
 
-    return res.status(200).json(shops ?? []);
+    const formattedShops = (shops ?? []).map((shop: any) => {
+      const bankAccounts = Array.isArray(shop.bank_account)
+        ? shop.bank_account
+        : shop.bank_account
+        ? [shop.bank_account]
+        : [];
+      const primaryBank =
+        bankAccounts.find((b: any) => b.status === "approved") ||
+        bankAccounts[0] ||
+        null;
+
+      return {
+        ...shop,
+        bank_account: primaryBank,
+        bank_name: primaryBank?.bank_name || null,
+        account_number: primaryBank?.account_number || null,
+        account_name: primaryBank?.account_name || null,
+      };
+    });
+
+    return res.status(200).json(formattedShops);
   } catch (err: any) {
     console.error("GetAllShops Exception:", err.message || err);
     return res.status(500).json({ error: "Internal Server Error" });
@@ -73,11 +127,8 @@ export const verifyShop = async (
     }
 
     const isApproved = action === "approve";
-
-    // 📌 1. ดึง adminId จาก req.user หรือ req.body
     let adminId = (req as any).user?.id || admin_id || verified_by || null;
 
-    // 📌 2. ป้องกัน NULL: หากยังไม่มี adminId ให้ดึง ID ของ Admin รายการแรกใน DB มาใช้แทน
     if (isApproved && !adminId) {
       const { data: adminData } = await supabase
         .from("admin")
@@ -90,7 +141,6 @@ export const verifyShop = async (
       }
     }
 
-    // 📌 3. อัปเดตข้อมูลลงฐานข้อมูล
     const updatePayload = {
       is_verify: isApproved,
       status: isApproved ? "approved" : "rejected",
@@ -101,12 +151,21 @@ export const verifyShop = async (
       .from("print_shop")
       .update(updatePayload)
       .eq("id", shop_id)
-      .select("*, address:address_id(*)")
+      .select("*, address:address_id(*), bank_account(*)")
       .single();
 
     if (error) {
       console.error("VerifyShop DB Error:", error.message);
       return res.status(400).json({ error: error.message });
+    }
+
+    // 📌 หากอนุมัติร้านค้า ให้อนุมัติบัญชีธนาคารค้างอนุมัติ (pending) ของร้านนั้นทันที
+    if (isApproved) {
+      await supabase
+        .from("bank_account")
+        .update({ status: "approved" })
+        .eq("shop_id", shop_id)
+        .eq("status", "pending");
     }
 
     return res.status(200).json({
@@ -122,7 +181,7 @@ export const verifyShop = async (
 
 /**
  * PATCH /api/admin/shops/suspend
- * ระงับ หรือ ปลดการระงับร้านค้า พร้อมบันทึกเหตุผล
+ * ระงับ หรือ ปลดการระงับร้านค้า
  */
 export const toggleSuspendShop = async (
   req: Request,
@@ -139,15 +198,15 @@ export const toggleSuspendShop = async (
     const isSuspend = suspend === true || suspend === "true";
     const newStatus = isSuspend ? "suspended" : "approved";
 
-    // 📌 อัปเดตสถานะร้านค้าในตาราง print_shop
     const { data: updatedShop, error } = await supabase
       .from("print_shop")
       .update({
+        is_verify: !isSuspend,
         status: newStatus,
         suspend_reason: isSuspend ? reason : null,
       })
       .eq("id", shop_id)
-      .select("*, address:address_id(*)")
+      .select("*, address:address_id(*), bank_account(*)")
       .single();
 
     if (error) {
@@ -155,7 +214,6 @@ export const toggleSuspendShop = async (
       return res.status(400).json({ error: error.message });
     }
 
-    // 📌 หากเป็นการปลดระงับ ให้ปรับสถานะคำร้องขอปลดระงับที่รอดำเนินการ (pending) ให้เป็น approved
     if (!isSuspend) {
       await supabase
         .from("shop_appeals")
@@ -200,10 +258,7 @@ export const getPendingBankAccounts = async (
       .order("created_at", { ascending: false });
 
     if (pendingError) {
-      console.error(
-        "Fetch pending bank_account error:",
-        pendingError.message
-      );
+      console.error("Fetch pending bank_account error:", pendingError.message);
       return res.status(500).json({ error: pendingError.message });
     }
 
@@ -233,24 +288,38 @@ export const getPendingBankAccounts = async (
         (a) => a.shop_id === pending.shop_id && a.id !== pending.id
       );
 
+      const oldBankData = oldAcc
+        ? {
+            bank_name: oldAcc.bank_name,
+            account_number: oldAcc.account_number,
+            account_name: oldAcc.account_name,
+          }
+        : null;
+
+      const newBankData = {
+        bank_name: pending.bank_name,
+        account_number: pending.account_number,
+        account_name: pending.account_name,
+      };
+
       return {
         id: pending.id,
         shop_id: pending.shop_id,
         shop_name: shopInfo?.shop_name || "ไม่ระบุชื่อร้าน",
         logo_url: shopInfo?.profile_image || null,
         created_at: pending.created_at,
-        old_account: oldAcc
-          ? {
-              bank_name: oldAcc.bank_name,
-              account_number: oldAcc.account_number,
-              account_name: oldAcc.account_name,
-            }
-          : null,
-        new_account: {
-          bank_name: pending.bank_name,
-          account_number: pending.account_number,
-          account_name: pending.account_name,
-        },
+        old_account: oldBankData,
+        old_bank: oldBankData,
+        old_bank_account: oldBankData,
+        new_account: newBankData,
+        new_bank: newBankData,
+        new_bank_account: newBankData,
+        old_bank_name: oldBankData?.bank_name || null,
+        old_account_number: oldBankData?.account_number || null,
+        old_account_name: oldBankData?.account_name || null,
+        bank_name: pending.bank_name,
+        account_number: pending.account_number,
+        account_name: pending.account_name,
       };
     });
 
@@ -263,7 +332,7 @@ export const getPendingBankAccounts = async (
 
 /**
  * PATCH /api/admin/bank-accounts/verify
- * อนุมัติ (approve) หรือ ปฏิเสธ (reject) บัญชีธนาคาร
+ * อนุมัติ (approve) หรือ ปปฏิเสธ (reject) บัญชีธนาคาร
  */
 export const approveOrRejectBankAccount = async (
   req: Request,
@@ -298,13 +367,21 @@ export const approveOrRejectBankAccount = async (
 
     if (action === "approve") {
       if (targetShopId) {
+        // 1. เปลี่ยนสถานะบัญชีเดิมของร้านที่เป็น 'approved' ให้กลายเป็น 'rejected' (ยกเลิกการใช้งานเดิม)
         await supabase
           .from("bank_account")
           .update({ status: "rejected" })
           .eq("shop_id", targetShopId)
           .eq("status", "approved");
+
+        // 2. ป้องกันปัญหาร้านค้าโดนล็อค: ยืนยันสถานะร้านค้าใน print_shop ว่าอนุมัติเรียบร้อย
+        await supabase
+          .from("print_shop")
+          .update({ is_verify: true, status: "approved" })
+          .eq("id", targetShopId);
       }
 
+      // 3. เปลี่ยนบัญชีใหม่ที่ยื่นมาให้กลายเป็น 'approved'
       const { data: approvedData, error: approveError } = await supabase
         .from("bank_account")
         .update({ status: "approved" })
@@ -318,10 +395,11 @@ export const approveOrRejectBankAccount = async (
 
       return res.status(200).json({
         success: true,
-        message: "อนุมัติบัญชีธนาคารสำเร็จ",
+        message: "อนุมัติเปลี่ยนบัญชีธนาคารสำเร็จ",
         data: approvedData,
       });
     } else if (action === "reject") {
+      // ปฏิเสธคำขอใหม่ บัญชีเดิมที่เป็น 'approved' จะยังคงแสดงผลเหมือนเดิมในระบบ
       const { data: rejectedData, error: rejectError } = await supabase
         .from("bank_account")
         .update({ status: "rejected" })
@@ -335,7 +413,7 @@ export const approveOrRejectBankAccount = async (
 
       return res.status(200).json({
         success: true,
-        message: "ปฏิเสธคำขอเปิดบัญชีธนาคารเรียบร้อยแล้ว",
+        message: "ปฏิเสธคำขอเปลี่ยนบัญชีธนาคารเรียบร้อยแล้ว",
         data: rejectedData,
       });
     } else {
@@ -350,13 +428,9 @@ export const approveOrRejectBankAccount = async (
 };
 
 // ==========================================
-// ติดต่อแอดมิน / ยื่นเรื่องขอปลดระงับ (Contact Admin & Appeals)
+// ติดต่อแอดมิน / ยื่นเรื่องขอปลดระงับ
 // ==========================================
 
-/**
- * POST /api/admin/contact-admin
- * บันทึกคำขอปลดการระงับ/ติดต่อ Admin ลงตาราง shop_appeals
- */
 export const createContactAdmin = async (
   req: Request,
   res: Response
@@ -370,7 +444,6 @@ export const createContactAdmin = async (
         .json({ error: "shop_id and message are required" });
     }
 
-    // 📌 เช็คว่ามีคำร้องที่รอตรวจสอบอยู่แล้วหรือไม่
     const { data: existingAppeal } = await supabase
       .from("shop_appeals")
       .select("id")
@@ -413,10 +486,6 @@ export const createContactAdmin = async (
   }
 };
 
-/**
- * GET /api/admin/shop-appeal/:shop_id
- * ดึงสถานะคำร้องล่าสุดของร้านค้า (ใช้สำหรับแสดงผลใน SuspendedBanner)
- */
 export const getShopAppealStatus = async (
   req: Request,
   res: Response
@@ -451,10 +520,6 @@ export const getShopAppealStatus = async (
   }
 };
 
-/**
- * GET /api/admin/appeals
- * ดึงรายการคำร้องขอปลดระงับทั้งหมด พร้อมข้อมูลร้านค้า
- */
 export const getShopAppeals = async (
   _req: Request,
   res: Response
@@ -477,16 +542,11 @@ export const getShopAppeals = async (
   }
 };
 
-/**
- * PATCH /api/admin/shop-appeal/nudge
- * อัปเดตการสะกิด/เร่งติดตามคำร้องปลดระงับ
- */
 export const nudgeShopAppeal = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
-    // 📌 1. ดึง ID จาก Request Body ให้ยืดหยุ่น (รองรับ appeal_id, id, shop_id)
     const targetId = req.body.appeal_id || req.body.id || req.body.appealId;
     const shopId = req.body.shop_id || req.body.shopId;
 
@@ -497,7 +557,6 @@ export const nudgeShopAppeal = async (
       });
     }
 
-    // 📌 2. สร้าง Query แบบยืดหยุ่น หาจาก ID คำร้อง หรือ shop_id ที่ยัง pending อยู่
     let query = supabase
       .from("shop_appeals")
       .update({

@@ -13,9 +13,6 @@ interface AppealRow {
   status: string;
 }
 
-/**
- * Helper ฟังก์ชันแปลง Date เป็น string รูปแบบ YYYY-MM-DD ตาม Local Time
- */
 const formatDateKey = (date: Date): string => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -23,75 +20,121 @@ const formatDateKey = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-/**
- * GET /api/admin/dashboard-stats
- */
 export const getPlatformStats = async (
   req: Request,
   res: Response,
 ): Promise<Response> => {
   try {
-    // 1. คำนวณช่วงเวลาย้อนหลัง 7 วัน (นับรวมวันนี้)
     const now = new Date();
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(now.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    // 2. ดึงข้อมูลแบบ Parallel ด้วย Promise.all เพื่อความเร็วสูงสุด
-    const [customerRes, shopRes, reportRes, paymentRes, appealsRes, refundRes] =
-      await Promise.all([
-        // (1) จำนวนลูกค้าทั้งหมด
-        supabase.from("customer").select("*", { count: "exact", head: true }),
+    // 1. ดึง status_id ของสถานะ "ยกเลิกการพิมพ์" จากตาราง status (แบบเดียวกับ refundController)
+    const { data: cancelStatusObj } = await supabase
+      .from("status")
+      .select("id")
+      .eq("state", "ยกเลิกการพิมพ์")
+      .maybeSingle();
 
-        // (2) จำนวนร้านค้าที่ Active (ไม่ใช่ PENDING หรือ SUSPENDED)
-        supabase
-          .from("print_shop")
-          .select("*", { count: "exact", head: true })
-          .eq("is_verify", true)
-          .eq("status", "approved"),
+    const [
+      customerRes,
+      shopRes,
+      reportRes,
+      paymentRes,
+      appealsRes,
+    ] = await Promise.all([
+      // (1) จำนวนลูกค้าทั้งหมด
+      supabase.from("customer").select("*", { count: "exact", head: true }),
 
-        // (3) จำนวนรายงานปัญหาที่รอตรวจสอบ
-        supabase
-          .from("report")
-          .select("*", { count: "exact", head: true })
-          .ilike("status", "PENDING"),
+      // (2) ร้านค้าที่อนุมัติแล้ว
+      supabase
+        .from("print_shop")
+        .select("*", { count: "exact", head: true })
+        .eq("is_verify", true)
+        .eq("status", "approved"),
 
-        // (4) ดึงข้อมูล Payment เฉพาะช่วง 7 วันย้อนหลัง
-        supabase
-          .from("payment")
-          .select("amount, payment_date, created_at")
-          .gte("created_at", sevenDaysAgo.toISOString()),
+      // (3) รายงานปัญหาค้างตรวจ (pending)
+      supabase
+        .from("report")
+        .select("*", { count: "exact", head: true })
+        .ilike("status", "pending"),
 
-        // (5) ดึงรายการคำร้องขอปลดระงับร้านค้าที่รอการตรวจสอบ
-        supabase
-          .from("shop_appeals")
-          .select("id, created_at, status")
-          .eq("status", "pending"),
+      // (4) Payment 7 วันย้อนหลัง
+      supabase
+        .from("payment")
+        .select("amount, payment_date, created_at")
+        .gte("payment_date", sevenDaysAgo.toISOString()),
 
-        // (6) ดึงจำนวนออเดอร์ที่อยู่ในสถานะยกเลิกและรอคืนเงิน
-        supabase
-          .from("orders")
-          .select("*", { count: "exact", head: true })
-          .eq("state", "ยกเลิกการพิมพ์"),
-      ]);
+      // (5) คำร้องขอปลดระงับร้านค้า (pending)
+      supabase
+        .from("shop_appeals")
+        .select("id, created_at, status")
+        .eq("status", "pending"),
+    ]);
 
-    // สกัดค่า Count
+    // 2. 📌 คำนวณรายการรอโอนเงินคืนลูกค้า (Pending Refunds) ถอดแบบ logic จาก refundController
+    let pendingRefunds = 0;
+    if (cancelStatusObj) {
+      const { data: cancelOrders } = await supabase
+        .from("print_order")
+        .select(`
+          id,
+          payment:payment!order_id ( id, status, refund_slip_url )
+        `)
+        .eq("current_status_id", cancelStatusObj.id);
+
+      pendingRefunds = (cancelOrders || []).filter((item: any) => {
+        const payList = Array.isArray(item.payment)
+          ? item.payment
+          : item.payment
+          ? [item.payment]
+          : [];
+
+        // กรองรายการที่เป็น REJECTED หรือ REFUNDED ออก
+        const isRejected = payList.some((p: any) => p.status === "REJECTED");
+        const isRefunded = payList.some(
+          (p: any) => p.status === "REFUNDED" || Boolean(p.refund_slip_url)
+        );
+
+        return !isRejected && !isRefunded;
+      }).length;
+    }
+
+    // 3. 📌 คำนวณรายการรอโอนให้ร้านค้า (Pending Payouts) ถอดแบบ logic จาก payoutController
+    let pendingPayouts = 0;
+    const { data: allPayments } = await supabase
+      .from("payment")
+      .select("id, status, payout_slip_url");
+
+    if (allPayments) {
+      pendingPayouts = allPayments.filter((item: any) => {
+        // กรองรายการ PAYOUT_REJECTED หรือ รายการที่ PAID / completed / มี payout_slip_url ออก
+        if (item.status === "PAYOUT_REJECTED") return false;
+
+        const isPaid =
+          Boolean(item.payout_slip_url) ||
+          item.status === "PAID" ||
+          item.status === "completed";
+
+        return !isPaid;
+      }).length;
+    }
+
     const customerCount = customerRes.count ?? 0;
     const shopCount = shopRes.count ?? 0;
     const pendingReports = reportRes.count ?? 0;
-    const pendingRefunds = refundRes.count ?? 0;
 
-    // คำนวณคำร้องขอปลดระงับ และเคสที่เกินกำหนด (Overdue 3 วัน)
+    // คำนวณคำร้องขอปลดระงับ เกิน 3 วัน
     const appealsData = (appealsRes.data as AppealRow[]) || [];
     const pendingAppeals = appealsData.length;
-
-    const oneDayInMs = 1 * 24 * 60 * 60 * 1000;
+    const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
     const overdueAppeals = appealsData.filter((a) => {
       const createdAt = new Date(a.created_at).getTime();
-      return now.getTime() - createdAt >= oneDayInMs;
+      return now.getTime() - createdAt >= threeDaysInMs;
     }).length;
 
-    // 3. เตรียม Map สำหรับ 7 วันย้อนหลัง
+    // คำนวณรายได้ย้อนหลัง 7 วัน
     const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const last7DaysMap: Record<string, { name: string; income: number }> = {};
 
@@ -102,7 +145,6 @@ export const getPlatformStats = async (
       last7DaysMap[dateStr] = { name: daysOfWeek[d.getDay()], income: 0 };
     }
 
-    // 4. คำนวณรายได้ย้อนหลัง 7 วัน (ค่าธรรมเนียม 5%)
     let total7DaysIncome = 0;
     const payments = (paymentRes.data as PaymentRow[]) || [];
 
@@ -119,7 +161,6 @@ export const getPlatformStats = async (
       }
     });
 
-    // 5. แปลงข้อมูลกราฟให้อยู่ในรูปแบบ Array
     const dailyIncome = Object.values(last7DaysMap).map((item) => ({
       name: item.name,
       income: Number(item.income.toFixed(2)),
@@ -132,6 +173,7 @@ export const getPlatformStats = async (
       pendingReports,
       pendingAppeals,
       pendingRefunds,
+      pendingPayouts,
       overdueAppeals,
       dailyIncome,
     });
