@@ -80,15 +80,16 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
         body: JSON.stringify({ appeal_id: appeal.id }),
       });
 
-      if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+
+      if (res.ok && result.success) {
         setIsNudged(true);
-        alert("เร่งติดตามคำร้องเรียบร้อยแล้ว แอดมินได้รับการแจ้งเตือนแล้วครับ");
+        console.log("[Nudge Success]:", result.message || "ส่งสัญญาณเร่งติดตามคำร้องเรียบร้อยแล้ว");
       } else {
-        alert("เกิดข้อผิดพลาดในการส่งข้อความติดตามคำร้อง");
+        console.error("[Nudge Failed]:", result.message || "ไม่สามารถส่งข้อความติดตามได้");
       }
     } catch (err) {
-      console.error("Nudge Error:", err);
-      alert("ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้");
+      console.error("[Nudge Error]: ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้", err);
     } finally {
       setNudgeLoading(false);
     }
@@ -135,7 +136,6 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
 
   return (
     <>
-      {/* เพิ่ม relative z-50 เพื่อให้อยู่เหนือชั้น Read-Only ของเนื้อหาหลัก */}
       <div className="relative z-50 w-full bg-rose-600 px-4 py-3 text-white shadow-md">
         <div className="mx-auto flex max-w-7xl flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           
@@ -182,7 +182,7 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
                       ? "กำลังส่ง..."
                       : isNudged
                       ? "แจ้งติดตามแล้ว"
-                      : "ติดตามคำร้อง / เร่งด่วน"}
+                      : "เร่งติดตามคำร้อง"}
                   </button>
                 </div>
               ) : (

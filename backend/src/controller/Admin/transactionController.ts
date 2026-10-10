@@ -108,61 +108,64 @@ export const getAllTransactions = async (req: Request, res: Response): Promise<R
 
 /**
  * GET /api/admin/refunds
- * ดึงรายการออเดอร์ที่มีสถานะ "ยกเลิกการพิมพ์" เพื่อรอดำเนินการคืนเงิน
+ * ดึงรายการออเดอร์ที่มีสถานะ "ยกเลิกการพิมพ์" ทั้งหมด
  */
 export const getPendingRefunds = async (req: Request, res: Response): Promise<Response> => {
   try {
+    // 1. ดึง ID ของสถานะ "ยกเลิกการพิมพ์"
     const { data: statusObj } = await supabase
       .from("status")
       .select("id")
       .eq("state", "ยกเลิกการพิมพ์")
       .maybeSingle();
 
-    if (!statusObj) {
-      return res.status(200).json([]);
-    }
+    if (!statusObj) return res.status(200).json([]);
 
+    // 2. ดึงข้อมูลออเดอร์ พร้อม Join ตาราง work_status เฉพาะอันที่เป็นสถานะ "ยกเลิกการพิมพ์"
     const { data: refunds, error } = await supabase
       .from("print_order")
       .select(`
         *,
-        status:current_status_id (
-          id,
-          state
-        ),
-        customer:customer_id (
-          id,
-          first_name,
-          last_name,
-          contact
-        ),
-        shop:shop_id (
-          id,
-          shop_name
-        ),
-        payment:payment!order_id (
-          id,
-          slip_url,
-          amount,
-          status,
-          payment_date
-        )
+        status:current_status_id ( id, state ),
+        customer:customer_id ( id, first_name, last_name, contact ),
+        shop:shop_id ( id, shop_name ),
+        payment:payment!order_id ( id, slip_url, refund_slip_url, amount, status, payment_date ),
+        cancel_history:work_status!order_id ( updated_at, status_id )
       `)
-      .eq("current_status_id", statusObj.id)
-      .order("order_date", { ascending: false });
+      .eq("current_status_id", statusObj.id);
 
     if (error) {
       console.error("GetPendingRefunds Error:", error.message);
       return res.status(200).json([]);
     }
 
-    const pendingRefunds = (refunds || []).filter((item: any) => {
-      const payList = Array.isArray(item.payment) ? item.payment : (item.payment ? [item.payment] : []);
-      const isAlreadyRefunded = payList.some((p: any) => p.status === "REFUNDED");
-      return !isAlreadyRefunded;
+    // 3. จัดกลุ่มข้อมูล หาประวัติการยกเลิก และดึงวันที่ยกเลิก (updated_at)
+    const formattedRefunds = (refunds || []).map((item: any) => {
+      const payList = Array.isArray(item.payment) ? item.payment : item.payment ? [item.payment] : [];
+      const refundedPayment = payList.find((p: any) => p.status === "REFUNDED");
+      const isRefunded = Boolean(refundedPayment);
+      const refundSlip = refundedPayment?.refund_slip_url || payList[0]?.refund_slip_url || null;
+
+      // ค้นหา record ใน work_status ที่ตรงกับสถานะยกเลิก
+      const cancelHistoryList = Array.isArray(item.cancel_history) ? item.cancel_history : [];
+      const cancelRecord = cancelHistoryList.find((ws: any) => ws.status_id === statusObj.id);
+
+      // ถ้าระบบเคยลงบันทึกใน work_status ไว้ ให้ใช้วันนั้น ถ้าไม่มีให้ Fallback เป็น order_date
+      const canceledAt = cancelRecord?.updated_at || item.order_date;
+
+      return {
+        ...item,
+        canceled_at: canceledAt,
+        refund_slip_url: refundSlip,
+        is_refunded: isRefunded,
+        payment_status: isRefunded ? "REFUNDED" : "PENDING",
+      };
     });
 
-    return res.status(200).json(pendingRefunds);
+    // 4. เรียงลำดับตามวันที่ยกเลิกล่าสุดขึ้นก่อน (Descending Order)
+    formattedRefunds.sort((a, b) => new Date(b.canceled_at).getTime() - new Date(a.canceled_at).getTime());
+
+    return res.status(200).json(formattedRefunds);
   } catch (err: any) {
     console.error("GetPendingRefunds Exception:", err.message || err);
     return res.status(200).json([]);
@@ -171,7 +174,7 @@ export const getPendingRefunds = async (req: Request, res: Response): Promise<Re
 
 /**
  * PATCH /api/admin/refunds/process
- * ยืนยันการโอนเงินคืนลูกค้า (พร้อมแนบสลิปคืนเงิน)
+ * ยืนยันการโอนเงินคืนลูกค้า (แนบสลิปคืนเงินเข้า refund_slip_url)
  */
 export const processRefund = async (req: Request, res: Response): Promise<Response> => {
   try {
@@ -181,6 +184,7 @@ export const processRefund = async (req: Request, res: Response): Promise<Respon
       return res.status(400).json({ error: "order_id is required" });
     }
 
+    // 1. เช็ครายการ Payment เดิมเพื่อทำการอัปเดต
     const { data: existingPayment } = await supabase
       .from("payment")
       .select("id")
@@ -190,11 +194,12 @@ export const processRefund = async (req: Request, res: Response): Promise<Respon
     let updatedPayment;
 
     if (existingPayment) {
+      // อัปเดต status และ refund_slip_url ในตาราง payment
       const { data, error: payErr } = await supabase
         .from("payment")
         .update({
           status: "REFUNDED",
-          slip_url: refund_slip_url || null,
+          refund_slip_url: refund_slip_url || null,
         })
         .eq("order_id", order_id)
         .select()
@@ -203,6 +208,7 @@ export const processRefund = async (req: Request, res: Response): Promise<Respon
       if (payErr) return res.status(400).json({ error: payErr.message });
       updatedPayment = data;
     } else {
+      // กรณีที่ไม่มี Record ใน payment ให้สร้างใหม่
       const { data: orderData } = await supabase
         .from("print_order")
         .select("customer_id, shop_id, total_price")
@@ -220,7 +226,7 @@ export const processRefund = async (req: Request, res: Response): Promise<Respon
           amount: refund_amount || orderData.total_price || 0,
           sender: orderData.customer_id,
           receiver: orderData.shop_id,
-          slip_url: refund_slip_url || null,
+          refund_slip_url: refund_slip_url || null,
           status: "REFUNDED",
         })
         .select()
@@ -235,6 +241,7 @@ export const processRefund = async (req: Request, res: Response): Promise<Respon
         .eq("id", order_id);
     }
 
+    // 2. บันทึกการแจ้งเตือนไปยังลูกค้า
     const { data: order } = await supabase
       .from("print_order")
       .select("customer_id, order_no")

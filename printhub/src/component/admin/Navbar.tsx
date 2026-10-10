@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import NotificationBell from "@/component/NotificationBell"; // 🟢 เรียกใช้ NotificationBell ที่รองรับ admin
+import NotificationBell from "@/component/NotificationBell";
 
 export default function AdminNavbar() {
   const pathname = usePathname();
@@ -88,6 +88,7 @@ export default function AdminNavbar() {
     }
 
     window.addEventListener("userProfileUpdated", loadUserData);
+
     return () => {
       window.removeEventListener("userProfileUpdated", loadUserData);
     };
@@ -134,7 +135,6 @@ export default function AdminNavbar() {
 
       {/* Nav Links */}
       <div className="flex h-full items-center gap-6 mx-4">
-        {/* แดชบอร์ด */}
         <Link
           href="/admin"
           className={`relative flex h-full items-center text-sm font-medium transition-colors whitespace-nowrap ${
@@ -149,7 +149,6 @@ export default function AdminNavbar() {
           )}
         </Link>
 
-        {/* ร้านค้า */}
         <Link
           href="/admin/shops"
           className={`relative flex h-full items-center text-sm font-medium transition-colors whitespace-nowrap ${
@@ -164,7 +163,6 @@ export default function AdminNavbar() {
           )}
         </Link>
 
-        {/* รายงานปัญหา */}
         <Link
           href="/admin/reports"
           className={`relative flex h-full items-center text-sm font-medium transition-colors whitespace-nowrap ${
@@ -244,7 +242,7 @@ export default function AdminNavbar() {
 
       {/* Actions */}
       <div className="flex items-center gap-3 shrink-0">
-        {/* 🟢 Notifications Button (ใช้ Component NotificationBell) */}
+        {/* Notifications Button */}
         <div className="text-white">
           <NotificationBell userId={adminId} role="admin" />
         </div>

@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import axios from "axios";
 import {
   Printer,
   Home,
@@ -13,11 +14,17 @@ import {
 } from "lucide-react";
 import NotificationBell from "@/component/NotificationBell";
 
+const API_BASE = "http://localhost:5000/shop";
+// หน้าตั้งค่าร้านส่ง event นี้หลังเปลี่ยนรูปสำเร็จ เพื่อให้ navbar อัปเดตรูปทันที
+const PROFILE_IMAGE_EVENT = "shop-profile-image-updated";
+
 export default function ShopNavbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [shopId, setShopId] = useState<string | null>(null);
   const [shopName, setShopName] = useState<string>("");
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [imageFailed, setImageFailed] = useState<boolean>(false);
 
   useEffect(() => {
     const storedShopId = localStorage.getItem("shop_id");
@@ -30,6 +37,41 @@ export default function ShopNavbar() {
       setShopName(storedShopName);
     }
   }, []);
+
+  // ดึงรูปโปรไฟล์ร้านมาแสดง (ถ้าไม่มีรูปหรือโหลดไม่ได้ จะแสดงตัวอักษรแรกของร้านเหมือนเดิม)
+  useEffect(() => {
+    if (!shopId) return;
+    let cancelled = false;
+
+    const fetchProfileImage = async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/profile/${shopId}`);
+        if (!cancelled) {
+          setProfileImage(res.data?.data?.profile_image ?? null);
+          setImageFailed(false);
+        }
+      } catch (err) {
+        console.error("Fetch shop profile image error:", err);
+      }
+    };
+    fetchProfileImage();
+
+    // เปลี่ยนรูปจากหน้าตั้งค่า -> อัปเดตทันทีโดยไม่ต้องรีเฟรช
+    const handleImageUpdated = (e: Event) => {
+      const url = (e as CustomEvent<{ profile_image?: string | null }>).detail
+        ?.profile_image;
+      setProfileImage(url ?? null);
+      setImageFailed(false);
+    };
+    window.addEventListener(PROFILE_IMAGE_EVENT, handleImageUpdated);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(PROFILE_IMAGE_EVENT, handleImageUpdated);
+    };
+  }, [shopId]);
+
+  const showProfileImage = !!profileImage && !imageFailed;
 
   const isHomeActive = pathname === "/shop";
   const isOrderActive = pathname.startsWith("/shop/order") && !pathname.endsWith("/chat");
@@ -169,7 +211,17 @@ export default function ShopNavbar() {
               {shopName || "ร้านค้า"}
             </span>
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative shrink-0">
-              {shopName?.charAt(0) || "S"}
+              {showProfileImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={profileImage as string}
+                  alt={shopName ? `รูปโปรไฟล์ ${shopName}` : "รูปโปรไฟล์ร้านค้า"}
+                  onError={() => setImageFailed(true)}
+                  className="absolute inset-0 h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                shopName?.charAt(0) || "S"
+              )}
               <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-xs">
                 <Settings
                   size={12}

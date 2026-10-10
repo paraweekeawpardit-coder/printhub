@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { User, Mail, Shield, Camera, CheckCircle, AlertCircle } from "lucide-react";
 
-// กำหนด BASE_URL ให้เรียกง่ายขึ้น
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
 
 export default function AdminProfilePage() {
@@ -27,18 +26,18 @@ export default function AdminProfilePage() {
     if (storedUser) {
       try {
         const parsed = JSON.parse(storedUser);
-        setProfile((prev) => ({
-          ...prev,
-          id: parsed.id || prev.id,
-          name: parsed.name || prev.name,
-          email: parsed.email || parsed.contact || prev.email,
+        const userObj = {
+          id: parsed.id || "",
+          name: parsed.name || parsed.first_name ? `${parsed.first_name || ""} ${parsed.last_name || ""}`.trim() : "",
+          email: parsed.email || parsed.contact || "",
           role: parsed.role || "Super Admin",
-          avatar: parsed.avatar || prev.avatar,
-        }));
-        if (parsed.avatar) {
-          setAvatarPreview(parsed.avatar);
+          avatar: parsed.avatar || "",
+        };
+        setProfile(userObj);
+        if (userObj.avatar) {
+          setAvatarPreview(userObj.avatar);
         }
-        return parsed;
+        return userObj;
       } catch (e) {
         console.error("Parse user error", e);
       }
@@ -50,21 +49,25 @@ export default function AdminProfilePage() {
     // 1. โหลดจาก localStorage มาแสดงก่อนทันที
     const storedUser = loadProfileFromStorage();
 
-    // 2. ดึงข้อมูลสดจาก API โดยระบุ id หรือ email ของแอดมินที่ล็อกอินอยู่
-    const queryParams = new URLSearchParams();
-    if (storedUser?.id) {
-      queryParams.append("id", storedUser.id);
-    } else if (storedUser?.email || storedUser?.contact) {
-      queryParams.append("email", storedUser.email || storedUser.contact);
+    // 2. ถ้ามีข้อมูล ID หรือ Email ใน localStorage ให้ดึงจาก API
+    const adminId = storedUser?.id || localStorage.getItem("admin_id");
+    const adminEmail = storedUser?.email || localStorage.getItem("admin_email");
+
+    if (!adminId && !adminEmail) {
+      return; // หากไม่มีข้อมูลอ้างอิงให้ใช้ค่าจาก localStorage ต่อไป
     }
 
-    const token = localStorage.getItem("token");
-    const fetchUrl = `${API_BASE_URL}/profile${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+    const queryParams = new URLSearchParams();
+    if (adminId) queryParams.append("id", adminId);
+    if (adminEmail) queryParams.append("email", adminEmail);
 
+    const fetchUrl = `${API_BASE_URL}/profile?${queryParams.toString()}`;
+
+    // ยิง API แบบไม่ส่ง Authorization Header (เนื่องจากไม่ได้ใช้ Middleware)
     fetch(fetchUrl, {
-      headers: { 
-        Authorization: `Bearer ${token || ""}`,
-        "Content-Type": "application/json"
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
       },
     })
       .then(async (res) => {
@@ -74,19 +77,27 @@ export default function AdminProfilePage() {
         return res.json();
       })
       .then((data) => {
-        if (data) {
-          const updatedAvatar = data.avatar || "";
-          const userData = {
-            id: data.id || storedUser?.id || "",
-            name: data.name || "",
-            email: data.email || data.contact || "",
-            role: data.role || "Super Admin",
-            avatar: updatedAvatar,
-          };
-          setProfile(userData);
-          setAvatarPreview(updatedAvatar);
+        // หาก API ส่งกลับก้อนข้อมูล (อาจจะอยู่ใน data หรือ data.data)
+        const profileData = data.data || data;
+        if (profileData) {
+          const updatedName =
+            profileData.name ||
+            (profileData.first_name
+              ? `${profileData.first_name} ${profileData.last_name || ""}`.trim()
+              : storedUser?.name || "");
 
-          // อัปเดตลง localStorage ให้ตรงกัน
+          const userData = {
+            id: profileData.id || storedUser?.id || "",
+            name: updatedName,
+            email: profileData.email || profileData.contact || storedUser?.email || "",
+            role: profileData.role || "Super Admin",
+            avatar: profileData.avatar || storedUser?.avatar || "",
+          };
+
+          setProfile(userData);
+          setAvatarPreview(userData.avatar);
+
+          // อัปเดตลง localStorage
           const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
           localStorage.setItem(
             "user",
@@ -95,7 +106,7 @@ export default function AdminProfilePage() {
         }
       })
       .catch((err) => {
-        console.error("Error fetching profile from API:", err);
+        console.warn("Could not fetch profile from server, using local data:", err);
       });
   }, []);
 
@@ -117,22 +128,21 @@ export default function AdminProfilePage() {
     }
   };
 
-  // บันทึกข้อมูลโปรไฟล์ และรูปภาพ
+  // บันทึกข้อมูลโปรไฟล์
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
     setSavingProfile(true);
 
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch(`${API_BASE_URL}/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token || ""}`,
         },
         body: JSON.stringify({
-          id: profile.id, // ส่ง ID แนบไปด้วยเพื่ออัปเดตถูกคน
+          id: profile.id,
+          email: profile.email,
           name: profile.name,
           avatar: profile.avatar,
         }),
@@ -150,20 +160,23 @@ export default function AdminProfilePage() {
       const newUserObj = {
         ...currentUser,
         id: updatedData.id || profile.id,
-        name: updatedData.name,
+        name: updatedData.name || profile.name,
         email: profile.email,
-        avatar: updatedData.avatar,
+        avatar: updatedData.avatar || profile.avatar,
       };
-      
+
       localStorage.setItem("user", JSON.stringify(newUserObj));
-      
-      // ส่ง Event บอก Navbar/Layout ให้เปลี่ยนรูปและชื่อสดๆ
+
+      // ส่ง Event เพื่อเปลี่ยนรูปและชื่อที่ Navbar/Layout ทันที
       window.dispatchEvent(new Event("userProfileUpdated"));
 
       setStatusMsg({ type: "success", text: "บันทึกข้อมูลโปรไฟล์เรียบร้อยแล้ว" });
     } catch (error: any) {
       console.error("Save profile error:", error);
-      setStatusMsg({ type: "error", text: error.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูลโปรไฟล์" });
+      setStatusMsg({
+        type: "error",
+        text: error.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูลโปรไฟล์",
+      });
     } finally {
       setSavingProfile(false);
     }
@@ -190,12 +203,16 @@ export default function AdminProfilePage() {
                   : "text-rose-700 bg-rose-50 border-rose-200"
               }`}
             >
-              {statusMsg.type === "success" ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+              {statusMsg.type === "success" ? (
+                <CheckCircle size={16} />
+              ) : (
+                <AlertCircle size={16} />
+              )}
               <span>{statusMsg.text}</span>
             </div>
           )}
 
-          {/* Form: ข้อมูลทั่วไป และ รูปโปรไฟล์ */}
+          {/* Form ข้อมูลทั่วไป และรูปโปรไฟล์ */}
           <form onSubmit={handleSaveProfile} className="space-y-6">
             <div className="flex items-center gap-4">
               <div className="relative">
@@ -234,7 +251,9 @@ export default function AdminProfilePage() {
                 <h3 className="font-bold text-slate-800 text-sm">
                   {profile.name || "Admin User"}
                 </h3>
-                <p className="text-xs text-slate-500">{profile.role || "Super Admin"}</p>
+                <p className="text-xs text-slate-500">
+                  {profile.role || "Super Admin"}
+                </p>
               </div>
             </div>
 
@@ -250,13 +269,15 @@ export default function AdminProfilePage() {
                 <input
                   type="text"
                   value={profile.name}
-                  onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                  onChange={(e) =>
+                    setProfile({ ...profile, name: e.target.value })
+                  }
                   className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-500 transition-colors text-slate-800"
                   required
                 />
               </div>
 
-              {/* อีเมล (ล็อกไม่ให้แก้ไข) */}
+              {/* อีเมล */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
                   อีเมล (ไม่สามารถแก้ไขได้)
@@ -269,11 +290,14 @@ export default function AdminProfilePage() {
                     readOnly
                     className="w-full px-3.5 py-2 pl-9 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-400 cursor-not-allowed"
                   />
-                  <Mail size={15} className="absolute left-3 top-2.5 text-slate-400" />
+                  <Mail
+                    size={15}
+                    className="absolute left-3 top-2.5 text-slate-400"
+                  />
                 </div>
               </div>
 
-              {/* ตำแหน่ง (ล็อกไม่ให้แก้ไข) */}
+              {/* ตำแหน่ง */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
                   ตำแหน่งในระบบ
@@ -286,7 +310,10 @@ export default function AdminProfilePage() {
                     readOnly
                     className="w-full px-3.5 py-2 pl-9 text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-400 cursor-not-allowed"
                   />
-                  <Shield size={15} className="absolute left-3 top-2.5 text-slate-400" />
+                  <Shield
+                    size={15}
+                    className="absolute left-3 top-2.5 text-slate-400"
+                  />
                 </div>
               </div>
             </div>

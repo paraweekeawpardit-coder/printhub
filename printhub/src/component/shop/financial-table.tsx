@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingUp, DollarSign, Calendar, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { TrendingUp, DollarSign, Calendar, Search } from "lucide-react";
 
 export type Transaction = {
-  id: string;
+  id: string; // uuid สำหรับคลิก
+  order_no?: number | string; // แสดงเลข order_no
   date: string;
   customer_name: string;
   gross: number;
@@ -23,7 +24,6 @@ type Props = {
     daily: TrendItem[];
     weekly: TrendItem[];
     monthly: TrendItem[];
-    yearly: TrendItem[];
   };
   onOrderClick: (id: string) => void;
 };
@@ -36,16 +36,13 @@ export default function FinancialTable({
   financialTrend,
   onOrderClick,
 }: Props) {
-  const [timeframe, setTimeframe] = useState<"daily" | "weekly" | "monthly" | "yearly">("yearly");
+  const [timeframe, setTimeframe] = useState<"daily" | "weekly" | "monthly">("monthly");
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
 
   const defaultLayout: Record<string, TrendItem[]> = {
     daily: ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."].map((l) => ({ label: l, amount: 0 })),
     weekly: ["สัปดาห์ 1", "สัปดาห์ 2", "สัปดาห์ 3", "สัปดาห์ 4"].map((l) => ({ label: l, amount: 0 })),
     monthly: ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."].map((l) => ({ label: l, amount: 0 })),
-    yearly: ["2565", "2566", "2567", "2568", "2569"].map((l) => ({ label: l, amount: 0 })),
   };
 
   const currentChartData: TrendItem[] =
@@ -56,16 +53,11 @@ export default function FinancialTable({
   const maxAmount = Math.max(...currentChartData.map((d) => d.amount), 1);
 
   const filteredTransactions = transactions.filter((t) => {
-    const matchId = t.id.toLowerCase().includes(searchTerm.toLowerCase());
+    const orderNoStr = t.order_no ? String(t.order_no) : t.id;
+    const matchId = orderNoStr.toLowerCase().includes(searchTerm.toLowerCase());
     const matchCustomer = t.customer_name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchId || matchCustomer;
   });
-
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1;
-  const paginatedTransactions = filteredTransactions.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
 
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
@@ -78,7 +70,6 @@ export default function FinancialTable({
         </p>
       </div>
 
-      {/* 3 สรุปการเงิน Cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
           <div className="flex items-center gap-2 text-slate-500">
@@ -111,7 +102,6 @@ export default function FinancialTable({
         </div>
       </div>
 
-      {/* Bar Chart รายได้ */}
       <div className="relative mb-6 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -146,18 +136,9 @@ export default function FinancialTable({
             >
               รายเดือน
             </button>
-            <button
-              onClick={() => setTimeframe("yearly")}
-              className={`rounded-md px-2.5 py-1 transition-all ${
-                timeframe === "yearly" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              รายปี
-            </button>
           </div>
         </div>
 
-        {/* แสดงแท่งกราฟ */}
         <div className="flex h-36 items-end justify-between gap-1.5 overflow-x-auto pt-4 pb-1">
           {currentChartData.map((item, idx) => {
             const heightPercent = Math.round((item.amount / maxAmount) * 100);
@@ -184,7 +165,7 @@ export default function FinancialTable({
         </div>
       </div>
 
-      {/* ตารางรายการทางการเงิน */}
+      {/* ตารางรายการทางการเงิน (Scrollable แนวตั้ง แสดงครั้งละประมาณ 3-4 แถว) */}
       <div className="space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -192,17 +173,14 @@ export default function FinancialTable({
             type="text"
             placeholder="ค้นหา Order ID หรือชื่อลูกค้า..."
             value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full rounded-xl border border-slate-200 pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-emerald-500"
           />
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-100">
+        <div className="rounded-xl border border-slate-100 overflow-hidden">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-slate-50 text-slate-500 sticky top-0 z-10">
               <tr>
                 <th className="p-3">ออเดอร์</th>
                 <th className="p-3">วันที่/เวลา</th>
@@ -212,60 +190,40 @@ export default function FinancialTable({
                 <th className="p-3 text-right">รับสุทธิ</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
-              {paginatedTransactions.length > 0 ? (
-                paginatedTransactions.map((t) => (
-                  <tr
-                    key={t.id}
-                    onClick={() => onOrderClick(t.id)}
-                    className="cursor-pointer hover:bg-slate-50"
-                  >
-                    <td className="p-3 font-semibold text-slate-800">#{t.id.slice(0, 8)}</td>
-                    <td className="p-3 text-slate-400">{new Date(t.date).toLocaleDateString("th-TH")}</td>
-                    <td className="p-3">{t.customer_name}</td>
-                    <td className="p-3 text-right font-medium">฿{t.gross.toFixed(2)}</td>
-                    <td className="p-3 text-right text-amber-600">-฿{t.fee.toFixed(2)}</td>
-                    <td className="p-3 text-right font-bold text-emerald-600">฿{t.net.toFixed(2)}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
-                    ยังไม่มีประวัติรายการการเงิน
-                  </td>
-                </tr>
-              )}
-            </tbody>
           </table>
-        </div>
 
-        {/* Pagination */}
-        {filteredTransactions.length > itemsPerPage && (
-          <div className="flex items-center justify-between pt-1 text-xs text-slate-500">
-            <span>
-              แสดง {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredTransactions.length)} จาก {filteredTransactions.length} รายการ
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
-                className="rounded-lg border border-slate-200 p-1 hover:bg-slate-50 disabled:opacity-40"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="px-2 font-medium text-slate-700">
-                {currentPage} / {totalPages}
-              </span>
-              <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
-                className="rounded-lg border border-slate-200 p-1 hover:bg-slate-50 disabled:opacity-40"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
+          {/* 🟢 คอนเทนเนอร์ scrollbar จำกัดความสูงของตารางไม่ให้ล้นยาวเกินไป */}
+          <div className="max-h-[180px] overflow-y-auto">
+            <table className="w-full text-left text-xs">
+              <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                {filteredTransactions.length > 0 ? (
+                  filteredTransactions.map((t) => (
+                    <tr
+                      key={t.id}
+                      onClick={() => onOrderClick(t.id)}
+                      className="cursor-pointer hover:bg-slate-50"
+                    >
+                      <td className="p-3 font-semibold text-slate-800">
+                        #{t.order_no || t.id.slice(0, 8)}
+                      </td>
+                      <td className="p-3 text-slate-400">{new Date(t.date).toLocaleDateString("th-TH")}</td>
+                      <td className="p-3">{t.customer_name}</td>
+                      <td className="p-3 text-right font-medium">฿{t.gross.toFixed(2)}</td>
+                      <td className="p-3 text-right text-amber-600">-฿{t.fee.toFixed(2)}</td>
+                      <td className="p-3 text-right font-bold text-emerald-600">฿{t.net.toFixed(2)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400">
+                      ยังไม่มีประวัติรายการการเงิน
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

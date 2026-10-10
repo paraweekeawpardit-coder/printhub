@@ -16,6 +16,7 @@ interface DashboardStats {
   pendingAppeals: number;
   pendingRefunds?: number;
   overdueAppeals: number;
+  nudgedAppeals?: number;
   totalPlatformIncome: number;
   dailyIncome?: ChartDataItem[];
 }
@@ -40,6 +41,7 @@ export default function AdminHomePage() {
         pendingAppeals: data.pendingAppeals ?? 0,
         pendingRefunds: data.pendingRefunds ?? 0,
         overdueAppeals: data.overdueAppeals ?? 0,
+        nudgedAppeals: data.nudgedAppeals ?? 0,
         totalPlatformIncome: data.totalPlatformIncome ?? 0,
         dailyIncome: data.dailyIncome ?? [],
       });
@@ -52,6 +54,7 @@ export default function AdminHomePage() {
         pendingAppeals: 0,
         pendingRefunds: 0,
         overdueAppeals: 0,
+        nudgedAppeals: 0,
         totalPlatformIncome: 0,
         dailyIncome: [],
       });
@@ -67,10 +70,20 @@ export default function AdminHomePage() {
   if (loading || !stats) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
-        <p className="text-gray-500 font-medium">กำลังโหลดข้อมูล...</p>
+        <p className="text-slate-500 font-medium">กำลังโหลดข้อมูล...</p>
       </div>
     );
   }
+
+  const renderAppealSubtitle = () => {
+    if ((stats.nudgedAppeals ?? 0) > 0) {
+      return `มี ${stats.nudgedAppeals} รายการเร่งติดตามเรื่อง`;
+    }
+    if (stats.overdueAppeals > 0) {
+      return `เกินกำหนด 3 วัน: ${stats.overdueAppeals} รายการ`;
+    }
+    return "คำร้องขอปลดระงับที่รอตรวจสอบ";
+  };
 
   return (
     <div className="w-full max-w-[1600px] mx-auto text-slate-900 font-sans p-6">
@@ -78,7 +91,6 @@ export default function AdminHomePage() {
         ผลการดำเนินงานแพลตฟอร์ม
       </h2>
 
-      {/* 💡 ปรับ grid-cols บังคับให้การ์ดเรียงแถวละ 5 ใบในจอใหญ่ (xl) */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
           title="จำนวนลูกค้าทั้งหมด"
@@ -98,13 +110,9 @@ export default function AdminHomePage() {
           title="คำร้องขอปลดระงับร้านค้า"
           value={stats.pendingAppeals}
           unit="รายการ"
-          subtitle={
-            stats.overdueAppeals > 0
-              ? `⚠️️ เกินกำหนด 3 วัน: ${stats.overdueAppeals} รายการ`
-              : "คำร้องขอปลดระงับที่รอตรวจสอบ"
-          }
+          subtitle={renderAppealSubtitle()}
           href="/admin/shops?tab=appeals"
-          isAlert={stats.pendingAppeals > 0}
+          isAlert={stats.pendingAppeals > 0 || (stats.nudgedAppeals ?? 0) > 0}
         />
         <StatCard
           title="ปัญหาที่รอตรวจสอบ"

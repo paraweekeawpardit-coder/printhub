@@ -40,6 +40,9 @@ import { getCustomerProfile, updateCustomerProfile } from '../controller/setting
 
 const router = express.Router();
 
+// ตั้งค่า Multer สำหรับอัปโหลดไฟล์งาน
+const upload = multer({ storage: multer.memoryStorage() });
+
 // ==========================================
 // 1. ค้นหาและสรุปข้อมูลร้านค้า (FR-1)
 // ==========================================
@@ -76,7 +79,7 @@ router.put('/order/:orderId/reject-slip', rejectPaymentSlip);
 // ==========================================
 router.get('/order/:orderId/review', getReviewOrderDetail);
 router.post('/review', submitOrderReview);
-router.post('/report', submitOrderReport);
+router.post('/report', upload.single('image'), submitOrderReport);
 
 // Route หน้า Dashboard
 router.get("/dashboard", getCustomerDashboard);
@@ -84,9 +87,6 @@ router.get("/dashboard", getCustomerDashboard);
 // Route ปรับสถานะออเดอร์
 router.put("/order/:id/cancel", cancelOrder);
 router.put("/order/:id/confirm-received", confirmReceivedOrder);
-
-// ตั้งค่า Multer สำหรับอัปโหลดไฟล์งาน
-const upload = multer({ storage: multer.memoryStorage() });
 
 // สร้าง Supabase client ฝั่ง Backend
 const supabase = createClient(
