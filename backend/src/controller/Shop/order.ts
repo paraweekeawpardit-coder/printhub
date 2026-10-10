@@ -41,6 +41,7 @@ interface SupabaseOrderQueryResult {
   appointment_time: string | null;
   receive_date: string | null;
   total_amount: number | null;
+  total_price: number | null;
   payment_id: string | null;
   customer: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
   current_status: { state: string } | { state: string }[] | null;
@@ -78,7 +79,7 @@ export const getOrdersByStatus = async (
     // เขียนสถานะที่เปลี่ยนอัตโนมัติลง DB ก่อนดึงข้อมูล
     await syncAutoStatuses(shop_id);
 
-    const { data: rawOrders, error } = await supabase
+    let query = supabase
       .from("print_order")
       .select(
         `
@@ -116,13 +117,13 @@ export const getOrdersByStatus = async (
       )
       .eq("shop_id", shop_id);
 
-    // 2. ถ้ามีการส่ง status ที่ไม่ใช่ "ทั้งหมด" ให้ Filter ตั้งแต่ชั้น Query
-    if (status !== "ทั้งหมด") {
-      query = query.eq("current_status.state", status);
+    // ถ้ามีการส่ง status ที่ไม่ใช่ "ทั้งหมด" ให้ Filter ตั้งแต่ชั้น Query
+    if (statusFilter !== "ทั้งหมด") {
+      query = query.eq("current_status.state", statusFilter);
     }
 
     // สั่ง Query ข้อมูลและเรียงลำดับ order_date
-    const { data: orders, error } = await query.order("order_date", {
+    const { data: rawOrders, error } = await query.order("order_date", {
       ascending: false,
     });
 
@@ -189,9 +190,8 @@ export const getOrdersByStatus = async (
           order_id: order.id,
           order_no: order.order_no,
           date: order.order_date,
-          customer_name: `${customer?.first_name ?? ""} ${
-            customer?.last_name ?? ""
-          }`.trim() || "ลูกค้าทั่วไป",
+          customer_name: `${customer?.first_name ?? ""} ${customer?.last_name ?? ""
+            }`.trim() || "ลูกค้าทั่วไป",
           status: computedStatus,
           amount: Number(order.total_amount || order.total_price || 0),
           items,
@@ -199,10 +199,10 @@ export const getOrdersByStatus = async (
             order.appointment_time || order.receive_date || order.order_date || null,
           payment: payment
             ? {
-                id: payment.id,
-                slip_url: payment.slip_url || null,
-                is_verified: payment.is_verified ?? null,
-              }
+              id: payment.id,
+              slip_url: payment.slip_url || null,
+              is_verified: payment.is_verified ?? null,
+            }
             : null,
         };
       })
@@ -420,21 +420,20 @@ export const getOrderById = async (
       order_no: order.order_no,
       date: order.order_date,
       appointment_time: order.appointment_time || order.receive_date,
-      customer_name: `${customer?.first_name ?? ""} ${
-        customer?.last_name ?? ""
-      }`.trim(),
+      customer_name: `${customer?.first_name ?? ""} ${customer?.last_name ?? ""
+        }`.trim(),
       customer_contact: customer?.contact || "",
       status: currentStatus?.state || "รอการดำเนินการ",
       amount: Number(order.total_amount || order.total_price || 0),
       items,
       payment: payment
         ? {
-            id: payment.id,
-            slip_url: payment.slip_url || null,
-            is_verified: payment.is_verified ?? null,
-            amount: Number(payment.amount || 0),
-            payment_date: payment.payment_date || null,
-          }
+          id: payment.id,
+          slip_url: payment.slip_url || null,
+          is_verified: payment.is_verified ?? null,
+          amount: Number(payment.amount || 0),
+          payment_date: payment.payment_date || null,
+        }
         : null,
     };
 

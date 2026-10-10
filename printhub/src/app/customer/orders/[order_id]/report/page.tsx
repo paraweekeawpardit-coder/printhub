@@ -23,6 +23,7 @@ interface OrderData {
   shop_id?: string;
   description?: string;
   total_price?: number | string;
+  has_reported?: boolean; // เพิ่มฟิลด์เช็กว่าเคยรายงานหรือยัง
 
   print_shop?: {
     shop_name?: string;
@@ -46,7 +47,7 @@ function PreviewFile({
   const [previewUrl, setPreviewUrl] = useState("");
 
   useEffect(() => {
-    if (!file.type.startsWith("image/")) {
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
       setPreviewUrl("");
       return;
     }
@@ -60,30 +61,42 @@ function PreviewFile({
   }, [file]);
 
   return (
-    <div className="relative w-28 h-24 rounded-xl border border-gray-200 bg-gray-50 overflow-hidden group">
+    <div className="relative w-full h-80 sm:h-96 rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden group shadow-xs">
       {previewUrl ? (
-        <>
-          <img
-            src={previewUrl}
-            alt={file.name}
-            className="w-full h-full object-cover"
-          />
-
-          <div className="absolute inset-x-0 bottom-0 bg-black/55 px-1.5 py-1">
-            <p className="text-[10px] text-white truncate">
-              {file.name}
-            </p>
+        file.type === "application/pdf" ? (
+          <div className="w-full h-full relative bg-white">
+            <iframe
+              src={`${previewUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
+              title={file.name}
+              className="w-full h-full border-0"
+            />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-2 pointer-events-none">
+              <p className="text-xs text-white truncate font-medium">
+                📄 {file.name}
+              </p>
+            </div>
           </div>
-        </>
+        ) : (
+          <div className="w-full h-full relative">
+            <img
+              src={previewUrl}
+              alt={file.name}
+              className="w-full h-full object-contain bg-slate-900/5"
+            />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 py-2">
+              <p className="text-xs text-white truncate font-medium">
+                {file.name}
+              </p>
+            </div>
+          </div>
+        )
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center px-2 text-center">
-          <div className="text-2xl mb-1">📄</div>
-
-          <span className="text-[10px] font-medium text-gray-700 truncate w-full">
+        <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
+          <div className="text-4xl mb-2">📄</div>
+          <span className="text-sm font-medium text-slate-700 truncate max-w-xs">
             {file.name}
           </span>
-
-          <span className="text-[9px] text-gray-400 mt-0.5">
+          <span className="text-xs text-slate-400 mt-1">
             {(file.size / 1024).toFixed(0)} KB
           </span>
         </div>
@@ -93,9 +106,9 @@ function PreviewFile({
         type="button"
         onClick={() => onRemove(index)}
         aria-label={`ลบไฟล์ ${file.name}`}
-        className="absolute -top-1.5 -right-1.5 z-10 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow hover:bg-red-600 transition"
+        className="absolute top-3 right-3 z-10 bg-red-500/90 hover:bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm shadow-md transition-all active:scale-95"
       >
-        ×
+        ✕
       </button>
     </div>
   );
@@ -105,11 +118,6 @@ export default function RefundRequestPage() {
   const params = useParams();
   const router = useRouter();
 
-  // ==========================================
-  // Order ID จาก URL
-  //
-  // /customer/orders/[order_id]/report
-  // ==========================================
   const rawOrderId =
     params?.order_id || params?.orderId;
 
@@ -117,9 +125,6 @@ export default function RefundRequestPage() {
     ? rawOrderId[0]
     : (rawOrderId as string);
 
-  // ==========================================
-  // Order Data
-  // ==========================================
   const [orderData, setOrderData] =
     useState<OrderData | null>(null);
 
@@ -129,9 +134,6 @@ export default function RefundRequestPage() {
   const [orderError, setOrderError] =
     useState("");
 
-  // ==========================================
-  // Form Data
-  // ==========================================
   const [formData, setFormData] = useState({
     issueType: "",
     description: "",
@@ -141,86 +143,34 @@ export default function RefundRequestPage() {
     accountName: "",
   });
 
-  // ==========================================
-  // Files
-  // ==========================================
-  const [files, setFiles] = useState<File[]>([]);
+  const [existingReport, setExistingReport] = useState<any | null>(null);
 
-  // ==========================================
-  // Submit State
-  // ==========================================
+  const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // ==========================================
-  // ดึงข้อมูล Order
-  // ใช้ API เดียวกับหน้า Review
-  // ==========================================
   const fetchOrderDetail = async (id: string) => {
     setLoadingOrder(true);
     setOrderError("");
 
     try {
-      const url =
-        `http://localhost:5000/api/customer/order/${id}/review`;
-
-      console.log(
-        "🔵 Report Order API URL:",
-        url
-      );
-
+      // ใช้ API เดิมตัวนี้ตัวเดียวจบ เพราะเราพ่วง has_reported มาด้วยแล้ว
+      const url = `http://localhost:5000/api/customer/order/${id}/review`;
       const res = await fetch(url);
-
-      console.log(
-        "🟡 Report Order API Status:",
-        res.status
-      );
-
-      const text = await res.text();
-
-      console.log(
-        "🟢 Report Order API Response:",
-        text
-      );
-
-      let result;
-
-      try {
-        result = JSON.parse(text);
-      } catch {
-        throw new Error(
-          `Backend ส่ง Response ที่ไม่ใช่ JSON กลับมา: ${text}`
-        );
-      }
+      const result = await res.json();
 
       if (res.ok && result.success) {
         setOrderData(result.data);
       } else {
-        setOrderError(
-          result.message ||
-          `ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้ (HTTP ${res.status})`
-        );
+        setOrderError(result.message || "ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้");
       }
     } catch (err) {
-      console.error(
-        "🔴 Report Detail API Error:",
-        err
-      );
-
-      if (err instanceof Error) {
-        setOrderError(err.message);
-      } else {
-        setOrderError(
-          "เกิดข้อผิดพลาดในการเชื่อมต่อ Backend"
-        );
-      }
+      console.error("Error:", err);
+      setOrderError("เกิดข้อผิดพลาดในการเชื่อมต่อ Backend");
     } finally {
       setLoadingOrder(false);
     }
   };
 
-  // ==========================================
-  // Load Order
-  // ==========================================
   useEffect(() => {
     if (
       orderId &&
@@ -235,9 +185,6 @@ export default function RefundRequestPage() {
     }
   }, [orderId]);
 
-  // ==========================================
-  // Input Change
-  // ==========================================
   const handleInputChange = (
     e: ChangeEvent<
       HTMLInputElement |
@@ -256,9 +203,6 @@ export default function RefundRequestPage() {
     }));
   };
 
-  // ==========================================
-  // File Upload
-  // ==========================================
   const handleFileUpload = (
     e: ChangeEvent<HTMLInputElement>
   ) => {
@@ -270,7 +214,6 @@ export default function RefundRequestPage() {
         ...newFiles,
       ]);
 
-      // Reset input so the same file can be selected again.
       e.target.value = "";
     }
   };
@@ -279,9 +222,6 @@ export default function RefundRequestPage() {
     setFiles((prevFiles) => prevFiles.filter((_, index) => index !== indexToRemove));
   };
 
-  // ==========================================
-  // Remove File
-  // ==========================================
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -303,7 +243,6 @@ export default function RefundRequestPage() {
     setSubmitting(true);
 
     try {
-      // สร้าง FormData เพื่อรองรับการแนบไฟล์พร้อมข้อความ
       const data = new FormData();
       data.append("order_id", orderId);
       data.append("shop_id", orderData.shop_id || "");
@@ -315,19 +254,14 @@ export default function RefundRequestPage() {
       data.append("account_number", formData.accountNumber);
       data.append("account_name", formData.accountName);
 
-      // ถ้าผู้ใช้แนบไฟล์มา ให้แนบไฟล์แรกไปกับ FormData (ใช้คีย์ชื่อ "image" ให้ตรงกับ Backend)
       if (files.length > 0) {
         data.append("image", files[0]);
       }
 
-      console.log("📤 Sending Report FormData...");
-
       const res = await fetch(
-        "http://localhost:5000/api/customer/report", // ปรับ URL ตาม Backend ของคุณ
+        "http://localhost:5000/api/customer/report",
         {
           method: "POST",
-          // 💡 ข้อสังเกต: เมื่อใช้ FormData **ไม่ต้องใส่ Header "Content-Type": "application/json"** 
-          // เพราะ Browser จะจัดการกำหนด multipart/form-data ให้เองอัตโนมัติ
           body: data,
         }
       );
@@ -338,7 +272,8 @@ export default function RefundRequestPage() {
         alert(result.message || "ส่งคำร้องขอคืนเงิน/แจ้งปัญหาเรียบร้อยแล้ว");
         router.push("/customer/orders");
       } else {
-        alert(result.message || "ไม่สามารถส่งคำร้องได้");
+        alert(result.message || result.error || "ไม่สามารถส่งคำร้องได้");
+        setExistingReport(true); // ปิดฟอร์มทันทีหากซ้ำ
       }
     } catch (err) {
       console.error("❌ Submit Report Error:", err);
@@ -348,9 +283,6 @@ export default function RefundRequestPage() {
     }
   };
 
-  // ==========================================
-  // Shared Navbar
-  // ==========================================
   const Navbar = () => (
     <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30">
       <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between gap-3">
@@ -380,18 +312,13 @@ export default function RefundRequestPage() {
     </header>
   );
 
-  // ==========================================
-  // Loading
-  // ==========================================
   if (loadingOrder) {
     return (
       <div className="min-h-screen bg-[#F9FAFB] font-sans">
         <Navbar />
-
         <main className="max-w-3xl mx-auto px-6 py-20">
           <div className="text-center">
             <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto" />
-
             <p className="mt-3 text-sm text-slate-400">
               กำลังโหลดข้อมูลคำสั่งซื้อ...
             </p>
@@ -401,29 +328,22 @@ export default function RefundRequestPage() {
     );
   }
 
-  // ==========================================
-  // Error
-  // ==========================================
   if (orderError) {
     return (
       <div className="min-h-screen bg-[#F9FAFB] font-sans">
         <Navbar />
-
         <main className="max-w-3xl mx-auto px-6 py-10">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="text-center">
               <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto text-xl font-bold">
                 !
               </div>
-
               <h2 className="mt-4 text-lg font-bold text-gray-900">
                 ไม่สามารถโหลดข้อมูลคำสั่งซื้อ
               </h2>
-
               <p className="mt-2 text-sm text-gray-500">
                 {orderError}
               </p>
-
               <button
                 type="button"
                 onClick={() => router.back()}
@@ -438,29 +358,19 @@ export default function RefundRequestPage() {
     );
   }
 
-  // ==========================================
-  // Main Page
-  // ==========================================
   return (
     <div className="min-h-screen bg-[#F9FAFB] font-sans pb-12">
       <Navbar />
 
       <main className="max-w-4xl mx-auto px-6 py-6">
-        {/* ==========================================
-            Shop / Order Summary
-        ========================================== */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs mb-4">
           <div className="flex items-center justify-between gap-5">
             <div className="flex items-center gap-3 min-w-0">
-              {/* Shop profile image */}
               <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
                 {orderData?.print_shop?.profile_image ? (
                   <img
                     src={orderData.print_shop.profile_image}
-                    alt={
-                      orderData.print_shop.shop_name ||
-                      "Shop profile"
-                    }
+                    alt={orderData.print_shop.shop_name || "Shop profile"}
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -478,9 +388,7 @@ export default function RefundRequestPage() {
                 <p className="text-xs text-slate-400 mt-0.5">
                   สั่งซื้อเมื่อ:{" "}
                   {orderData?.order_date
-                    ? new Date(
-                      orderData.order_date
-                    ).toLocaleString("th-TH", {
+                    ? new Date(orderData.order_date).toLocaleString("th-TH", {
                       day: "numeric",
                       month: "numeric",
                       year: "numeric",
@@ -492,196 +400,151 @@ export default function RefundRequestPage() {
                 </p>
               </div>
             </div>
-
-
           </div>
         </div>
 
-        {/* ==========================================
-            Report Form
-        ========================================== */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-6"
-          >
-            {/* ==========================================
-                1. รายละเอียดปัญหา
-            ========================================== */}
-            <section className="space-y-3">
-              <h2 className="text-base font-semibold text-gray-900 border-b pb-2">
-                รายละเอียดปัญหา
-              </h2>
+        {/* 🛑 เช็กเงื่อนไขจากทั้ง existingReport และ orderData.has_reported */}
+        {existingReport || orderData?.has_reported ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-amber-200 p-8 text-center space-y-4">
+            <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">
+              ⚠️
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">
+              คุณได้ส่งคำร้องขอคืนเงินสำหรับคำสั่งซื้อนี้ไปแล้ว
+            </h2>
+            <p className="text-sm text-gray-500 max-w-md mx-auto">
+              ระบบได้รับคำร้องของคุณเรียบร้อยแล้ว อยู่ระหว่างการตรวจสอบ คุณสามารถติดตามสถานะคำสั่งซื้อได้จากเมนูคำสั่งซื้อของฉัน
+            </p>
+            <div className="pt-4">
+              <Link
+                href="/customer/orders"
+                className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition"
+              >
+                กลับไปยังคำสั่งซื้อของฉัน
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-6"
+            >
+              {/* 1. รายละเอียดปัญหา */}
+              <section className="space-y-3">
+                <h2 className="text-base font-semibold text-gray-900 border-b pb-2">
+                  รายละเอียดปัญหา
+                </h2>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  เลือกประเภทปัญหา{" "}
-                  <span className="text-red-500">
-                    *
-                  </span>
-                </label>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    เลือกประเภทปัญหา{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
 
-                <select
-                  name="issueType"
-                  required
-                  value={formData.issueType}
-                  onChange={handleInputChange}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 bg-white"
-                >
-                  <option value="" disabled>
-                    เลือกประเภทปัญหา
-                  </option>
+                  <select
+                    name="issueType"
+                    required
+                    value={formData.issueType}
+                    onChange={handleInputChange}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 bg-white"
+                  >
+                    <option value="" disabled>
+                      เลือกประเภทปัญหา
+                    </option>
+                    <option value="color">สีเพี้ยน / ไม่ตรงตามไฟล์งาน</option>
+                    <option value="paper">ชนิดกระดาษ / ขนาด ไม่ตรงตามที่สั่ง</option>
+                    <option value="damaged">งานพิมพ์ชำรุด / ยับ / เป็นรอย</option>
+                    <option value="quantity">ได้สินค้าไม่ครบตามจำนวน</option>
+                    <option value="delay">จัดส่งล่าช้า</option>
+                    <option value="other">อื่นๆ</option>
+                  </select>
+                </div>
 
-                  <option value="color">
-                    สีเพี้ยน / ไม่ตรงตามไฟล์งาน
-                  </option>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    รายละเอียดเพิ่มเติม
+                  </label>
 
-                  <option value="paper">
-                    ชนิดกระดาษ / ขนาด ไม่ตรงตามที่สั่ง
-                  </option>
-
-                  <option value="damaged">
-                    งานพิมพ์ชำรุด / ยับ / เป็นรอย
-                  </option>
-
-                  <option value="quantity">
-                    ได้สินค้าไม่ครบตามจำนวน
-                  </option>
-
-                  <option value="delay">
-                    จัดส่งล่าช้า
-                  </option>
-
-                  <option value="other">
-                    อื่นๆ
-                  </option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  รายละเอียดเพิ่มเติม
-                </label>
-
-                <textarea
-                  name="description"
-                  rows={3}
-                  placeholder="ระบุรายละเอียด เช่น สีเพี้ยนจากไฟล์ที่ส่งไปมาก มีรอยพับบริเวณมุมล่าง..."
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
-                />
-              </div>
-            </section>
-
-
-
-            {/* ==========================================
-                2. หลักฐาน
-            ========================================== */}
-            <section className="space-y-3">
-              <h2 className="text-base font-semibold text-gray-900 border-b pb-2">
-                หลักฐาน
-              </h2>
-
-              <p className="text-xs text-gray-500">
-                แนบรูปถ่าย หรือ ไฟล์ที่มีปัญหา (JPG, PNG, PDF)
-              </p>
-
-              <div className="flex flex-wrap items-center gap-3">
-                {files.map((file, idx) => (
-                  <PreviewFile
-                    key={`${file.name}-${file.lastModified}-${idx}`}
-                    file={file}
-                    index={idx}
-                    onRemove={handleRemoveFile}
+                  <textarea
+                    name="description"
+                    rows={3}
+                    placeholder="ระบุรายละเอียด เช่น สีเพี้ยนจากไฟล์ที่ส่งไปมาก มีรอยพับบริเวณมุมล่าง..."
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
                   />
-                ))}
+                </div>
+              </section>
 
-                <label className="w-28 h-24 rounded-xl border-2 border-dashed border-blue-200 hover:border-blue-500 bg-blue-50/50 hover:bg-blue-50 flex flex-col items-center justify-center cursor-pointer transition-all text-blue-600 text-xs font-medium gap-1">
-                  <span className="text-2xl leading-none">
-                    +
-                  </span>
+              {/* 2. หลักฐาน */}
+              <section className="space-y-3">
+                <h2 className="text-base font-semibold text-gray-900 border-b pb-2">
+                  หลักฐาน
+                </h2>
 
-                  <span>
-                    แนบไฟล์เพิ่ม
-                  </span>
-
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-
-              {files.length > 0 && (
-                <p className="text-xs text-slate-400">
-                  แนบแล้ว {files.length} ไฟล์
-                  {" · "}
-                  รูปภาพจะแสดงตัวอย่างทันที
+                <p className="text-xs text-gray-500">
+                  แนบรูปถ่าย หรือ ไฟล์ที่มีปัญหา (JPG, PNG, PDF)
                 </p>
-              )}
-            </section>
 
-            {/* ==========================================
-                3. ความต้องการ
-            ========================================== */}
-            <section className="space-y-3">
-              <h2 className="text-base font-semibold text-gray-900 border-b pb-2">
-                ความต้องการ
-              </h2>
+                <div className="flex flex-wrap items-center gap-3">
+                  {files.map((file, idx) => (
+                    <PreviewFile
+                      key={`${file.name}-${file.lastModified}-${idx}`}
+                      file={file}
+                      index={idx}
+                      onRemove={handleRemoveFile}
+                    />
+                  ))}
 
-              <div className="flex gap-6">
-                {/* Reprint */}
-                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700">
-                  <input
-                    type="radio"
-                    name="resolution"
-                    value="reprint"
-                    checked={
-                      formData.resolution ===
-                      "reprint"
-                    }
-                    onChange={handleInputChange}
-                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                  />
+                  <label className="w-28 h-24 rounded-xl border-2 border-dashed border-blue-200 hover:border-blue-500 bg-blue-50/50 hover:bg-blue-50 flex flex-col items-center justify-center cursor-pointer transition-all text-blue-600 text-xs font-medium gap-1">
+                    <span className="text-2xl leading-none">+</span>
+                    <span>แนบไฟล์เพิ่ม</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
 
-                  พิมพ์งานใหม่
-                </label>
+                {files.length > 0 && (
+                  <p className="text-xs text-slate-400">
+                    แนบแล้ว {files.length} ไฟล์
+                    {" · "}
+                    รูปภาพจะแสดงตัวอย่างทันที
+                  </p>
+                )}
+              </section>
 
-                {/* Refund */}
-                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700">
-                  <input
-                    type="radio"
-                    name="resolution"
-                    value="refund"
-                    checked={
-                      formData.resolution ===
-                      "refund"
-                    }
-                    onChange={handleInputChange}
-                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                  />
+              {/* 3. ความต้องการ */}
+              <section className="space-y-3">
+                <h2 className="text-base font-semibold text-gray-900 border-b pb-2">
+                  ความต้องการ
+                </h2>
 
-                  ขอคืนเงิน (Refund)
-                </label>
-              </div>
+                <div className="flex gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700">
+                    <input
+                      type="radio"
+                      name="resolution"
+                      value="refund"
+                      checked={formData.resolution === "refund"}
+                      onChange={handleInputChange}
+                      className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    ขอคืนเงิน (Refund)
+                  </label>
+                </div>
 
-              {/* ==========================================
-                  Bank Information
-              ========================================== */}
-              {formData.resolution ===
-                "refund" && (
+                {formData.resolution === "refund" && (
                   <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {/* Bank */}
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         ธนาคาร
                       </label>
-
                       <input
                         type="text"
                         name="bankName"
@@ -692,12 +555,10 @@ export default function RefundRequestPage() {
                       />
                     </div>
 
-                    {/* Account Number */}
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         เลขที่บัญชี
                       </label>
-
                       <input
                         type="text"
                         name="accountNumber"
@@ -708,12 +569,10 @@ export default function RefundRequestPage() {
                       />
                     </div>
 
-                    {/* Account Name */}
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         ชื่อบัญชี
                       </label>
-
                       <input
                         type="text"
                         name="accountName"
@@ -725,33 +584,28 @@ export default function RefundRequestPage() {
                     </div>
                   </div>
                 )}
-            </section>
+              </section>
 
-            {/* ==========================================
-                Buttons
-            ========================================== */}
-            <div className="pt-2 flex flex-col-reverse sm:flex-row gap-3">
-              {/* Cancel */}
-              <Link
-                href="/customer/orders"
-                className="w-full sm:w-1/2 bg-white hover:bg-gray-50 text-gray-700 font-medium py-2.5 rounded-xl transition-all border border-gray-300 active:scale-[0.99] text-center"
-              >
-                ยกเลิกคำร้อง
-              </Link>
+              {/* Buttons */}
+              <div className="pt-2 flex flex-col-reverse sm:flex-row gap-3">
+                <Link
+                  href="/customer/orders"
+                  className="w-full sm:w-1/2 bg-white hover:bg-gray-50 text-gray-700 font-medium py.2.5 rounded-xl transition-all border border-gray-300 active:scale-[0.99] text-center"
+                >
+                  ยกเลิกคำร้อง
+                </Link>
 
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full sm:w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/10 active:scale-[0.99] disabled:bg-gray-400"
-              >
-                {submitting
-                  ? "กำลังส่งคำร้อง..."
-                  : "ส่งคำร้อง"}
-              </button>
-            </div>
-          </form>
-        </div>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full sm:w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/10 active:scale-[0.99] disabled:bg-gray-400"
+                >
+                  {submitting ? "กำลังส่งคำร้อง..." : "ส่งคำร้อง"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </main>
     </div>
   );
