@@ -22,7 +22,7 @@ export type ServiceDetailRow = {
 };
 
 export type ServiceTypeGroup = {
-  id?: string;
+  id?: number | string;
   type: string;
   items: ServiceDetailRow[];
 };
@@ -87,7 +87,6 @@ const SERVICE_TEMPLATES: Record<string, { group_type: string; detail: string; pr
   ],
 };
 
-const SERVICE_TYPE_TEMPLATES = Object.keys(SERVICE_TEMPLATES);
 const OTHER_OPTION = "__other__";
 
 // 🟢 แก้ไข: จัดกลุ่มข้อมูลให้ถูกต้องเพื่อรองรับการแสดงผลทุกรายการ
@@ -519,8 +518,8 @@ export default function ShopServicesTab({
             {services.map((group, gIdx) => {
               const groupedRows = groupItems(group.items, true);
               const isPreset = SERVICE_TYPE_TEMPLATES.includes(group.type);
-              const isCustomMode = customTypeIndexes[gIdx] || (!isPreset && group.type !== "");
-              const selectValue = isCustomMode ? OTHER_OPTION : group.type;
+              const selectValue =
+                group.type === "" ? "" : isPreset ? group.type : OTHER_OPTION;
 
               const err = allErrors[gIdx] ?? emptyErrors;
               const showErr = attemptedSave || !!errorScope[gIdx];

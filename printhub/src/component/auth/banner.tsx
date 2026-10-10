@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import FadeIn from "./fade-in";
-import laning from "@/public/laning.png";
+// import laning from "@/public/laning.png";
 
 export default function Banner() {
   return (
@@ -41,7 +41,7 @@ export default function Banner() {
         <FadeIn delay={0.15}>
           <div className="relative overflow-hidden rounded-3xl shadow-xl shadow-navy/10">
             <Image
-              src={laning}
+              src="/laning.png"
               alt="PrintHub Hero"
               width={650}
               height={450}

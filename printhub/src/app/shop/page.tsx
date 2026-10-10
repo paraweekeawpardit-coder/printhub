@@ -5,12 +5,16 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { Clock, DollarSign, Star } from "lucide-react";
 
-import DashboardCard from "@/src/component/shop/dashboard-card";
-import OrderCard from "@/src/component/shop/order-card";
-import ShopNavbar from "@/src/component/shop/navbar";
-import FinancialTable, { Transaction } from "@/src/component/shop/financial-table";
-import OrderBreakdownModal from "@/src/component/shop/order-breakdown-modal";
-import ReviewComplaintModal from "@/src/component/shop/review-complaint-modal";
+import DashboardCard from "@/component/shop/dashboard-card";
+import OrderCard from "@/component/shop/order-card";
+import ShopNavbar from "@/component/shop/navbar";
+import FinancialTable, { Transaction } from "@/component/shop/financial-table";
+import OrderBreakdownModal from "@/component/shop/order-breakdown-modal";
+import ReviewComplaintModal from "@/component/shop/review-complaint-modal";
+
+// 🟢 กำหนด API_URL หลักให้รองรับทั้ง Environment Variable และ Fallback
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_URL = `${rawApiUrl.replace(/\/+$/, "")}/api`;
 
 type Order = {
   id: string;
@@ -44,6 +48,7 @@ export default function ShopPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [shopId, setShopId] = useState<string>("");
+  const [isSuspended, setIsSuspended] = useState<boolean>(false);
 
   const [activeView, setActiveView] = useState<"orders" | "financial" | "reviews" | null>(null);
 
@@ -95,11 +100,9 @@ export default function ShopPage() {
   const isFetchingRef = useRef(false);
 
   useEffect(() => {
-    const id = localStorage.getItem("shop_id");
+    const id = localStorage.getItem("shop_id") || localStorage.getItem("id");
     if (id) {
       setShopId(id);
-    } else {
-      console.error("shop_id not found in localStorage");
     }
   }, []);
 
@@ -113,7 +116,14 @@ export default function ShopPage() {
       try {
         if (!opts?.silent) setLoading(true);
 
-        const headers = { shop_id: shopId };
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("token")
+            : null;
+        const headers = {
+          shop_id: shopId,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
 
         // ใช้ Promise.allSettled เพื่อป้องกัน API บางตัวพังหรือส่งค่า null กลับมาแล้วทำให้แอปพังทั้งหน้า
         const [
@@ -124,23 +134,56 @@ export default function ShopPage() {
           financeRes,
           breakdownRes,
           reviewRes,
-        ] = await Promise.allSettled([
-          axios.get("http://localhost:5000/shop/numWork", { headers }),
-          axios.get("http://localhost:5000/shop/getScore", { headers }),
-          axios.get("http://localhost:5000/shop/getIncome", { headers }),
-          axios.get("http://localhost:5000/shop/getTopOrder", { headers }),
-          axios.get("http://localhost:5000/shop/getFinancialOverview", { headers }),
-          axios.get("http://localhost:5000/shop/getOrderStatusBreakdown", { headers }),
-          axios.get("http://localhost:5000/shop/getComplaintsAndReviews", { headers }),
+          profileRes,
+        ] = await Promise.all([
+          axios
+            .get(`${API_URL}/shop/numWork`, { headers })
+            .catch(() => ({ data: { numWork: 0 } })),
+          axios
+            .get(`${API_URL}/shop/getScore`, { headers })
+            .catch(() => ({ data: { score: 0, totalReviews: 0 } })),
+          axios
+            .get(`${API_URL}/shop/getIncome`, { headers })
+            .catch(() => ({ data: { income: 0, orderCount: 0 } })),
+          axios
+            .get(`${API_URL}/shop/getTopOrder`, { headers })
+            .catch(() => ({ data: [] })),
+          axios
+            .get(`${API_URL}/shop/getFinancialOverview`, {
+              headers,
+            })
+            .catch(() => ({ data: null })),
+          axios
+            .get(`${API_URL}/shop/getOrderStatusBreakdown`, {
+              headers,
+            })
+            .catch(() => ({ data: null })),
+          axios
+            .get(`${API_URL}/shop/getComplaintsAndReviews`, {
+              headers,
+            })
+            .catch(() => ({ data: null })),
+          axios
+            .get(`${API_URL}/shop/profile/${shopId}`, { headers })
+            .catch(() =>
+              axios
+                .get(`${API_URL}/shop/getProfile/${shopId}`, { headers })
+                .catch(() => ({ data: null }))
+            ),
         ]);
 
-        const numData = numRes.status === "fulfilled" ? numRes.value.data : null;
-        const scoreData = scoreRes.status === "fulfilled" ? scoreRes.value.data : null;
-        const incomeData = incomeRes.status === "fulfilled" ? incomeRes.value.data : null;
-        const ordersData = ordersRes.status === "fulfilled" ? ordersRes.value.data : null;
-        const financeDataRes = financeRes.status === "fulfilled" ? financeRes.value.data : null;
-        const breakdownDataRes = breakdownRes.status === "fulfilled" ? breakdownRes.value.data : null;
-        const reviewDataRes = reviewRes.status === "fulfilled" ? reviewRes.value.data : null;
+        const profData = profileRes?.data?.data || profileRes?.data;
+        if (profData && profData.status === "suspended") {
+          setIsSuspended(true);
+        } else {
+          setIsSuspended(false);
+        }
+
+        setNum(`${numRes.data.numWork ?? 0} รายการ`);
+        setScore(`${Number(scoreRes.data.score ?? 0).toFixed(1)} / 5.0`);
+        setIncome(
+          `${Number(incomeRes.data.income ?? 0).toLocaleString()} บาท`
+        );
 
         setNum(`${numData?.numWork ?? 0} รายการ`);
         setScore(`${scoreData?.score ?? 0.0} / 5.0`);
@@ -156,7 +199,12 @@ export default function ShopPage() {
             totalFee: 0,
             totalNet: 0,
             transactions: [],
-            financialTrend: { daily: [], weekly: [], monthly: [], yearly: [] },
+            financialTrend: {
+              daily: [],
+              weekly: [],
+              monthly: [],
+              yearly: [],
+            },
           }
         );
         setBreakdownData(
@@ -181,27 +229,16 @@ export default function ShopPage() {
   );
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
-
-  useEffect(() => {
-    const handleFocus = () => fetchDashboardData({ silent: true });
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        fetchDashboardData({ silent: true });
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [fetchDashboardData]);
+    if (shopId) {
+      fetchDashboardData();
+    }
+  }, [shopId, fetchDashboardData]);
 
   const handleOrderClick = (orderId: string) => {
+    if (isSuspended) {
+      console.warn("[Action Blocked] Account is suspended. Cannot view order details.");
+      return;
+    }
     router.push(`/shop/detail/${orderId}`);
   };
 
@@ -220,32 +257,53 @@ export default function ShopPage() {
 
         {/* 3 Dashboard Summary Cards */}
         <div className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-3">
-          <DashboardCard
-            title="รายการที่รอการดำเนินการ"
-            value={num}
-            subtitle="รอการดำเนินการ / รอพิมพ์"
-            icon={Clock}
-            active={activeView === "orders"}
-            onClick={() => setActiveView(activeView === "orders" ? null : "orders")}
-          />
+          <div
+            className={`cursor-pointer rounded-2xl transition-all ${
+              activeView === "orders" ? "ring-2 ring-[#0F2942]" : ""
+            }`}
+            onClick={() =>
+              setActiveView(activeView === "orders" ? null : "orders")
+            }
+          >
+            <DashboardCard
+              title="รายการที่รอการดำเนินการ"
+              value={num}
+              subtitle="รอการดำเนินการ / รอพิมพ์"
+              icon={Clock}
+            />
+          </div>
 
-          <DashboardCard
-            title="รายได้ทั้งหมด"
-            value={income}
-            subtitle={`${todayOrdersCount} คำสั่งพิมพ์วันนี้`}
-            icon={DollarSign}
-            active={activeView === "financial"}
-            onClick={() => setActiveView(activeView === "financial" ? null : "financial")}
-          />
+          <div
+            className={`cursor-pointer rounded-2xl transition-all ${
+              activeView === "financial" ? "ring-2 ring-[#0F2942]" : ""
+            }`}
+            onClick={() =>
+              setActiveView(activeView === "financial" ? null : "financial")
+            }
+          >
+            <DashboardCard
+              title="รายได้ทั้งหมด"
+              value={income}
+              subtitle={`${todayOrdersCount} คำสั่งพิมพ์`}
+              icon={DollarSign}
+            />
+          </div>
 
-          <DashboardCard
-            title="คะแนนรีวิวเฉลี่ย"
-            value={score}
-            subtitle={`${totalReviewsCount} รีวิวทั้งหมด`}
-            icon={Star}
-            active={activeView === "reviews"}
-            onClick={() => setActiveView(activeView === "reviews" ? null : "reviews")}
-          />
+          <div
+            className={`cursor-pointer rounded-2xl transition-all ${
+              activeView === "reviews" ? "ring-2 ring-[#0F2942]" : ""
+            }`}
+            onClick={() =>
+              setActiveView(activeView === "reviews" ? null : "reviews")
+            }
+          >
+            <DashboardCard
+              title="คะแนนรีวิวเฉลี่ย"
+              value={score}
+              subtitle={`${totalReviewsCount} รีวิวทั้งหมด`}
+              icon={Star}
+            />
+          </div>
         </div>
 
         {/* Dynamic Detail Section */}
@@ -302,6 +360,7 @@ export default function ShopPage() {
                   order={item}
                   onClick={() => handleOrderClick(item.id)}
                   onUpdateStatus={handleStatusUpdated}
+                  disabled={isSuspended}
                 />
               ))
             ) : (

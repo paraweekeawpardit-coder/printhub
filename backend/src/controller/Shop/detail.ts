@@ -39,6 +39,7 @@ export const getOrder = async (
   try {
     const order_id = (
       req.params.id ||
+      req.params.order_id ||
       req.query.order_id ||
       req.headers.order_id
     ) as string;
@@ -54,9 +55,9 @@ export const getOrder = async (
         id, order_no, description, subtotal_price, small_order_fee, platform_fee,
         total_amount, order_date, receive_date, appointment_time, current_status_id,
         payment_id, review_id,
-        customer:customer_id (
+        customer (
           id, first_name, last_name, contact,
-          address:address_id ( detail, subdistrict, district, province, postcode )
+          address ( detail, subdistrict, district, province, postcode )
         ),
         print_order_item ( id, category, describe, file_url, quantity, unit_price, subtotal, page_count ),
         print_file ( id, filename, file_url, file_size_mb, page_count, item_id )
@@ -66,6 +67,7 @@ export const getOrder = async (
       .single();
 
     if (error || !order) {
+      console.error("Fetch Order Supabase Error:", error);
       return res.status(404).json({ error: "Order not found" });
     }
 
@@ -86,7 +88,7 @@ export const getOrder = async (
     ]);
 
     const statusState = statusRow?.state || ORDER_PENDING_STATE;
-    const formattedCustomer = Array.isArray(order.customer) ? order.customer[0] : order.customer;
+    const formattedCustomer: any = Array.isArray(order.customer) ? order.customer[0] : order.customer;
     const formattedAddress = Array.isArray(formattedCustomer?.address) ? formattedCustomer.address[0] : formattedCustomer?.address;
 
     return res.status(200).json({
@@ -100,6 +102,7 @@ export const getOrder = async (
         small_order_fee: Number(order.small_order_fee || 0),
         platform_fee: Number(order.platform_fee || 0),
         total_amount: Number(order.total_amount || 0),
+        total_price: Number(order.total_amount || 0),
         status_state: statusState,
         customer: {
           id: formattedCustomer?.id,
@@ -118,19 +121,19 @@ export const getOrder = async (
         review: reviewRow || null,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Backend Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
 
-// UPDATE ORDER STATUS (ใช้สำหรับกรณีเปลี่ยนสถานะทั่วไป เช่น กดปฏิเสธ หรือ กดยืนยันพิมพ์เสร็จ)
+// UPDATE ORDER STATUS (เปลี่ยนสถานะทั่วไป)
 export const updateOrderStatus = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
-    const { id } = req.params;
+    const id = req.params.id || req.params.order_id;
     const { status_name } = req.body;
     const shop_id = (req.query.shop_id || req.headers.shop_id) as string | undefined;
 
@@ -157,11 +160,18 @@ export const updateOrderStatus = async (
 
     if (!statusData) return res.status(404).json({ error: `Status '${status_name}' not found` });
 
+    // สร้างประวัติการอัปเดตสถานะ (work_status)
     const { data: newWorkStatus } = await supabase
       .from("work_status")
       .insert([{ order_id: id, status_id: statusData.id, updated_at: new Date().toISOString() }])
-      .select()
+      .select("id")
       .single();
+
+    // อัปเดตสถานะหลักบน print_order
+    const updatePayload: any = { current_status_id: statusData.id };
+    if (newWorkStatus?.id) {
+      updatePayload.work_state_id = newWorkStatus.id;
+    }
 
     await supabase
       .from("print_order")
@@ -169,25 +179,31 @@ export const updateOrderStatus = async (
       .eq("id", id);
 
     return res.status(200).json({ message: "Status updated", data: { status_state: statusData.state } });
-  } catch (err) {
+  } catch (err: any) {
+    console.error("Update Order Status Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
 
 // VERIFY PAYMENT SLIP & AUTO CHANGE STATUS
-// - ถูกต้อง = "กำลังพิมพ์" (เท่ากับกดยืนยันรับออเดอร์ทันที)
-// - ไม่ถูกต้อง = "รอการชำระเงิน" (ฝั่งช็อปจะไม่นำมาแสดง)
+// - สลิปถูกต้อง (is_verified = true)  => สถานะเปลี่ยนเป็น "กำลังพิมพ์"
+// - สลิปไม่ถูกต้อง (is_verified = false) => สถานะเปลี่ยนเป็น "รอการชำระเงิน"
 export const verifyPayment = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
-    const { id } = req.params;
-    const { is_verified } = req.body;
+    const id = req.params.id || req.params.order_id;
+    let { is_verified } = req.body;
     const shop_id = (req.query.shop_id || req.headers.shop_id) as string | undefined;
 
+    // แปลงค่าเป็น boolean ป้องกันการส่ง string "true"/"false"
+    if (typeof is_verified === "string") {
+      is_verified = is_verified === "true";
+    }
+
     if (!id || typeof is_verified !== "boolean") {
-      return res.status(400).json({ error: "Invalid payload" });
+      return res.status(400).json({ error: "Invalid payload: is_verified must be boolean" });
     }
 
     const { data: order } = await supabase
@@ -200,14 +216,15 @@ export const verifyPayment = async (
       return res.status(404).json({ error: "Order not found or unauthorized" });
     }
 
-    if (!order.payment_id) {
-      return res.status(400).json({ error: "ยังไม่มีหลักฐานการชำระเงิน" });
+    // 1. อัปเดตสถานะการตรวจสลิปในตาราง payment
+    if (order.payment_id) {
+      await supabase
+        .from("payment")
+        .update({ is_verified })
+        .eq("id", order.payment_id);
     }
 
-    // 1. อัปเดตสถานะการตรวจสลิป
-    await supabase.from("payment").update({ is_verified }).eq("id", order.payment_id);
-
-    // 2. กำหนดสถานะออเดอร์ใหม่ตามผลการตรวจ
+    // 2. กำหนดสถานะออเดอร์ใหม่ตามตาราง status ใน Database
     const nextStatusName = is_verified ? "กำลังพิมพ์" : "รอการชำระเงิน";
 
     const { data: targetStatus } = await supabase
@@ -220,12 +237,17 @@ export const verifyPayment = async (
       const { data: newWorkStatus } = await supabase
         .from("work_status")
         .insert([{ order_id: id, status_id: targetStatus.id, updated_at: new Date().toISOString() }])
-        .select()
+        .select("id")
         .single();
+
+      const updatePayload: any = { current_status_id: targetStatus.id };
+      if (newWorkStatus?.id) {
+        updatePayload.work_state_id = newWorkStatus.id;
+      }
 
       await supabase
         .from("print_order")
-        .update({ current_status_id: targetStatus.id, work_state_id: newWorkStatus?.id })
+        .update(updatePayload)
         .eq("id", id);
     }
 
@@ -234,8 +256,8 @@ export const verifyPayment = async (
       is_verified,
       new_status: nextStatusName,
     });
-  } catch (err) {
-    console.error("Verify Payment Error:", err);
+  } catch (err: any) {
+    console.error("Update Payment Status Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 import {
@@ -22,13 +22,20 @@ import {
   FileText,
   AlertTriangle,
 } from "lucide-react";
-import { SlipModal, ActionConfirmModal } from "@/src/component/shop/OrderModals";
+import { SlipModal, ActionConfirmModal, WarnModal } from "@/component/shop/OrderModals";
+
+// 🟢 ปรับ API_BASE ให้มี /api นำหน้าเสมอ
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE = `${rawApiUrl.replace(/\/+$/, "")}/api`;
 
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const orderId = (params?.id || params?.order_id) as string;
+  
+  // ดึง order_id หรือ id จาก params
+  const orderId = (params?.order_id || params?.id) as string;
 
+  const [shopId, setShopId] = useState<string>("");
   const [order, setOrder] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
@@ -44,7 +51,17 @@ export default function OrderDetailPage() {
   const [showVerifyValidModal, setShowVerifyValidModal] = useState<boolean>(false);
   const [showVerifyInvalidModal, setShowVerifyInvalidModal] = useState<boolean>(false);
 
-  const fetchOrder = async (silent = false) => {
+  // ดึง shop_id จาก localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedShopId =
+        localStorage.getItem("shop_id") || localStorage.getItem("id");
+      if (storedShopId) setShopId(storedShopId);
+    }
+  }, []);
+
+  // 🟢 ดึงข้อมูลออเดอร์โดยชี้ไปที่ /api/shop/orders/:orderId
+  const fetchOrder = useCallback(async (silent = false) => {
     if (!orderId) return;
 
     try {
@@ -52,32 +69,45 @@ export default function OrderDetailPage() {
         setIsLoading(true);
         setError(null);
       }
-      const res = await axios.get(`http://localhost:5000/shop/orders/${orderId}`);
+      
+      const res = await axios.get(`${API_BASE}/shop/orders/${orderId}`, {
+        headers: shopId ? { shop_id: shopId } : {},
+      });
+
       if (res.data && res.data.order) {
         setOrder(res.data.order);
+      } else if (res.data) {
+        setOrder(res.data);
       } else {
         throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
       }
     } catch (err: any) {
-      const message = err.response?.data?.error || err.message || "เกิดข้อผิดพลาดในการดึงข้อมูล";
+      const message =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        "เกิดข้อผิดพลาดในการดึงข้อมูล";
       if (silent) setActionError(message);
       else setError(message);
     } finally {
       if (!silent) setIsLoading(false);
     }
-  };
+  }, [orderId, shopId]);
 
   useEffect(() => {
     fetchOrder();
-  }, [orderId]);
+  }, [fetchOrder]);
 
+  // 🟢 อัปเดตสถานะออเดอร์
   const handleUpdateStatus = async (nextStatus: string) => {
     try {
       setIsUpdating(true);
       setActionError(null);
-      await axios.patch(`http://localhost:5000/shop/orders/${orderId}/status`, {
-        status_name: nextStatus,
-      });
+      await axios.patch(
+        `${API_BASE}/shop/orders/${orderId}/status`,
+        { status_name: nextStatus },
+        { params: { shop_id: shopId } }
+      );
       await fetchOrder(true);
     } catch (err: any) {
       setActionError(err.response?.data?.error || "อัปเดตสถานะไม่สำเร็จ");
@@ -86,13 +116,16 @@ export default function OrderDetailPage() {
     }
   };
 
+  // 🟢 ตรวจสลิปการชำระเงิน
   const handleVerifySlip = async (isVerified: boolean) => {
     try {
       setIsUpdating(true);
       setActionError(null);
-      await axios.patch(`http://localhost:5000/shop/orders/${orderId}/verify-payment`, {
-        is_verified: isVerified,
-      });
+      await axios.patch(
+        `${API_BASE}/shop/orders/${orderId}/verify-payment`,
+        { is_verified: isVerified },
+        { params: { shop_id: shopId } }
+      );
       await fetchOrder(true);
     } catch (err: any) {
       setActionError(err.response?.data?.error || "บันทึกผลตรวจสลิปไม่สำเร็จ");
@@ -194,7 +227,7 @@ export default function OrderDetailPage() {
           </button>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">หมายเลขออเดอร์</span>
-            <span className="text-sm font-semibold text-[#12356b] bg-blue-50 px-2.5 py-1 rounded-lg">#{order.order_no}</span>
+            <span className="text-sm font-semibold text-[#12356b] bg-blue-50 px-2.5 py-1 rounded-lg">#{order.order_no || order.id}</span>
           </div>
         </div>
       </div>
@@ -271,7 +304,7 @@ export default function OrderDetailPage() {
                           </span>
                           <h3 className="font-semibold text-gray-900 text-base mt-1">{item.category}</h3>
                         </div>
-                        <p className="font-bold text-slate-800">฿{item.subtotal.toLocaleString()}</p>
+                        <p className="font-bold text-slate-800">฿{item.subtotal?.toLocaleString() ?? 0}</p>
                       </div>
 
                       {item.describe && (
