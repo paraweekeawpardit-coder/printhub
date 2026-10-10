@@ -86,6 +86,7 @@ export default function ShopDetailModal({
   const closeTime = shop.close_time || shop.closeTime;
   const openDays = shop.open_days || shop.openDays;
 
+  // ฟังก์ชันดึงข้อมูลบัญชีธนาคารครอบคลุมทุกโครงสร้าง Data
   const extractBankInfo = () => {
     let rawBank: any = shop.bank_account || shop.shop_bank_account;
 
@@ -317,7 +318,7 @@ export default function ShopDetailModal({
           )}
         </div>
 
-        {/* Modal Footer */}
+        {/* Modal Footer (จุดอนุมัติ / ปฏิเสธ) */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50">
           {onReject && (
             <button

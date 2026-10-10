@@ -15,13 +15,28 @@ import {
 import { 
   getAllReports, 
   verifyReport, 
-  resolveReport // 👈 นำเข้าฟังก์ชันตัดสินเคสรายงาน
+  resolveReport
 } from "../controller/Admin/reportController.js";
+
+// 1. Transaction Controller
 import { 
-  getAllTransactions, 
-  getPendingRefunds, // 👈 นำเข้าฟังก์ชันดึงรายการรอคืนเงิน
-  processRefund      // 👈 นำเข้าฟังก์ชันอนุมัติโอนเงินคืน
+  getAllTransactions 
 } from "../controller/Admin/transactionController.js";
+
+// 2. Refund Controller (ระบบคืนเงินลูกค้า)
+import { 
+  getPendingRefunds, 
+  processRefund,
+  rejectRefund 
+} from "../controller/Admin/refundController.js";
+
+// 3. Payout Controller (ระบบโอนเงินให้ร้านค้า)
+import { 
+  getPayouts, 
+  processPayout,
+  rejectPayout // 👈 นำเข้าฟังก์ชันปฏิเสธโอนเงินให้ร้านค้า
+} from "../controller/Admin/payoutController.js";
+
 import { adminLogin } from "../controller/Auth/admin.js";
 import {
   getAdminProfile,
@@ -60,12 +75,20 @@ router.patch("/bank-accounts/verify", approveOrRejectBankAccount);
 // Reports
 router.get("/reports", getAllReports);
 router.patch("/reports/verify", verifyReport);
-router.patch("/reports/resolve", resolveReport); // 👈 เพิ่ม Route ตัดสินเคสรายงานปัญหา
+router.patch("/reports/resolve", resolveReport);
 
-// Transactions & Refunds
+// Transactions
 router.get("/transactions", getAllTransactions);
-router.get("/refunds", getPendingRefunds);       // 👈 เพิ่ม Route ดึงออเดอร์ยกเลิกเพื่อรอคืนเงิน
-router.patch("/refunds/process", processRefund);  // 👈 เพิ่ม Route อนุมัติการโอนเงินคืน
+
+// Refunds (การคืนเงินลูกค้า)
+router.get("/refunds", getPendingRefunds);
+router.patch("/refunds/process", processRefund);
+router.patch("/refunds/reject", rejectRefund);
+
+// Payouts (การโอนเงินให้ร้านค้า)
+router.get("/payouts", getPayouts);
+router.patch("/payouts/process", processPayout);
+router.patch("/payouts/reject", rejectPayout); // 👈 เพิ่ม Route ปฏิเสธการโอนเงินให้ร้านค้า
 
 // Profile & Settings
 router.get("/profile", getAdminProfile);

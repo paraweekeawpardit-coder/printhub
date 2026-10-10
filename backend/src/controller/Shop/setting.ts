@@ -561,6 +561,7 @@ export const updateBankAccount = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
+<<<<<<< HEAD
     // ---------- แก้ไขบัญชีเดิม ----------
     if (id) {
       const { data: old, error: oldErr } = await supabase
@@ -568,6 +569,251 @@ export const updateBankAccount = async (
         .select("bank_name, account_name, account_number, status")
         .eq("id", id)
         .eq("shop_id", shop_id)
+=======
+    const { data: bankAccounts, error } = await supabase
+      .from("bank_account")
+      .select("*")
+      .eq("shop_id", shop_id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("GetBankAccount Error:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    if (!bankAccounts || bankAccounts.length === 0) {
+      return res.status(200).json({ data: null });
+    }
+
+    // 1. ค้นหาบัญชีที่ได้รับการอนุมัติอยู่แล้ว (approved) เพื่อใช้แสดงผลเลขบัญชีปัจจุบัน
+    const approvedAccount = bankAccounts.find((acc) => acc.status === "approved");
+
+    // 2. ค้นหาคำขอใหม่ที่ยังรอดำเนินการ (pending)
+    const pendingAccount = bankAccounts.find((acc) => acc.status === "pending");
+
+    // เลือกใช้อันที่ approved เป็นหลักก่อน หากไม่มีอนุมัติเลยค่อยใช้รายการล่าสุด
+    const displayAccount = approvedAccount || pendingAccount || bankAccounts[0];
+
+    return res.status(200).json({
+      data: {
+        ...displayAccount,
+        is_pending: Boolean(pendingAccount),
+        pending_created_at: pendingAccount?.created_at || null,
+      },
+    });
+  } catch (err: any) {
+    console.error("GetBankAccount Exception:", err.message || err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+/**
+ * PUT /api/shop/bank-account/:shop_id
+ */
+export const updateBankAccount = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const shop_id = req.params.shop_id as string;
+    const { bank_name, account_name, accountNumber, account_number } = req.body;
+
+    const targetAccountNumber = account_number || accountNumber;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    // 🔒 ตรวจสอบการอนุมัติร้านค้า
+    const isVerified = await checkShopVerification(shop_id);
+    if (!isVerified) {
+      return res.status(403).json({ error: "ร้านค้าของคุณยังไม่ได้รับการอนุมัติ ไม่สามารถยื่นเปลี่ยนบัญชีได้" });
+    }
+
+    if (!bank_name || !account_name || !targetAccountNumber) {
+      return res.status(400).json({ error: "กรุณากรอกข้อมูลบัญชีธนาคารให้ครบถ้วน" });
+    }
+
+    const { data: existingPending } = await supabase
+      .from("bank_account")
+      .select("id")
+      .eq("shop_id", shop_id)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    if (existingPending) {
+      return res.status(400).json({
+        error: "คุณมีคำขอเปลี่ยนบัญชีธนาคารที่กำลังรอดำเนินการอยู่ ไม่สามารถส่งคำขอเพิ่มได้ในขณะนี้",
+      });
+    }
+
+    const { data: newBank, error } = await supabase
+      .from("bank_account")
+      .insert({
+        shop_id,
+        bank_name,
+        account_name,
+        account_number: targetAccountNumber,
+        status: "pending",
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("UpdateBankAccount Error:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ยื่นคำขอเปลี่ยนบัญชีธนาคารเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ",
+      data: newBank,
+    });
+  } catch (err: any) {
+    console.error("UpdateBankAccount Exception:", err.message || err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+/**
+ * PATCH /api/shop/open-status/:shop_id
+ */
+export const updateOpenStatus = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const shop_id = req.params.shop_id as string;
+    const { is_open } = req.body;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    // 🔒 ตรวจสอบการอนุมัติร้านค้า
+    const isVerified = await checkShopVerification(shop_id);
+    if (!isVerified) {
+      return res.status(403).json({ error: "ร้านค้าของคุณยังไม่ได้รับการอนุมัติ ไม่สามารถเปลี่ยนสถานะร้านได้" });
+    }
+
+    const { error } = await supabase
+      .from("print_shop")
+      .update({ is_open })
+      .eq("id", shop_id);
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({ success: true, is_open });
+  } catch (err: any) {
+    console.error("UpdateOpenStatus Exception:", err.message || err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+/**
+ * GET /api/shop/verify-status/:shop_id
+ */
+export const getVerifyStatus = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const shop_id = req.params.shop_id as string;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    const { data: shop, error } = await supabase
+      .from("print_shop")
+      .select("is_verify, status")
+      .eq("id", shop_id)
+      .maybeSingle();
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      data: {
+        is_verify: shop?.is_verify ?? false,
+        status: shop?.status ?? "pending",
+      },
+    });
+  } catch (err: any) {
+    console.error("GetVerifyStatus Exception:", err.message || err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+/**
+ * GET /api/shop/services/:shop_id
+ */
+export const getShopServices = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const shop_id = req.params.shop_id as string;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    const { data: serviceTypes, error } = await supabase
+      .from("service_type")
+      .select(`
+        id,
+        type,
+        service_detail (*)
+      `)
+      .eq("shop_id", shop_id);
+
+    if (error) {
+      console.error("GetShopServices Error:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({ data: serviceTypes ?? [] });
+  } catch (err: any) {
+    console.error("GetShopServices Exception:", err.message || err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+/**
+ * POST /api/shop/services
+ */
+export const saveShopServices = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const shop_id = req.headers.shop_id as string;
+    const { services } = req.body;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id header is required" });
+    }
+
+    // 🔒 ตรวจสอบการอนุมัติร้านค้า
+    const isVerified = await checkShopVerification(shop_id);
+    if (!isVerified) {
+      return res.status(403).json({ error: "ร้านค้าของคุณยังไม่ได้รับการอนุมัติ ไม่สามารถแก้ไขบริการได้" });
+    }
+
+    if (!Array.isArray(services)) {
+      return res.status(400).json({ error: "Invalid services payload" });
+    }
+
+    const { data: existingTypes } = await supabase
+      .from("service_type")
+      .select("id")
+      .eq("shop_id", shop_id);
+
+    if (existingTypes && existingTypes.length > 0) {
+      const typeIds = existingTypes.map((t) => t.id);
+      await supabase.from("service_detail").delete().in("service_type_id", typeIds);
+      await supabase.from("service_type").delete().eq("shop_id", shop_id);
+    }
+
+    for (const group of services) {
+      const { data: insertedType, error: typeError } = await supabase
+        .from("service_type")
+        .insert({
+          shop_id,
+          type: group.type,
+        })
+        .select()
+>>>>>>> ff9b15d4 (ปรับปรุงโค้ดฝั่งแอดมิน และอัปเดตเพิ่มเติมสำหรับแอดมิน)
         .single();
 
       if (oldErr || !old) {
