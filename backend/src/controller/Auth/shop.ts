@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import "multer" 
+import "multer"
 
 interface MulterRequest extends Request {
   files?: {
@@ -183,10 +183,8 @@ export const LoginShop = async (req: Request, res: Response): Promise<Response> 
     const { data: shop, error: findError } = await supabase
       .from("print_shop")
       .select("*")
-      .or(`email.eq.${contact}`)
+      .eq("email", contact)
       .maybeSingle();
-    
-      console.log("login shop :",shop)
 
     if (findError) {
       console.error("Find shop error:", findError);
@@ -217,17 +215,20 @@ export const LoginShop = async (req: Request, res: Response): Promise<Response> 
     const payload = {
       id: shop.id,
       shop_name: shop.shop_name,
+      role: "shop",
     };
 
     const token = jwt.sign(payload, secretKey, {
       expiresIn: "24h",
     });
 
+    // ร้านที่โดนแบนยัง login ได้ เพื่อให้เห็น banner และเหตุผล
     return res.status(200).json({
       message: "Login successful",
       token,
       shop_id: shop.id,
       shop_name: shop.shop_name,
+      role: "shop",
     });
   } catch (err) {
     console.error("Login Error:", err);

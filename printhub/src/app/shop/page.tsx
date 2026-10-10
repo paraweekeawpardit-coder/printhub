@@ -14,7 +14,7 @@ import ReviewComplaintModal from "@/src/component/shop/review-complaint-modal";
 
 type Order = {
   id: string;
-  order_no?: string; // 👈 เพิ่ม order_no ใน Type
+  order_no?: string;
   customer_id: string;
   shop_id: string;
   description: string | null;
@@ -115,6 +115,7 @@ export default function ShopPage() {
 
         const headers = { shop_id: shopId };
 
+        // ใช้ Promise.allSettled เพื่อป้องกัน API บางตัวพังหรือส่งค่า null กลับมาแล้วทำให้แอปพังทั้งหน้า
         const [
           numRes,
           scoreRes,
@@ -123,7 +124,7 @@ export default function ShopPage() {
           financeRes,
           breakdownRes,
           reviewRes,
-        ] = await Promise.all([
+        ] = await Promise.allSettled([
           axios.get("http://localhost:5000/shop/numWork", { headers }),
           axios.get("http://localhost:5000/shop/getScore", { headers }),
           axios.get("http://localhost:5000/shop/getIncome", { headers }),
@@ -133,16 +134,24 @@ export default function ShopPage() {
           axios.get("http://localhost:5000/shop/getComplaintsAndReviews", { headers }),
         ]);
 
-        setNum(`${numRes.data.numWork ?? 0} รายการ`);
-        setScore(`${scoreRes.data.score ?? 0.0} / 5.0`);
-        setIncome(`${incomeRes.data.income ?? 0} บาท`);
+        const numData = numRes.status === "fulfilled" ? numRes.value.data : null;
+        const scoreData = scoreRes.status === "fulfilled" ? scoreRes.value.data : null;
+        const incomeData = incomeRes.status === "fulfilled" ? incomeRes.value.data : null;
+        const ordersData = ordersRes.status === "fulfilled" ? ordersRes.value.data : null;
+        const financeDataRes = financeRes.status === "fulfilled" ? financeRes.value.data : null;
+        const breakdownDataRes = breakdownRes.status === "fulfilled" ? breakdownRes.value.data : null;
+        const reviewDataRes = reviewRes.status === "fulfilled" ? reviewRes.value.data : null;
 
-        setTodayOrdersCount(incomeRes.data.orderCount ?? 0);
-        setTotalReviewsCount(scoreRes.data.totalReviews ?? 0);
+        setNum(`${numData?.numWork ?? 0} รายการ`);
+        setScore(`${scoreData?.score ?? 0.0} / 5.0`);
+        setIncome(`${incomeData?.income ?? 0} บาท`);
 
-        setOrders(ordersRes.data ?? []);
+        setTodayOrdersCount(incomeData?.orderCount ?? 0);
+        setTotalReviewsCount(scoreData?.totalReviews ?? 0);
+
+        setOrders(ordersData ?? []);
         setFinancialData(
-          financeRes.data ?? {
+          financeDataRes ?? {
             totalGross: 0,
             totalFee: 0,
             totalNet: 0,
@@ -151,7 +160,7 @@ export default function ShopPage() {
           }
         );
         setBreakdownData(
-          breakdownRes.data ?? {
+          breakdownDataRes ?? {
             total: 0,
             counts: {},
             orders: [],
@@ -159,7 +168,7 @@ export default function ShopPage() {
           }
         );
         setReviewData(
-          reviewRes.data ?? { reviews: [], complaints: [] }
+          reviewDataRes ?? { reviews: [], complaints: [] }
         );
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
@@ -192,7 +201,6 @@ export default function ShopPage() {
     };
   }, [fetchDashboardData]);
 
-  // ส่ง orderId (UUID) ในการนำทาง
   const handleOrderClick = (orderId: string) => {
     router.push(`/shop/detail/${orderId}`);
   };

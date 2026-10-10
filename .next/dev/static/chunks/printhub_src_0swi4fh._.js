@@ -92,7 +92,8 @@ function ShopPage() {
                 const headers = {
                     shop_id: shopId
                 };
-                const [numRes, scoreRes, incomeRes, ordersRes, financeRes, breakdownRes, reviewRes] = await Promise.all([
+                // ใช้ Promise.allSettled เพื่อป้องกัน API บางตัวพังหรือส่งค่า null กลับมาแล้วทำให้แอปพังทั้งหน้า
+                const [numRes, scoreRes, incomeRes, ordersRes, financeRes, breakdownRes, reviewRes] = await Promise.allSettled([
                     __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$axios$2f$lib$2f$axios$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"].get("http://localhost:5000/shop/numWork", {
                         headers
                     }),
@@ -115,13 +116,20 @@ function ShopPage() {
                         headers
                     })
                 ]);
-                setNum(`${numRes.data.numWork ?? 0} รายการ`);
-                setScore(`${scoreRes.data.score ?? 0.0} / 5.0`);
-                setIncome(`${incomeRes.data.income ?? 0} บาท`);
-                setTodayOrdersCount(incomeRes.data.orderCount ?? 0);
-                setTotalReviewsCount(scoreRes.data.totalReviews ?? 0);
-                setOrders(ordersRes.data ?? []);
-                setFinancialData(financeRes.data ?? {
+                const numData = numRes.status === "fulfilled" ? numRes.value.data : null;
+                const scoreData = scoreRes.status === "fulfilled" ? scoreRes.value.data : null;
+                const incomeData = incomeRes.status === "fulfilled" ? incomeRes.value.data : null;
+                const ordersData = ordersRes.status === "fulfilled" ? ordersRes.value.data : null;
+                const financeDataRes = financeRes.status === "fulfilled" ? financeRes.value.data : null;
+                const breakdownDataRes = breakdownRes.status === "fulfilled" ? breakdownRes.value.data : null;
+                const reviewDataRes = reviewRes.status === "fulfilled" ? reviewRes.value.data : null;
+                setNum(`${numData?.numWork ?? 0} รายการ`);
+                setScore(`${scoreData?.score ?? 0.0} / 5.0`);
+                setIncome(`${incomeData?.income ?? 0} บาท`);
+                setTodayOrdersCount(incomeData?.orderCount ?? 0);
+                setTotalReviewsCount(scoreData?.totalReviews ?? 0);
+                setOrders(ordersData ?? []);
+                setFinancialData(financeDataRes ?? {
                     totalGross: 0,
                     totalFee: 0,
                     totalNet: 0,
@@ -133,7 +141,7 @@ function ShopPage() {
                         yearly: []
                     }
                 });
-                setBreakdownData(breakdownRes.data ?? {
+                setBreakdownData(breakdownDataRes ?? {
                     total: 0,
                     counts: {},
                     orders: [],
@@ -144,7 +152,7 @@ function ShopPage() {
                         yearly: []
                     }
                 });
-                setReviewData(reviewRes.data ?? {
+                setReviewData(reviewDataRes ?? {
                     reviews: [],
                     complaints: []
                 });
@@ -193,7 +201,6 @@ function ShopPage() {
     }["ShopPage.useEffect"], [
         fetchDashboardData
     ]);
-    // ส่ง orderId (UUID) ในการนำทาง
     const handleOrderClick = (orderId)=>{
         router.push(`/shop/detail/${orderId}`);
     };
@@ -207,7 +214,7 @@ function ShopPage() {
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$src$2f$component$2f$shop$2f$navbar$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {}, void 0, false, {
                 fileName: "[project]/printhub/src/app/shop/page.tsx",
-                lineNumber: 206,
+                lineNumber: 214,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -218,7 +225,7 @@ function ShopPage() {
                         children: "ผลการดำเนินงานด้านคำสั่งพิมพ์"
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/app/shop/page.tsx",
-                        lineNumber: 209,
+                        lineNumber: 217,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -233,7 +240,7 @@ function ShopPage() {
                                 onClick: ()=>setActiveView(activeView === "orders" ? null : "orders")
                             }, void 0, false, {
                                 fileName: "[project]/printhub/src/app/shop/page.tsx",
-                                lineNumber: 215,
+                                lineNumber: 223,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$src$2f$component$2f$shop$2f$dashboard$2d$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -245,7 +252,7 @@ function ShopPage() {
                                 onClick: ()=>setActiveView(activeView === "financial" ? null : "financial")
                             }, void 0, false, {
                                 fileName: "[project]/printhub/src/app/shop/page.tsx",
-                                lineNumber: 224,
+                                lineNumber: 232,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$src$2f$component$2f$shop$2f$dashboard$2d$card$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"], {
@@ -257,13 +264,13 @@ function ShopPage() {
                                 onClick: ()=>setActiveView(activeView === "reviews" ? null : "reviews")
                             }, void 0, false, {
                                 fileName: "[project]/printhub/src/app/shop/page.tsx",
-                                lineNumber: 233,
+                                lineNumber: 241,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/printhub/src/app/shop/page.tsx",
-                        lineNumber: 214,
+                        lineNumber: 222,
                         columnNumber: 9
                     }, this),
                     activeView === "orders" && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -276,12 +283,12 @@ function ShopPage() {
                             onOrderClick: handleOrderClick
                         }, void 0, false, {
                             fileName: "[project]/printhub/src/app/shop/page.tsx",
-                            lineNumber: 246,
+                            lineNumber: 254,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/app/shop/page.tsx",
-                        lineNumber: 245,
+                        lineNumber: 253,
                         columnNumber: 11
                     }, this),
                     activeView === "financial" && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -295,12 +302,12 @@ function ShopPage() {
                             onOrderClick: handleOrderClick
                         }, void 0, false, {
                             fileName: "[project]/printhub/src/app/shop/page.tsx",
-                            lineNumber: 258,
+                            lineNumber: 266,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/app/shop/page.tsx",
-                        lineNumber: 257,
+                        lineNumber: 265,
                         columnNumber: 11
                     }, this),
                     activeView === "reviews" && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -311,12 +318,12 @@ function ShopPage() {
                             onOrderClick: handleOrderClick
                         }, void 0, false, {
                             fileName: "[project]/printhub/src/app/shop/page.tsx",
-                            lineNumber: 271,
+                            lineNumber: 279,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/app/shop/page.tsx",
-                        lineNumber: 270,
+                        lineNumber: 278,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -324,7 +331,7 @@ function ShopPage() {
                         children: "รายการคำสั่งพิมพ์วันนี้"
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/app/shop/page.tsx",
-                        lineNumber: 280,
+                        lineNumber: 288,
                         columnNumber: 9
                     }, this),
                     loading ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -332,7 +339,7 @@ function ShopPage() {
                         children: "กำลังโหลดข้อมูล..."
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/app/shop/page.tsx",
-                        lineNumber: 285,
+                        lineNumber: 293,
                         columnNumber: 11
                     }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3",
@@ -342,31 +349,31 @@ function ShopPage() {
                                 onUpdateStatus: handleStatusUpdated
                             }, item.id, false, {
                                 fileName: "[project]/printhub/src/app/shop/page.tsx",
-                                lineNumber: 292,
+                                lineNumber: 300,
                                 columnNumber: 17
                             }, this)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             className: "col-span-full py-8 text-center text-slate-500",
                             children: "ไม่มีรายการคำสั่งพิมพ์วันนี้"
                         }, void 0, false, {
                             fileName: "[project]/printhub/src/app/shop/page.tsx",
-                            lineNumber: 300,
+                            lineNumber: 308,
                             columnNumber: 15
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/app/shop/page.tsx",
-                        lineNumber: 289,
+                        lineNumber: 297,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/printhub/src/app/shop/page.tsx",
-                lineNumber: 208,
+                lineNumber: 216,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/printhub/src/app/shop/page.tsx",
-        lineNumber: 205,
+        lineNumber: 213,
         columnNumber: 5
     }, this);
 }
@@ -482,6 +489,9 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$
 var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$dollar$2d$sign$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__DollarSign$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/dollar-sign.mjs [app-client] (ecmascript) <export default as DollarSign>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$calendar$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Calendar$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/calendar.mjs [app-client] (ecmascript) <export default as Calendar>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$search$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Search$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/search.mjs [app-client] (ecmascript) <export default as Search>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$eye$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Eye$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/eye.mjs [app-client] (ecmascript) <export default as Eye>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$clock$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Clock$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/clock.mjs [app-client] (ecmascript) <export default as Clock>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$x$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__X$3e$__ = __turbopack_context__.i("[project]/printhub/node_modules/lucide-react/dist/esm/icons/x.mjs [app-client] (ecmascript) <export default as X>");
 ;
 var _s = __turbopack_context__.k.signature();
 "use client";
@@ -491,6 +501,22 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
     _s();
     const [timeframe, setTimeframe] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])("monthly");
     const [searchTerm, setSearchTerm] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])("");
+    const [slip, setSlip] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
+    // ปิดหน้าต่างสลิปด้วยปุ่ม Esc
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
+        "FinancialTable.useEffect": ()=>{
+            if (!slip) return;
+            const onKey = {
+                "FinancialTable.useEffect.onKey": (e)=>e.key === "Escape" && setSlip(null)
+            }["FinancialTable.useEffect.onKey"];
+            window.addEventListener("keydown", onKey);
+            return ({
+                "FinancialTable.useEffect": ()=>window.removeEventListener("keydown", onKey)
+            })["FinancialTable.useEffect"];
+        }
+    }["FinancialTable.useEffect"], [
+        slip
+    ]);
     const defaultLayout = {
         daily: [
             "จ.",
@@ -535,10 +561,71 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
     const maxAmount = Math.max(...currentChartData.map((d)=>d.amount), 1);
     const filteredTransactions = transactions.filter((t)=>{
         const orderNoStr = t.order_no ? String(t.order_no) : t.id;
-        const matchId = orderNoStr.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchCustomer = t.customer_name.toLowerCase().includes(searchTerm.toLowerCase());
-        return matchId || matchCustomer;
+        return orderNoStr.toLowerCase().includes(searchTerm.toLowerCase());
     });
+    // ใช้ colgroup เดียวกันทั้งหัวตารางและตัวตาราง เพื่อให้คอลัมน์ตรงกัน
+    const Cols = ()=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("colgroup", {
+            children: [
+                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("col", {
+                    style: {
+                        width: "17%"
+                    }
+                }, void 0, false, {
+                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                    lineNumber: 73,
+                    columnNumber: 7
+                }, this),
+                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("col", {
+                    style: {
+                        width: "17%"
+                    }
+                }, void 0, false, {
+                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                    lineNumber: 74,
+                    columnNumber: 7
+                }, this),
+                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("col", {
+                    style: {
+                        width: "16%"
+                    }
+                }, void 0, false, {
+                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                    lineNumber: 75,
+                    columnNumber: 7
+                }, this),
+                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("col", {
+                    style: {
+                        width: "18%"
+                    }
+                }, void 0, false, {
+                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                    lineNumber: 76,
+                    columnNumber: 7
+                }, this),
+                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("col", {
+                    style: {
+                        width: "16%"
+                    }
+                }, void 0, false, {
+                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                    lineNumber: 77,
+                    columnNumber: 7
+                }, this),
+                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("col", {
+                    style: {
+                        width: "16%"
+                    }
+                }, void 0, false, {
+                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                    lineNumber: 78,
+                    columnNumber: 7
+                }, this)
+            ]
+        }, void 0, true, {
+            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+            lineNumber: 72,
+            columnNumber: 5
+        }, this);
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
         className: "rounded-2xl border border-slate-100 bg-white p-6 shadow-sm",
         children: [
@@ -550,7 +637,7 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                         children: "สรุปการเงินและค่าธรรมเนียม"
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                        lineNumber: 65,
+                        lineNumber: 85,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -558,13 +645,13 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                         children: "รายละเอียดรายได้ ยอดหักค่าธรรมเนียมแพลตฟอร์ม และยอดรับสุทธิ"
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                        lineNumber: 68,
+                        lineNumber: 88,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                lineNumber: 64,
+                lineNumber: 84,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -580,104 +667,12 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                         className: "h-4 w-4"
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 76,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-xs font-semibold",
-                                        children: "ยอดขายรวม (Gross)"
-                                    }, void 0, false, {
-                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 77,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 75,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                className: "mt-2 text-xl font-bold text-slate-800",
-                                children: [
-                                    "฿",
-                                    totalGross.toLocaleString("th-TH", {
-                                        minimumFractionDigits: 2
-                                    })
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 79,
-                                columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                        lineNumber: 74,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "rounded-xl border border-amber-100 bg-amber-50/30 p-4",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center gap-2 text-amber-700",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$dollar$2d$sign$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__DollarSign$3e$__["DollarSign"], {
-                                        className: "h-4 w-4"
-                                    }, void 0, false, {
-                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 86,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                        className: "text-xs font-semibold",
-                                        children: "หักค่าธรรมเนียม"
-                                    }, void 0, false, {
-                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 87,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 85,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                className: "mt-2 text-xl font-bold text-amber-600",
-                                children: [
-                                    "-฿",
-                                    totalFee.toLocaleString("th-TH", {
-                                        minimumFractionDigits: 2
-                                    })
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 89,
-                                columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                        lineNumber: 84,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "rounded-xl border border-emerald-100 bg-emerald-50/30 p-4",
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center gap-2 text-emerald-700",
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$trending$2d$up$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__TrendingUp$3e$__["TrendingUp"], {
-                                        className: "h-4 w-4"
-                                    }, void 0, false, {
-                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
                                         lineNumber: 96,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                         className: "text-xs font-semibold",
-                                        children: "รายได้สุทธิที่ได้รับ"
+                                        children: "ยอดขายรวม (Gross)"
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
                                         lineNumber: 97,
@@ -690,10 +685,10 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                className: "mt-2 text-xl font-bold text-emerald-600",
+                                className: "mt-2 text-xl font-bold text-slate-800",
                                 children: [
                                     "฿",
-                                    totalNet.toLocaleString("th-TH", {
+                                    totalGross.toLocaleString("th-TH", {
                                         minimumFractionDigits: 2
                                     })
                                 ]
@@ -707,11 +702,103 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
                         lineNumber: 94,
                         columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "rounded-xl border border-amber-100 bg-amber-50/30 p-4",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "flex items-center gap-2 text-amber-700",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$dollar$2d$sign$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__DollarSign$3e$__["DollarSign"], {
+                                        className: "h-4 w-4"
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                        lineNumber: 106,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                        className: "text-xs font-semibold",
+                                        children: "หักค่าธรรมเนียม"
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                        lineNumber: 107,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                lineNumber: 105,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                className: "mt-2 text-xl font-bold text-amber-600",
+                                children: [
+                                    "-฿",
+                                    totalFee.toLocaleString("th-TH", {
+                                        minimumFractionDigits: 2
+                                    })
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                lineNumber: 109,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                        lineNumber: 104,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                        className: "rounded-xl border border-emerald-100 bg-emerald-50/30 p-4",
+                        children: [
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "flex items-center gap-2 text-emerald-700",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$trending$2d$up$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__TrendingUp$3e$__["TrendingUp"], {
+                                        className: "h-4 w-4"
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                        lineNumber: 116,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                        className: "text-xs font-semibold",
+                                        children: "รายได้สุทธิที่ได้รับ"
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                        lineNumber: 117,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                lineNumber: 115,
+                                columnNumber: 11
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                className: "mt-2 text-xl font-bold text-emerald-600",
+                                children: [
+                                    "฿",
+                                    totalNet.toLocaleString("th-TH", {
+                                        minimumFractionDigits: 2
+                                    })
+                                ]
+                            }, void 0, true, {
+                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                lineNumber: 119,
+                                columnNumber: 11
+                            }, this)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                        lineNumber: 114,
+                        columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                lineNumber: 73,
+                lineNumber: 93,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -727,7 +814,7 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                         className: "h-4 w-4 text-emerald-600"
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 108,
+                                        lineNumber: 128,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -735,13 +822,13 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                         children: "กราฟแนวโน้มรายได้สุทธิ (บาท)"
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 109,
+                                        lineNumber: 129,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 107,
+                                lineNumber: 127,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -753,7 +840,7 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                         children: "รายวัน"
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 115,
+                                        lineNumber: 135,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -762,7 +849,7 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                         children: "รายสัปดาห์"
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 123,
+                                        lineNumber: 143,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -771,19 +858,19 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                         children: "รายเดือน"
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 131,
+                                        lineNumber: 151,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 114,
+                                lineNumber: 134,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                        lineNumber: 106,
+                        lineNumber: 126,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -798,7 +885,7 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                         children: item.amount > 0 ? `฿${item.amount.toLocaleString()}` : "0"
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 148,
+                                        lineNumber: 168,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -810,12 +897,12 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                             className: `w-full max-w-[20px] rounded-md transition-all duration-300 ${item.amount > 0 ? "bg-emerald-500 hover:bg-emerald-600 shadow-sm" : "bg-slate-200"}`
                                         }, void 0, false, {
                                             fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                            lineNumber: 152,
+                                            lineNumber: 172,
                                             columnNumber: 19
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 151,
+                                        lineNumber: 171,
                                         columnNumber: 17
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -824,25 +911,25 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                         children: item.label
                                     }, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 159,
+                                        lineNumber: 179,
                                         columnNumber: 17
                                     }, this)
                                 ]
                             }, idx, true, {
                                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 147,
+                                lineNumber: 167,
                                 columnNumber: 15
                             }, this);
                         })
                     }, void 0, false, {
                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                        lineNumber: 142,
+                        lineNumber: 162,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                lineNumber: 105,
+                lineNumber: 125,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -855,224 +942,363 @@ function FinancialTable({ totalGross, totalFee, totalNet, transactions, financia
                                 className: "absolute left-3 top-2.5 h-4 w-4 text-slate-400"
                             }, void 0, false, {
                                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 171,
+                                lineNumber: 191,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
                                 type: "text",
-                                placeholder: "ค้นหา Order ID หรือชื่อลูกค้า...",
+                                placeholder: "ค้นหาเลขออเดอร์...",
                                 value: searchTerm,
                                 onChange: (e)=>setSearchTerm(e.target.value),
                                 className: "w-full rounded-xl border border-slate-200 pl-9 pr-4 py-2 text-xs text-slate-700 outline-none focus:border-emerald-500"
                             }, void 0, false, {
                                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 172,
+                                lineNumber: 192,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                        lineNumber: 170,
+                        lineNumber: 190,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "rounded-xl border border-slate-100 overflow-hidden",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("table", {
-                                className: "w-full text-left text-xs",
-                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("thead", {
-                                    className: "bg-slate-50 text-slate-500 sticky top-0 z-10",
-                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
-                                        children: [
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                                className: "p-3",
-                                                children: "ออเดอร์"
-                                            }, void 0, false, {
-                                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                lineNumber: 185,
-                                                columnNumber: 17
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                                className: "p-3",
-                                                children: "วันที่/เวลา"
-                                            }, void 0, false, {
-                                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                lineNumber: 186,
-                                                columnNumber: 17
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                                className: "p-3",
-                                                children: "ลูกค้า"
-                                            }, void 0, false, {
-                                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                lineNumber: 187,
-                                                columnNumber: 17
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                                className: "p-3 text-right",
-                                                children: "ยอดเต็ม"
-                                            }, void 0, false, {
-                                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                lineNumber: 188,
-                                                columnNumber: 17
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                                className: "p-3 text-right",
-                                                children: "ค่าธรรมเนียม"
-                                            }, void 0, false, {
-                                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                lineNumber: 189,
-                                                columnNumber: 17
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                                className: "p-3 text-right",
-                                                children: "รับสุทธิ"
-                                            }, void 0, false, {
-                                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                lineNumber: 190,
-                                                columnNumber: 17
-                                            }, this)
-                                        ]
-                                    }, void 0, true, {
+                                className: "w-full table-fixed text-left text-xs",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Cols, {}, void 0, false, {
                                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 184,
-                                        columnNumber: 15
+                                        lineNumber: 203,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("thead", {
+                                        className: "bg-slate-50 text-slate-500 sticky top-0 z-10",
+                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                    className: "p-3",
+                                                    children: "ออเดอร์"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                    lineNumber: 206,
+                                                    columnNumber: 17
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                    className: "p-3",
+                                                    children: "วันที่/เวลา"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                    lineNumber: 207,
+                                                    columnNumber: 17
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                    className: "p-3 text-right",
+                                                    children: "ยอดเต็ม"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                    lineNumber: 208,
+                                                    columnNumber: 17
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                    className: "p-3 text-right",
+                                                    children: "ค่าธรรมเนียม"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                    lineNumber: 209,
+                                                    columnNumber: 17
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                    className: "p-3 text-right",
+                                                    children: "รับสุทธิ"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                    lineNumber: 210,
+                                                    columnNumber: 17
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
+                                                    className: "p-3 text-center",
+                                                    children: "สถานะการโอน"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                    lineNumber: 211,
+                                                    columnNumber: 17
+                                                }, this)
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                            lineNumber: 205,
+                                            columnNumber: 15
+                                        }, this)
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                        lineNumber: 204,
+                                        columnNumber: 13
                                     }, this)
-                                }, void 0, false, {
-                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                    lineNumber: 183,
-                                    columnNumber: 13
-                                }, this)
-                            }, void 0, false, {
+                                ]
+                            }, void 0, true, {
                                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 182,
+                                lineNumber: 202,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: "max-h-[180px] overflow-y-auto",
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("table", {
-                                    className: "w-full text-left text-xs",
-                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
-                                        className: "divide-y divide-slate-100 bg-white text-slate-700",
-                                        children: filteredTransactions.length > 0 ? filteredTransactions.map((t)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
-                                                onClick: ()=>onOrderClick(t.id),
-                                                className: "cursor-pointer hover:bg-slate-50",
-                                                children: [
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        className: "p-3 font-semibold text-slate-800",
-                                                        children: [
-                                                            "#",
-                                                            t.order_no || t.id.slice(0, 8)
-                                                        ]
-                                                    }, void 0, true, {
-                                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                        lineNumber: 206,
-                                                        columnNumber: 23
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        className: "p-3 text-slate-400",
-                                                        children: new Date(t.date).toLocaleDateString("th-TH")
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                        lineNumber: 209,
-                                                        columnNumber: 23
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        className: "p-3",
-                                                        children: t.customer_name
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                        lineNumber: 210,
-                                                        columnNumber: 23
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        className: "p-3 text-right font-medium",
-                                                        children: [
-                                                            "฿",
-                                                            t.gross.toFixed(2)
-                                                        ]
-                                                    }, void 0, true, {
-                                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                        lineNumber: 211,
-                                                        columnNumber: 23
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        className: "p-3 text-right text-amber-600",
-                                                        children: [
-                                                            "-฿",
-                                                            t.fee.toFixed(2)
-                                                        ]
-                                                    }, void 0, true, {
-                                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                        lineNumber: 212,
-                                                        columnNumber: 23
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                        className: "p-3 text-right font-bold text-emerald-600",
-                                                        children: [
-                                                            "฿",
-                                                            t.net.toFixed(2)
-                                                        ]
-                                                    }, void 0, true, {
-                                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                        lineNumber: 213,
-                                                        columnNumber: 23
-                                                    }, this)
-                                                ]
-                                            }, t.id, true, {
-                                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                lineNumber: 201,
-                                                columnNumber: 21
-                                            }, this)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
-                                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                colSpan: 6,
-                                                className: "py-8 text-center text-slate-400",
-                                                children: "ยังไม่มีประวัติรายการการเงิน"
+                                    className: "w-full table-fixed text-left text-xs",
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Cols, {}, void 0, false, {
+                                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                            lineNumber: 219,
+                                            columnNumber: 15
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
+                                            className: "divide-y divide-slate-100 bg-white text-slate-700",
+                                            children: filteredTransactions.length > 0 ? filteredTransactions.map((t)=>{
+                                                const orderLabel = `#${t.order_no || t.id.slice(0, 8)}`;
+                                                return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                    onClick: ()=>onOrderClick(t.id),
+                                                    className: "cursor-pointer hover:bg-slate-50",
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "p-3 font-semibold text-slate-800",
+                                                            children: orderLabel
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                            lineNumber: 230,
+                                                            columnNumber: 25
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "p-3 text-slate-400",
+                                                            children: new Date(t.date).toLocaleDateString("th-TH")
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                            lineNumber: 231,
+                                                            columnNumber: 25
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "p-3 text-right font-medium",
+                                                            children: [
+                                                                "฿",
+                                                                t.gross.toFixed(2)
+                                                            ]
+                                                        }, void 0, true, {
+                                                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                            lineNumber: 232,
+                                                            columnNumber: 25
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "p-3 text-right text-amber-600",
+                                                            children: [
+                                                                "-฿",
+                                                                t.fee.toFixed(2)
+                                                            ]
+                                                        }, void 0, true, {
+                                                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                            lineNumber: 233,
+                                                            columnNumber: 25
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "p-3 text-right font-bold text-emerald-600",
+                                                            children: [
+                                                                "฿",
+                                                                t.net.toFixed(2)
+                                                            ]
+                                                        }, void 0, true, {
+                                                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                            lineNumber: 234,
+                                                            columnNumber: 25
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                            className: "p-3 text-center",
+                                                            children: t.payout_slip_url ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                                onClick: (e)=>{
+                                                                    e.stopPropagation(); // ไม่ให้เปิดหน้า order detail
+                                                                    setSlip({
+                                                                        url: t.payout_slip_url,
+                                                                        orderLabel
+                                                                    });
+                                                                },
+                                                                className: "inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-100",
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$eye$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Eye$3e$__["Eye"], {
+                                                                        className: "h-3.5 w-3.5",
+                                                                        "aria-hidden": "true"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                                        lineNumber: 244,
+                                                                        columnNumber: 31
+                                                                    }, this),
+                                                                    "ดูสลิป"
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                                lineNumber: 237,
+                                                                columnNumber: 29
+                                                            }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                className: "inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700",
+                                                                children: [
+                                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$clock$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Clock$3e$__["Clock"], {
+                                                                        className: "h-3.5 w-3.5",
+                                                                        "aria-hidden": "true"
+                                                                    }, void 0, false, {
+                                                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                                        lineNumber: 249,
+                                                                        columnNumber: 31
+                                                                    }, this),
+                                                                    "กำลังดำเนินการ"
+                                                                ]
+                                                            }, void 0, true, {
+                                                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                                lineNumber: 248,
+                                                                columnNumber: 29
+                                                            }, this)
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                            lineNumber: 235,
+                                                            columnNumber: 25
+                                                        }, this)
+                                                    ]
+                                                }, t.id, true, {
+                                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                    lineNumber: 225,
+                                                    columnNumber: 23
+                                                }, this);
+                                            }) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
+                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                    colSpan: 6,
+                                                    className: "py-8 text-center text-slate-400",
+                                                    children: "ยังไม่มีประวัติรายการการเงิน"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                                    lineNumber: 259,
+                                                    columnNumber: 21
+                                                }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                                lineNumber: 218,
-                                                columnNumber: 21
+                                                lineNumber: 258,
+                                                columnNumber: 19
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                            lineNumber: 217,
-                                            columnNumber: 19
+                                            lineNumber: 220,
+                                            columnNumber: 15
                                         }, this)
-                                    }, void 0, false, {
-                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                        lineNumber: 198,
-                                        columnNumber: 15
-                                    }, this)
-                                }, void 0, false, {
+                                    ]
+                                }, void 0, true, {
                                     fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                    lineNumber: 197,
+                                    lineNumber: 218,
                                     columnNumber: 13
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                                lineNumber: 196,
+                                lineNumber: 217,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                        lineNumber: 181,
+                        lineNumber: 201,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-                lineNumber: 169,
+                lineNumber: 189,
                 columnNumber: 7
+            }, this),
+            slip && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                role: "dialog",
+                "aria-modal": "true",
+                "aria-label": `สลิปการโอนเงิน ออเดอร์ ${slip.orderLabel}`,
+                className: "fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4",
+                onClick: ()=>setSlip(null),
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                    className: "relative flex max-h-[92vh] w-full max-w-2xl flex-col rounded-2xl bg-white p-5 shadow-xl",
+                    onClick: (e)=>e.stopPropagation(),
+                    children: [
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "mb-3 flex items-center justify-between",
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                    className: "text-sm font-bold text-[#0F2942]",
+                                    children: [
+                                        "สลิปการโอนเงิน ",
+                                        slip.orderLabel
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                    lineNumber: 284,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                    onClick: ()=>setSlip(null),
+                                    "aria-label": "ปิด",
+                                    className: "rounded-lg p-1 text-slate-500 hover:bg-slate-100",
+                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$x$2e$mjs__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__X$3e$__["X"], {
+                                        className: "h-4 w-4"
+                                    }, void 0, false, {
+                                        fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                        lineNumber: 292,
+                                        columnNumber: 17
+                                    }, this)
+                                }, void 0, false, {
+                                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                    lineNumber: 287,
+                                    columnNumber: 15
+                                }, this)
+                            ]
+                        }, void 0, true, {
+                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                            lineNumber: 283,
+                            columnNumber: 13
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "min-h-0 flex-1 overflow-auto rounded-xl border border-slate-100 bg-slate-50 p-2",
+                            children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("img", {
+                                src: slip.url,
+                                alt: `สลิปการโอนเงิน ${slip.orderLabel}`,
+                                className: "mx-auto max-h-[78vh] w-auto max-w-full object-contain"
+                            }, void 0, false, {
+                                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                                lineNumber: 297,
+                                columnNumber: 15
+                            }, this)
+                        }, void 0, false, {
+                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                            lineNumber: 295,
+                            columnNumber: 13
+                        }, this),
+                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$printhub$2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("a", {
+                            href: slip.url,
+                            target: "_blank",
+                            rel: "noopener noreferrer",
+                            className: "mt-3 self-center text-xs font-medium text-[#2f6fed] hover:underline",
+                            children: "เปิดรูปเต็มในแท็บใหม่"
+                        }, void 0, false, {
+                            fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                            lineNumber: 303,
+                            columnNumber: 13
+                        }, this)
+                    ]
+                }, void 0, true, {
+                    fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                    lineNumber: 279,
+                    columnNumber: 11
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
+                lineNumber: 272,
+                columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/printhub/src/component/shop/financial-table.tsx",
-        lineNumber: 63,
+        lineNumber: 83,
         columnNumber: 5
     }, this);
 }
-_s(FinancialTable, "toIPrhWhU+tjA3LqpFXnSHuWoo4=");
+_s(FinancialTable, "daiGr0uSowdva+tLDA6gByNzceY=");
 _c = FinancialTable;
 var _c;
 __turbopack_context__.k.register(_c, "FinancialTable");
