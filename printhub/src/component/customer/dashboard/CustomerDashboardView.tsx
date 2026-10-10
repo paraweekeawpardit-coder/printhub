@@ -7,7 +7,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Printer, CheckCircle2, Loader2, Check } from "lucide-react";
 
 import DashboardWelcomeBanner from "./DashboardWelcomeBanner";
@@ -40,6 +40,9 @@ export default function CustomerDashboardView({
   pageTitle,
 }: CustomerDashboardViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const highlightOrderId = searchParams.get("highlight");
+
   const [activeTab, setActiveTab] = useState<"orders" | "reports">("orders");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState("ทั้งหมด");
   const [loading, setLoading] = useState(true);
@@ -81,7 +84,7 @@ export default function CustomerDashboardView({
     return isNaN(parsed) ? null : parsed;
   };
 
-  // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์ (จุดตรวจจับสถานะจุดเดียวของทั้งระบบ)
+  // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์
   const getRealOrderState = (o: any) => {
     if (!o) return "รอการดำเนินงาน";
 
@@ -92,7 +95,6 @@ export default function CustomerDashboardView({
       (typeof o.status === "string" ? o.status : null) ||
       "";
 
-    // 1. ถ้าระบุชัดเจนว่าเป็นยกเลิก ให้ยึดเป็นยกเลิกทันที
     if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก") {
       return "ยกเลิกการพิมพ์";
     }
@@ -101,7 +103,6 @@ export default function CustomerDashboardView({
     const paymentData = Array.isArray(o?.payment) ? o.payment[0] : o?.payment;
     const isSlipRejected = paymentData?.is_verified === false || paymentData?.status === "rejected";
 
-    // 2. เช็คการหมดเวลาชำระเงิน
     let isExpired = false;
     const expiresAtMs = parseSafeTime(o?.expires_at);
     const orderDateMs = parseSafeTime(o?.order_date);
@@ -112,12 +113,10 @@ export default function CustomerDashboardView({
       isExpired = now > (orderDateMs + 10 * 60 * 1000);
     }
 
-    // 🌟 หมดเวลาชำระเงินแล้ว -> ต้องตัดเข้า "ยกเลิกการพิมพ์" ทันที ห้ามค้างที่รอชำระเงิน
     if (isExpired) {
       return "ยกเลิกการพิมพ์";
     }
 
-    // 3. ตรวจสอบกรณีเลยเวลานัดรับงาน (S2G7 Auto-Cancel)
     const appointmentMs = parseSafeTime(o?.appointment_time);
     if (appointmentMs && now >= appointmentMs) {
       if (dbState === "รอการดำเนินงาน" || dbState === "กำลังพิมพ์") {
@@ -125,7 +124,6 @@ export default function CustomerDashboardView({
       }
     }
 
-    // 4. สลิปถูกปฏิเสธ แต่ยังไม่หมดเวลา -> ให้แสดงในแท็บ "รอการชำระเงิน"
     if (isSlipRejected) {
       return "รอการชำระเงิน";
     }
@@ -162,6 +160,40 @@ export default function CustomerDashboardView({
     }
     fetchDashboardData(cid);
   }, [router, fetchDashboardData]);
+
+  // 🟢 ปรับกรอบไฮไลต์ให้เส้นบางลง (ring-2) และสีเข้มขึ้น (ring-blue-600)
+  useEffect(() => {
+    if (!loading && highlightOrderId && orders.length > 0) {
+      const targetOrder = orders.find((o) => String(o.id) === String(highlightOrderId));
+      if (targetOrder) {
+        setTimeout(() => {
+          const element = document.getElementById(`order-${highlightOrderId}`);
+          if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
+
+            // 🟢 เปลี่ยนคลาสเป็น ring-2 (เส้นบางลง) และ ring-blue-600 (สีเข้มขึ้น)
+            element.classList.add(
+              "ring-2",
+              "ring-blue-600",
+              "ring-offset-2",
+              "shadow-xl",
+              "transition-all",
+              "duration-300"
+            );
+
+            setTimeout(() => {
+              element.classList.remove(
+                "ring-2",
+                "ring-blue-600",
+                "ring-offset-2",
+                "shadow-xl"
+              );
+            }, 3500);
+          }
+        }, 300);
+      }
+    }
+  }, [loading, highlightOrderId, orders]);
 
   // คำนวณจำนวนออเดอร์ในแต่ละสถานะ
   const statusCounts = useMemo(() => {
@@ -351,36 +383,37 @@ export default function CustomerDashboardView({
           ) : (
             <div className="space-y-3">
               {filteredOrders.map((order) => (
-                <CustomerOrderCard
-                  key={order.id}
-                  order={order}
-                  showOrderDate={true}
-                  isExpanded={expandedOrderId === order.id}
-                  onToggleExpand={() =>
-                    setExpandedOrderId(expandedOrderId === order.id ? null : order.id)
-                  }
-                  onCancelClick={(orderId, orderNo) =>
-                    setConfirmModal({
-                      isOpen: true,
-                      type: "cancel",
-                      orderId,
-                      orderNo,
-                    })
-                  }
-                  onReceivedClick={(orderId, orderNo) =>
-                    setConfirmModal({
-                      isOpen: true,
-                      type: "received",
-                      orderId,
-                      orderNo,
-                    })
-                  }
-                  onReportClick={(ord) => {
-                    setSelectedOrderForReport(ord);
-                    setIsReportModalOpen(true);
-                  }}
-                  onShowToast={showToast}
-                />
+                <div key={order.id} id={`order-${order.id}`} className="transition-all rounded-3xl">
+                  <CustomerOrderCard
+                    order={order}
+                    showOrderDate={true}
+                    isExpanded={expandedOrderId === order.id}
+                    onToggleExpand={() =>
+                      setExpandedOrderId(expandedOrderId === order.id ? null : order.id)
+                    }
+                    onCancelClick={(orderId, orderNo) =>
+                      setConfirmModal({
+                        isOpen: true,
+                        type: "cancel",
+                        orderId,
+                        orderNo,
+                      })
+                    }
+                    onReceivedClick={(orderId, orderNo) =>
+                      setConfirmModal({
+                        isOpen: true,
+                        type: "received",
+                        orderId,
+                        orderNo,
+                      })
+                    }
+                    onReportClick={(ord) => {
+                      setSelectedOrderForReport(ord);
+                      setIsReportModalOpen(true);
+                    }}
+                    onShowToast={showToast}
+                  />
+                </div>
               ))}
             </div>
           )

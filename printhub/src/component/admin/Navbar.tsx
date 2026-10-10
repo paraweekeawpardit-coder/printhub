@@ -3,27 +3,18 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-
-interface Notification {
-  _id: string;
-  title: string;
-  message: string;
-  createdAt: string;
-  isRead: boolean;
-}
+import NotificationBell from "@/component/NotificationBell"; // 🟢 เรียกใช้ NotificationBell ที่รองรับ admin
 
 export default function AdminNavbar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showFinanceMenu, setShowFinanceMenu] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const [adminName, setAdminName] = useState<string>("Admin");
   const [adminAvatar, setAdminAvatar] = useState<string>("");
+  const [adminId, setAdminId] = useState<string>("admin");
 
   if (pathname === "/admin/login") {
     return null;
@@ -36,12 +27,14 @@ export default function AdminNavbar() {
         const parsed = JSON.parse(storedUser);
         if (parsed.name) setAdminName(parsed.name);
         if (parsed.avatar) setAdminAvatar(parsed.avatar);
+        if (parsed.id) setAdminId(parsed.id);
       } catch (e) {
         console.error("Error parsing user data", e);
       }
     } else {
       setAdminName("Admin");
       setAdminAvatar("");
+      setAdminId("admin");
     }
   };
 
@@ -75,6 +68,7 @@ export default function AdminNavbar() {
           if (data && data.name) {
             setAdminName(data.name);
             setAdminAvatar(data.avatar || "");
+            if (data.id) setAdminId(data.id);
 
             const currentUser = JSON.parse(
               localStorage.getItem("user") || "{}"
@@ -85,6 +79,7 @@ export default function AdminNavbar() {
                 ...currentUser,
                 name: data.name,
                 avatar: data.avatar || "",
+                id: data.id || currentUser.id,
               })
             );
           }
@@ -96,30 +91,6 @@ export default function AdminNavbar() {
     return () => {
       window.removeEventListener("userProfileUpdated", loadUserData);
     };
-  }, [pathname]);
-
-  const fetchNotifications = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    try {
-      setLoading(true);
-      const res = await fetch("http://localhost:5000/api/admin/notifications", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(data);
-      }
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchNotifications();
   }, [pathname]);
 
   const handleLogout = async () => {
@@ -144,7 +115,6 @@ export default function AdminNavbar() {
     }
   };
 
-  const hasUnread = notifications.some((n) => !n.isRead);
   const isFinanceActive = pathname === "/admin/slips" || pathname === "/admin/refunds";
 
   return (
@@ -162,7 +132,7 @@ export default function AdminNavbar() {
         </span>
       </Link>
 
-      {/* Nav Links - คลีนและเป็นระเบียบ */}
+      {/* Nav Links */}
       <div className="flex h-full items-center gap-6 mx-4">
         {/* แดชบอร์ด */}
         <Link
@@ -209,7 +179,22 @@ export default function AdminNavbar() {
           )}
         </Link>
 
-        {/* เมนูการเงิน (Dropdown รวมสลิปและโอนเงินคืน) */}
+        {/* รับเรื่องช่วยเหลือ */}
+        <Link
+          href="/admin/support"
+          className={`relative flex h-full items-center gap-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+            pathname === "/admin/support"
+              ? "text-white font-semibold"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          รับเรื่องช่วยเหลือ
+          {pathname === "/admin/support" && (
+            <span className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-t-sm bg-sky-400" />
+          )}
+        </Link>
+
+        {/* เมนูการเงิน */}
         <div
           className="relative flex h-full items-center cursor-pointer"
           onMouseEnter={() => setShowFinanceMenu(true)}
@@ -259,67 +244,9 @@ export default function AdminNavbar() {
 
       {/* Actions */}
       <div className="flex items-center gap-3 shrink-0">
-        {/* Notifications Button */}
-        <div className="relative">
-          <button
-            className="relative flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-all hover:bg-white/10 hover:text-white cursor-pointer"
-            aria-label="Notifications"
-            onClick={() => {
-              setShowNotifications(!showNotifications);
-              setShowProfileMenu(false);
-              if (!showNotifications) fetchNotifications();
-            }}
-          >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.8"
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-              />
-            </svg>
-            {hasUnread && (
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500" />
-            )}
-          </button>
-
-          {showNotifications && (
-            <div className="absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg z-50">
-              <div className="border-b border-slate-100 px-4 py-2.5 text-xs font-bold text-slate-500">
-                การแจ้งเตือน
-              </div>
-              <div className="max-h-60 overflow-y-auto">
-                {loading ? (
-                  <div className="p-4 text-center text-xs text-slate-400">
-                    กำลังโหลด...
-                  </div>
-                ) : notifications.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-slate-400">
-                    ไม่มีการแจ้งเตือนใหม่
-                  </div>
-                ) : (
-                  notifications.map((item) => (
-                    <div
-                      key={item._id}
-                      className={`border-b border-slate-50 p-3 text-xs ${
-                        !item.isRead ? "bg-sky-50/60" : ""
-                      }`}
-                    >
-                      <p className="font-semibold text-slate-800">
-                        {item.title}
-                      </p>
-                      <p className="mt-0.5 text-slate-500">{item.message}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
+        {/* 🟢 Notifications Button (ใช้ Component NotificationBell) */}
+        <div className="text-white">
+          <NotificationBell userId={adminId} role="admin" />
         </div>
 
         {/* Profile Button */}
@@ -328,7 +255,6 @@ export default function AdminNavbar() {
             className="flex items-center gap-2.5 p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer focus:outline-none"
             onClick={() => {
               setShowProfileMenu(!showProfileMenu);
-              setShowNotifications(false);
             }}
           >
             <span className="hidden lg:block text-xs font-semibold text-slate-200 pl-1">
