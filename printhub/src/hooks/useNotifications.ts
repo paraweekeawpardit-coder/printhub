@@ -7,6 +7,7 @@ export interface NotificationItem {
   id: string;
   customer_id?: string;
   shop_id?: string;
+  admin_id?: string;
   order_id?: string;
   title: string;
   message: string;
@@ -15,13 +16,24 @@ export interface NotificationItem {
   created_at: string;
 }
 
-export function useNotifications(userId: string | undefined, role: "customer" | "shop") {
+export function useNotifications(
+  userId: string | undefined, 
+  role: "customer" | "shop" | "admin"
+) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // 🟢 Helper กำหนดคอลัมน์ตาม role
+  const getColumnName = useCallback(() => {
+    if (role === "admin") return "admin_id";
+    if (role === "shop") return "shop_id";
+    return "customer_id";
+  }, [role]);
+
   const fetchNotifications = useCallback(async () => {
-    if (!userId || userId === "undefined" || userId === "null") {
+    // กรณี customer/shop แต่ไม่มี userId ให้เคลียร์ค่า
+    if (role !== "admin" && (!userId || userId === "undefined" || userId === "null")) {
       setNotifications([]);
       setUnreadCount(0);
       setLoading(false);
@@ -30,13 +42,21 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
 
     try {
       setLoading(true);
-      const columnCheck = role === "customer" ? "customer_id" : "shop_id";
+      const columnCheck = getColumnName();
 
-      const { data, error } = await supabase
+      let query = supabase
         .from("notifications")
         .select("*")
-        .eq(columnCheck, userId)
         .order("created_at", { ascending: false });
+
+      // ถ้าเป็น Admin และไม่มี userId เฉพาะเจาะจง ให้ดึงรายการทั้งหมดที่ admin_id ไม่เป็น null
+      if (role === "admin" && (!userId || userId === "admin" || userId === "undefined")) {
+        query = query.not("admin_id", "is", null);
+      } else {
+        query = query.eq(columnCheck, userId as string);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("Supabase notification fetch error:", error);
@@ -49,7 +69,7 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
     } finally {
       setLoading(false);
     }
-  }, [userId, role]);
+  }, [userId, role, getColumnName]);
 
   const markAsRead = async (id: string) => {
     try {
@@ -69,18 +89,25 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
     }
   };
 
-  // 🟢 ฟังก์ชันอัปเดตสถานะเป็น "อ่านแล้วทั้งหมด" ใน Supabase
+  // 🟢 ฟังก์ชันอัปเดตสถานะเป็น "อ่านแล้วทั้งหมด"
   const markAllAsRead = async () => {
-    if (!userId || unreadCount === 0) return;
+    if (unreadCount === 0) return;
 
     try {
-      const columnCheck = role === "customer" ? "customer_id" : "shop_id";
+      const columnCheck = getColumnName();
 
-      const { error } = await supabase
+      let query = supabase
         .from("notifications")
         .update({ is_read: true })
-        .eq(columnCheck, userId)
         .eq("is_read", false);
+
+      if (role === "admin" && (!userId || userId === "admin")) {
+        query = query.not("admin_id", "is", null);
+      } else {
+        query = query.eq(columnCheck, userId as string);
+      }
+
+      const { error } = await query;
 
       if (!error) {
         setNotifications((prev) =>
@@ -94,25 +121,31 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
   };
 
   useEffect(() => {
-    if (!userId || userId === "undefined" || userId === "null") return;
+    if (role !== "admin" && (!userId || userId === "undefined" || userId === "null")) return;
 
     fetchNotifications();
 
-    const columnCheck = role === "customer" ? "customer_id" : "shop_id";
+    const columnCheck = getColumnName();
+    const channelId = `noti_channel_${role}_${userId || "all"}`;
 
-    // Realtime listener
+    // 🟢 Realtime Supabase Postgres Changes
     const channel = supabase
-      .channel(`noti_channel_${role}_${userId}`)
+      .channel(channelId)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "notifications",
-          filter: `${columnCheck}=eq.${userId}`,
+          filter: role === "admin" && (!userId || userId === "admin")
+            ? undefined // แอดมินดึงข้อความใหม่ของแอดมินทั้งหมด
+            : `${columnCheck}=eq.${userId}`,
         },
         (payload) => {
           const newNoti = payload.new as NotificationItem;
+          // ตรวจสอบความถูกต้องฝั่ง Admin
+          if (role === "admin" && !newNoti.admin_id) return;
+
           setNotifications((prev) => [newNoti, ...prev]);
           setUnreadCount((prev) => prev + 1);
         }
@@ -122,14 +155,14 @@ export function useNotifications(userId: string | undefined, role: "customer" | 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, role, fetchNotifications]);
+  }, [userId, role, fetchNotifications, getColumnName]);
 
   return {
     notifications,
     unreadCount,
     loading,
     markAsRead,
-    markAllAsRead, // 🟢 ส่งฟังก์ชันให้ออกไปใช้งาน
+    markAllAsRead,
     fetchNotifications,
   };
 }
