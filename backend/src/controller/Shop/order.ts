@@ -41,6 +41,7 @@ interface SupabaseOrderQueryResult {
   appointment_time: string | null;
   receive_date: string | null;
   total_amount: number | null;
+  total_price: number | null;
   payment_id: string | null;
   customer: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
   current_status: { state: string } | { state: string }[] | null;
@@ -114,17 +115,8 @@ export const getOrdersByStatus = async (
         )
         `
       )
-      .eq("shop_id", shop_id);
-
-    // 2. ถ้ามีการส่ง status ที่ไม่ใช่ "ทั้งหมด" ให้ Filter ตั้งแต่ชั้น Query
-    if (status !== "ทั้งหมด") {
-      query = query.eq("current_status.state", status);
-    }
-
-    // สั่ง Query ข้อมูลและเรียงลำดับ order_date
-    const { data: orders, error } = await query.order("order_date", {
-      ascending: false,
-    });
+      .eq("shop_id", shop_id)
+      .order("order_date", { ascending: false });
 
     if (error) {
       console.error("Get orders error:", error);
@@ -145,9 +137,6 @@ export const getOrdersByStatus = async (
 
         let computedStatus = currentStatus?.state || "รอการดำเนินงาน";
 
-        // -------------------------------------------------------------
-        // เงื่อนไขเวลาเพิ่มเติม:
-        // -------------------------------------------------------------
         const appointmentTimeStr = order.appointment_time || order.receive_date;
 
         if (appointmentTimeStr) {
@@ -159,12 +148,10 @@ export const getOrdersByStatus = async (
               computedStatus === "รอการดำเนินงาน";
             const isPendingOrPrinting = isPending || computedStatus === "กำลังพิมพ์";
 
-            // ถ้ารอดำเนินการ หรือ กำลังพิมพ์ แล้วเลยเวลานัดรับ -> เปลี่ยนเป็น "ยกเลิกการพิมพ์"
             if (isPendingOrPrinting && now > appointmentTime) {
               computedStatus = "ยกเลิกการพิมพ์";
             }
 
-            // ถ้าพิมพ์เสร็จสิ้น แล้วเลยเวลานัดรับเกิน 24 ชม. -> เปลี่ยนเป็น "รายการเสร็จสิ้น"
             const isCompletedPrint = computedStatus === "พิมพ์เสร็จสิ้น";
             if (isCompletedPrint && now > appointmentTime + ONE_DAY_MS) {
               computedStatus = "รายการเสร็จสิ้น";
@@ -207,14 +194,11 @@ export const getOrdersByStatus = async (
         };
       })
       .filter((order) => {
-        // 1. กรองสถานะ "รอการชำระเงิน" ออก
         if (order.status === "รอการชำระเงิน") return false;
-        // 2. กรองตาม Tab สถานะที่เลือก
         if (statusFilter !== "ทั้งหมด" && order.status !== statusFilter) return false;
         return true;
       });
 
-    // กำหนดลำดับความสำคัญของสถานะ
     const STATUS_PRIORITY: Record<string, number> = {
       รอการดำเนินการ: 1,
       รอการดำเนินงาน: 1,
@@ -229,7 +213,6 @@ export const getOrdersByStatus = async (
       return isNaN(t) ? new Date(o.date).getTime() : t;
     };
 
-    // จัดเรียงข้อมูล (Status Priority -> เวลานัดรับเรียงตามลำดับก่อน-หลัง)
     const sortedOrders = [...processedOrders].sort((a, b) => {
       const priorityA = STATUS_PRIORITY[a.status] ?? 99;
       const priorityB = STATUS_PRIORITY[b.status] ?? 99;
@@ -238,7 +221,6 @@ export const getOrdersByStatus = async (
         return priorityA - priorityB;
       }
 
-      // สถานะเดียวกัน -> เวลานัดรับที่ใกล้ถึงที่สุดขึ้นก่อน
       return getPickupTimestamp(a) - getPickupTimestamp(b);
     });
 

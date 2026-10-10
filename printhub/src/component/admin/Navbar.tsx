@@ -116,17 +116,11 @@ export default function AdminNavbar() {
     }
   };
 
-<<<<<<< HEAD
-  const isFinanceActive = pathname === "/admin/slips" || pathname === "/admin/refunds";
-=======
-  const hasUnread = notifications.some((n) => !(n.isRead ?? n.is_read));
-  
-  // เพิ่ม /admin/payouts ในการเช็ค Active State
-  const isFinanceActive = 
-    pathname === "/admin/slips" || 
-    pathname === "/admin/refunds" || 
+  // เช็ค Active State ของกลุ่มการเงิน
+  const isFinanceActive =
+    pathname === "/admin/slips" ||
+    pathname === "/admin/refunds" ||
     pathname === "/admin/payouts";
->>>>>>> ff9b15d4 (ปรับปรุงโค้ดฝั่งแอดมิน และอัปเดตเพิ่มเติมสำหรับแอดมิน)
 
   return (
     <nav className="sticky top-0 z-50 flex h-14 w-full items-center justify-between bg-slate-900 px-6 shadow-sm">

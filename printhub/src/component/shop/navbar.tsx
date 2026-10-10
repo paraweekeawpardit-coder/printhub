@@ -45,7 +45,7 @@ export default function ShopNavbar() {
 
     const fetchProfileImage = async () => {
       try {
-        const res = await axios.get(`${API_BASE}/profile/${shopId}`);
+        const res = axios.get(`http://localhost:5000/api/shop/profile/${shopId}`)
         if (!cancelled) {
           setProfileImage(res.data?.data?.profile_image ?? null);
           setImageFailed(false);
