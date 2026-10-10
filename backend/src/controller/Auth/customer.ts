@@ -44,7 +44,7 @@ export const Regis = async (req: Request, res: Response): Promise<Response> => {
 
     const Passwd = await bcrypt.hash(password, 10);
 
-    const { data: newCustomer, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from("customer")
       .insert([
         {
@@ -72,13 +72,16 @@ export const Regis = async (req: Request, res: Response): Promise<Response> => {
 export const Login = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { contact, password } = req.body;
-    console.log(req.body)
 
     if (!contact || !password) {
-      console.log("กรอกข้อมูลไม่ครบ")
       return res.status(400).json({
         error: "กรุณากรอกอีเมลและรหัสผ่าน",
       });
+    }
+
+    const secretKey = process.env.JWT_SECRET;
+    if (!secretKey) {
+      throw new Error("JWT_SECRET is not defined in environment variables.");
     }
 
     const { data: user, error: findError } = await supabase
@@ -86,8 +89,6 @@ export const Login = async (req: Request, res: Response): Promise<Response> => {
       .select("*")
       .eq("contact", contact)
       .maybeSingle();
-    
-      console.log("login customer :",user)
 
     if (findError) {
       console.error(findError);
@@ -96,56 +97,52 @@ export const Login = async (req: Request, res: Response): Promise<Response> => {
       });
     }
 
+    // ไม่พบในตาราง customer -> ลองหาในตาราง print_shop
     if (!user) {
-      const { data: shop, error: findError } = await supabase
-      .from("print_shop")
-      .select("*")
-      .or(`email.eq.${contact}`)
-      .maybeSingle();
+      const { data: shop, error: findShopError } = await supabase
+        .from("print_shop")
+        .select("*")
+        .eq("email", contact)
+        .maybeSingle();
 
-      console.log("login shop :",shop)
-
-      if (findError) {
-      console.error("Find shop error:", findError);
-      return res.status(500).json({
-        error: "Server Error",
-      });
+      if (findShopError) {
+        console.error("Find shop error:", findShopError);
+        return res.status(500).json({
+          error: "Server Error",
+        });
       }
-      
+
       if (!shop) {
-      return res.status(400).json({
-        error: "ไม่พบผู้ใช้งาน",
-      });
+        return res.status(400).json({
+          error: "ไม่พบผู้ใช้งาน",
+        });
       }
 
-      const isPasswordValid = await bcrypt.compare(password, shop.password);
-      
-      if (!isPasswordValid) {
-          return res.status(400).json({
-            error: "รหัสผ่านไม่ถูกต้อง",
-          });
+      const isShopPasswordValid = await bcrypt.compare(password, shop.password);
+
+      if (!isShopPasswordValid) {
+        return res.status(400).json({
+          error: "รหัสผ่านไม่ถูกต้อง",
+        });
       }
 
-      const secretKey = process.env.JWT_SECRET;
-      if (!secretKey) {
-        throw new Error("JWT_SECRET is not defined");
-      }
-
-      const payload = {
-      id: shop.id,
-      shop_name: shop.shop_name,
+      const shopPayload = {
+        id: shop.id,
+        shop_name: shop.shop_name,
+        role: "shop",
       };
 
-      const token = jwt.sign(payload, secretKey, {
-          expiresIn: "24h",
+      const shopToken = jwt.sign(shopPayload, secretKey, {
+        expiresIn: "24h",
       });
 
+      // ร้านที่โดนแบนยัง login ได้ เพื่อให้เห็น banner และเหตุผล
       return res.status(200).json({
-      message: "เข้าสู่ระบบสำเร็จ",
-      token: token,
-      shop_id: shop.id,
-      shop_name: shop.shop_name,
-      role:"shop"
+        message: "เข้าสู่ระบบสำเร็จ",
+        token: shopToken,
+        shop_id: shop.id,
+        shop_name: shop.shop_name,
+        role: "shop",
       });
     }
 
@@ -157,14 +154,10 @@ export const Login = async (req: Request, res: Response): Promise<Response> => {
       });
     }
 
-    const secretKey = process.env.JWT_SECRET;
-    if (!secretKey) {
-      throw new Error("JWT_SECRET is not defined in environment variables.");
-    }
-
     const payload = {
       id: user.id,
       name: user.first_name,
+      role: "customer",
     };
 
     const token = jwt.sign(payload, secretKey, { expiresIn: "24h" });
@@ -174,7 +167,7 @@ export const Login = async (req: Request, res: Response): Promise<Response> => {
       token: token,
       id: user.id,
       name: user.first_name,
-      role:"customer"
+      role: "customer",
     });
   } catch (err) {
     console.error(err);

@@ -3,6 +3,8 @@ import supabase from "../../config/supabase.js";
 
 // bank_account.status เป็น NOT NULL -> ปรับค่าให้ตรงกับที่ระบบ admin ใช้ตรวจบัญชี
 const DEFAULT_BANK_STATUS = "pending";
+// เมื่อร้านแก้ไขข้อมูลบัญชีเดิม -> รอแอดมินตรวจสอบใหม่
+const CHANGED_BANK_STATUS = "pending";
 
 export const getShopProfile = async (
   req: Request,
@@ -559,27 +561,75 @@ export const updateBankAccount = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
+    // ---------- แก้ไขบัญชีเดิม ----------
     if (id) {
+      const { data: old, error: oldErr } = await supabase
+        .from("bank_account")
+        .select("bank_name, account_name, account_number, status")
+        .eq("id", id)
+        .eq("shop_id", shop_id)
+        .single();
+
+      if (oldErr || !old) {
+        return res.status(404).json({ error: "Bank account not found" });
+      }
+
+      // เช็คว่ามีการเปลี่ยนแปลงข้อมูลจริงหรือไม่
+      const changed =
+        old.bank_name !== bank_name ||
+        old.account_name !== account_name ||
+        old.account_number !== account_number;
+
       const { error } = await supabase
         .from("bank_account")
-        .update({ bank_name, account_name, account_number })
+        .update({
+          bank_name,
+          account_name,
+          account_number,
+          ...(changed && { status: CHANGED_BANK_STATUS }), // เปลี่ยน status เป็น "change" เมื่อมีการแก้ไข
+        })
         .eq("id", id)
         .eq("shop_id", shop_id);
 
       if (error) return res.status(400).json({ error: error.message });
-    } else {
-      const { error } = await supabase
-        .from("bank_account")
-        .insert({
-          shop_id,
-          bank_name,
-          account_name,
-          account_number,
-          status: DEFAULT_BANK_STATUS,
-        });
 
-      if (error) return res.status(400).json({ error: error.message });
+      // หากมีการเปลี่ยนแปลงข้อมูล ให้ปรับ print_shop.is_verify เป็น false เพื่อรอแอดมินตรวจสอบใหม่
+      if (changed) {
+        const { error: shopErr } = await supabase
+          .from("print_shop")
+          .update({ is_verify: false })
+          .eq("id", shop_id);
+
+        if (shopErr) {
+          // rollback ข้อมูลบัญชีธนาคารกลับค่าเดิมหากอัปเดต print_shop ไม่สำเร็จ
+          await supabase
+            .from("bank_account")
+            .update({
+              bank_name: old.bank_name,
+              account_name: old.account_name,
+              account_number: old.account_number,
+              status: old.status,
+            })
+            .eq("id", id)
+            .eq("shop_id", shop_id);
+
+          return res.status(400).json({ error: shopErr.message });
+        }
+      }
+
+      return res.status(200).json({ message: "Bank account updated successfully" });
     }
+
+    // ---------- เพิ่มบัญชีครั้งแรก ----------
+    const { error } = await supabase.from("bank_account").insert({
+      shop_id,
+      bank_name,
+      account_name,
+      account_number,
+      status: DEFAULT_BANK_STATUS,
+    });
+
+    if (error) return res.status(400).json({ error: error.message });
 
     return res.status(200).json({ message: "Bank account updated successfully" });
   } catch (err) {
@@ -587,7 +637,6 @@ export const updateBankAccount = async (
     return res.status(500).json({ error: "Server Error" });
   }
 };
-
 // ==========================================
 // รูปโปรไฟล์ร้าน: เปลี่ยนได้อย่างเดียว ลบไม่ได้ (ร้านต้องมีรูปเสมอ)
 // ต้องสร้าง bucket (แบบ Public) ใน Supabase Storage ชื่อ "shop-profile"

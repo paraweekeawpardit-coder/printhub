@@ -18,7 +18,7 @@ const API_URL = `${rawApiUrl.replace(/\/+$/, "")}/api`;
 
 type Order = {
   id: string;
-  order_no?: string; // 👈 เพิ่ม order_no ใน Type
+  order_no?: string;
   customer_id: string;
   shop_id: string;
   description: string | null;
@@ -125,7 +125,7 @@ export default function ShopPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
 
-        // 🟢 เปลี่ยนทุก Request ให้ยิงผ่าน ${API_URL}/shop/...
+        // ใช้ Promise.allSettled เพื่อป้องกัน API บางตัวพังหรือส่งค่า null กลับมาแล้วทำให้แอปพังทั้งหน้า
         const [
           numRes,
           scoreRes,
@@ -185,12 +185,16 @@ export default function ShopPage() {
           `${Number(incomeRes.data.income ?? 0).toLocaleString()} บาท`
         );
 
-        setTodayOrdersCount(incomeRes.data.orderCount ?? 0);
-        setTotalReviewsCount(scoreRes.data.totalReviews ?? 0);
+        setNum(`${numData?.numWork ?? 0} รายการ`);
+        setScore(`${scoreData?.score ?? 0.0} / 5.0`);
+        setIncome(`${incomeData?.income ?? 0} บาท`);
 
-        setOrders(ordersRes.data ?? []);
+        setTodayOrdersCount(incomeData?.orderCount ?? 0);
+        setTotalReviewsCount(scoreData?.totalReviews ?? 0);
+
+        setOrders(ordersData ?? []);
         setFinancialData(
-          financeRes.data ?? {
+          financeDataRes ?? {
             totalGross: 0,
             totalFee: 0,
             totalNet: 0,
@@ -204,7 +208,7 @@ export default function ShopPage() {
           }
         );
         setBreakdownData(
-          breakdownRes.data ?? {
+          breakdownDataRes ?? {
             total: 0,
             counts: {},
             orders: [],
@@ -212,7 +216,7 @@ export default function ShopPage() {
           }
         );
         setReviewData(
-          reviewRes.data ?? { reviews: [], complaints: [] }
+          reviewDataRes ?? { reviews: [], complaints: [] }
         );
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
@@ -230,7 +234,6 @@ export default function ShopPage() {
     }
   }, [shopId, fetchDashboardData]);
 
-  // ส่ง orderId (UUID) ในการนำทาง
   const handleOrderClick = (orderId: string) => {
     if (isSuspended) {
       console.warn("[Action Blocked] Account is suspended. Cannot view order details.");

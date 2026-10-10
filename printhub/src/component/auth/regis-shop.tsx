@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Eye, EyeOff, FileText, X, ChevronDown } from "lucide-react";
+import { Eye, EyeOff, FileText, X, ChevronDown, ShieldCheck } from "lucide-react";
 import axios from "axios";
 import dynamic from "next/dynamic";
 import { LocationData } from "./map";
@@ -14,22 +13,23 @@ type RegisFormProps = {
 const MapPicker = dynamic(() => import("./map"), { ssr: false });
 
 function isValidThaiIDCard(id: string): boolean {
-  // เช็กเฉพาะว่าเป็นตัวเลขความยาวครบ 13 หลัก
-  return /^\d{13}$/.test(id);
+  return /^\d{13}\$/.test(id);
 }
 
 function isValidThaiPhone(phone: string): boolean {
-  return /^0[689]\d{8}$/.test(phone);
+  return /^0[689]\d{8}\$/.test(phone);
 }
 
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+\$/.test(email);
 }
 
 export default function RegisFormShop({ setRegis }: RegisFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showExampleModal, setShowExampleModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [message, setMessage] = useState("");
   const bankDropdownRef = useRef<HTMLDivElement>(null);
@@ -96,6 +96,11 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
     e.preventDefault();
     setMessage("");
 
+    if (!agreed) {
+      setMessage("กรุณายอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว");
+      return;
+    }
+
     if (!shopData.shop_name.trim()) {
       setMessage("กรุณากรอกชื่อร้านค้า");
       return;
@@ -141,7 +146,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
       return;
     }
 
-    if (!/^\d{10,12}$/.test(shopData.bank_number)) {
+    if (!/^\d{10,12}\$/.test(shopData.bank_number)) {
       setMessage("เลขบัญชีธนาคารต้องเป็นตัวเลข 10-12 หลัก");
       return;
     }
@@ -457,9 +462,29 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             </button>
           </div>
 
+          <div className="flex items-start gap-2.5 text-xs text-gray-500 pt-1">
+            <input
+              type="checkbox"
+              id="agree-shop"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+            />
+            <label htmlFor="agree-shop" className="leading-relaxed cursor-pointer">
+              ฉันยอมรับ{" "}
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(true)}
+                className="text-primary hover:underline font-semibold"
+              >
+                เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว
+              </button>
+            </label>
+          </div>
+
           <button
             type="submit"
-            className="w-full rounded-xl bg-primary py-3 text-white text-sm font-medium hover:opacity-90 transition"
+            className="w-full rounded-xl bg-primary py-3 text-white text-sm font-medium hover:opacity-90 transition shadow-sm shadow-primary/20"
           >
             สมัครร้านค้า
           </button>
@@ -506,6 +531,79 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             >
               เข้าใจแล้ว
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Improved PDPA Modal Design for Shop */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl max-h-[85vh] flex flex-col border border-slate-100">
+            
+            {/* Header */}
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <ShieldCheck size={22} />
+              </div>
+              <div className="flex-1 pr-6">
+                <h3 className="text-base font-bold text-slate-800">
+                  เงื่อนไขและนโยบายสำหรับพาร์ทเนอร์ร้านค้า
+                </h3>
+                <p className="text-xs text-slate-400">
+                  ข้อมูลการยืนยันตัวตนและการคุ้มครองข้อมูลส่วนบุคคล (PDPA)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(false)}
+                className="absolute right-5 top-5 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="overflow-y-auto space-y-4 text-xs text-slate-600 py-4 pr-2 leading-relaxed flex-1">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  1. เงื่อนไขสำหรับร้านค้าพาร์ทเนอร์
+                </h4>
+                <p className="pl-3">• ร้านค้าต้องระบุข้อมูลสถานที่ พิกัด และเอกสารยืนยันตัวตน (รูปคู่บัตรประชาชน) ที่ถูกต้องตรงตามจริง</p>
+                <p className="pl-3">• หากมีการแก้ไขข้อมูลบัญชีธนาคาร จะต้องผ่านการตรวจสอบและอนุมัติจากผู้ดูแลระบบ (Admin) ใหม่</p>
+                <p className="pl-3">• ร้านค้าต้องให้บริการงานพิมพ์ด้วยความซื่อสัตย์และรักษามาตรฐานตามที่แพลตฟอร์มกำหนด</p>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  2. นโยบายความเป็นส่วนตัว (PDPA)
+                </h4>
+                <p className="pl-3">• <strong>การจัดเก็บข้อมูล:</strong> จัดเก็บข้อมูลผู้ประกอบการ บัตรประชาชน และบัญชีธนาคารเพื่อยืนยันตัวตนและโอนเงินรายได้</p>
+                <p className="pl-3">• <strong>ความปลอดภัย:</strong> ข้อมูลบัตรประชาชนจะถูกเก็บเป็นความลับสูงสุด ใช้สำหรับตรวจสอบความถูกต้องโดยแอดมินเท่านั้น</p>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="pt-4 border-t border-slate-100 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(false)}
+                className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+              >
+                ปิดหน้าต่าง
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAgreed(true);
+                  setShowTermsModal(false);
+                }}
+                className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-white hover:bg-[#005FA3] shadow-md shadow-primary/20 transition"
+              >
+                ยอมรับเงื่อนไข
+              </button>
+            </div>
           </div>
         </div>
       )}
