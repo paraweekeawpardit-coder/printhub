@@ -215,12 +215,14 @@ export default function ShopSettingsPage() {
         setBankName(bankAccount.bank_name ?? "");
         setAccountName(bankAccount.account_name ?? "");
         setAccountNumber(bankAccount.account_number ?? "");
+
         setHasBankData(Boolean(bankAccount.bank_name || bankAccount.account_number));
         setOriginalBank({
           bankName: bankAccount.bank_name ?? "",
           accountName: bankAccount.account_name ?? "",
           accountNumber: bankAccount.account_number ?? "",
         });
+
         const pendingStatus = Boolean(bankAccount.is_pending);
         setIsBankPending(pendingStatus);
 
@@ -228,11 +230,10 @@ export default function ShopSettingsPage() {
           bankAccount.created_at || bankAccount.updated_at || ""
         );
 
-        setHasBankData(true);
-
         if (pendingStatus) {
           setIsEditingBank(false);
         }
+      }
       } else {
         setBankAccountId(null);
         setBankName("");
