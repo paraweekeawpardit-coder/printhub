@@ -8,6 +8,7 @@ import {
   Home,
   ClipboardList,
   MessageCircle,
+  Headset, // 👈 เพิ่ม Headset Icon สำหรับปุ่มติดต่อแอดมิน
   Settings,
   LogOut,
 } from "lucide-react";
@@ -44,7 +45,7 @@ export default function ShopNavbar() {
 
     const fetchProfileImage = async () => {
       try {
-        const res = await axios.get(`${API_BASE}/profile/${shopId}`);
+        const res = axios.get(`http://localhost:5000/api/shop/profile/${shopId}`)
         if (!cancelled) {
           setProfileImage(res.data?.data?.profile_image ?? null);
           setImageFailed(false);
@@ -75,9 +76,15 @@ export default function ShopNavbar() {
   const isHomeActive = pathname === "/shop";
   const isOrderActive = pathname.startsWith("/shop/order") && !pathname.endsWith("/chat");
   const isChatActive = pathname.includes("/chat");
+  const isSupportActive = pathname.startsWith("/shop/support"); // 👈 เช็ก active state ของหน้าติดต่อแอดมิน
   const isSettingActive = pathname.startsWith("/shop/setting");
 
   const goTo = (path: string) => {
+    if (path === "support") {
+      router.push("/shop/support");
+      return;
+    }
+
     if (!shopId) {
       console.warn("shopId not found in localStorage");
       alert("ไม่พบข้อมูลร้านค้า กรุณาล็อกอินใหม่อีกครั้ง");
@@ -171,6 +178,22 @@ export default function ShopNavbar() {
               แชท
             </span>
           </button>
+
+          {/* 🟢 ติดต่อแอดมิน (Support Chat) */}
+          <button
+            onClick={() => goTo("support")}
+            title="ติดต่อแอดมิน"
+            className={`flex items-center gap-2 h-10 px-3 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
+              isSupportActive
+                ? "bg-[#0F2942] text-white"
+                : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
+            }`}
+          >
+            <Headset size={16} />
+            <span className={isSupportActive ? "inline" : "hidden md:inline"}>
+              ติดต่อแอดมิน
+            </span>
+          </button>
         </div>
 
         {/* Setting, Notification & Logout Section */}
@@ -213,7 +236,7 @@ export default function ShopNavbar() {
           {/* เส้นคั่นแบ่งสัดส่วน */}
           <div className="h-5 w-[1px] bg-slate-200 my-auto" />
 
-          {/* ปุ่มออกจากระบบ (Logout Button - ใส่ logout-btn เพิ่มที่นี่) */}
+          {/* ปุ่มออกจากระบบ (Logout Button) */}
           <button
             onClick={handleLogout}
             title="ออกจากระบบ"

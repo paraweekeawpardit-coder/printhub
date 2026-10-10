@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import ShopCard, { Shop, checkIsShopOpen } from "../../component/customer/ShopCard";
 import SearchBar from "../../component/customer/SearchBar";
 import ServiceCategoryList from "../../component/customer/ServiceCategoryList";
-// 🌟 ตรวจสอบ Path ให้ตรงกับโฟลเดอร์ที่คุณวาง FilterPillsBar ไว้ (เช่น ../../component/customer/filter/FilterPillsBar หรือ ../../component/customer/FilterPillsBar)
 import FilterPillsBar from "../../component/customer/filter/FilterPillsBar";
 import LocationMapModal from "../../component/customer/LocationMapModal";
 import { 
@@ -32,6 +31,8 @@ const CATEGORIES = [
 
 export default function CustomerHomePage() {
   const router = useRouter();
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -51,6 +52,21 @@ export default function CustomerHomePage() {
   const [locationName, setLocationName] = useState<string>("ระบุตำแหน่งของคุณบนแผนที่");
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
 
+  // 🔒 Route Guard: ตรวจสอบสถานะการเข้าสู่ระบบ
+  useEffect(() => {
+    const token =
+      localStorage.getItem("token") ||
+      localStorage.getItem("customerToken") ||
+      localStorage.getItem("access_token");
+
+    if (!token) {
+      console.log("[CustomerPage] Unauthorized access. Redirecting to /auth");
+      router.replace("/auth");
+    } else {
+      setIsAuthChecking(false);
+    }
+  }, [router]);
+
   const fetchCartData = useCallback(async () => {
     try {
       const customerId = localStorage.getItem("customer_id") || localStorage.getItem("id");
@@ -60,13 +76,11 @@ export default function CustomerHomePage() {
       const json = await res.json();
       
       if (json.success && json.data) {
-        // 🌟 ดึงรายการสินค้าทั้งหมด ไม่ว่าจะส่งมาเป็น shops หรือ cart_items
         let items: any[] = [];
 
         if (Array.isArray(json.data.cart_items)) {
           items = json.data.cart_items;
         } else if (Array.isArray(json.data.shops)) {
-          // รวมสินค้าจากทุกร้านค้าในตะกร้า
           items = json.data.shops.flatMap((s: any) => s.items || []);
         } else if (Array.isArray(json.data.cart_item)) {
           items = json.data.cart_item;
@@ -100,6 +114,8 @@ export default function CustomerHomePage() {
   }, []);
 
   useEffect(() => {
+    if (isAuthChecking) return;
+
     const savedCoords = localStorage.getItem("user_coords");
     const savedName = localStorage.getItem("user_location_name");
 
@@ -116,10 +132,12 @@ export default function CustomerHomePage() {
     }
 
     fetchCartData();
-  }, [fetchCurrentGps, fetchCartData]);
+  }, [isAuthChecking, fetchCurrentGps, fetchCartData]);
 
   // ฟังก์ชันดึงข้อมูลร้านค้าจาก Backend
   const fetchShops = useCallback(async () => {
+    if (isAuthChecking) return;
+
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -173,6 +191,7 @@ export default function CustomerHomePage() {
       setLoading(false);
     }
   }, [
+    isAuthChecking,
     keyword,
     selectedService,
     selectedFinishing,
@@ -187,15 +206,13 @@ export default function CustomerHomePage() {
     fetchShops();
   }, [fetchShops]);
 
-  // 🌟 กรองรายการร้านค้าสำรองฝั่งหน้าบ้าน ป้องกันกรณี API ยังไม่ได้กรองหมวดหมู่หรือสถานะร้าน
+  // กรองรายการร้านค้าสำรองฝั่งหน้าบ้าน
   const displayedShops = useMemo(() => {
     return shops.filter((shop: any) => {
-      // 1. กรองเปิดให้บริการ
       if (isOpenOnly && !checkIsShopOpen(shop)) {
         return false;
       }
 
-      // 2. กรองตามประเภทบริการหลัก (ถ้ามีการเลือกไว้)
       if (selectedService && selectedService !== "ทั้งหมด") {
         const types = shop.service_types || shop.services || shop.service_type || [];
         if (Array.isArray(types) && types.length > 0) {
@@ -226,6 +243,16 @@ export default function CustomerHomePage() {
     setSelectedService(serviceName);
     setSelectedFinishing([]);
   };
+
+  // แสดง Loading Screen ขณะตรวจสอบ Auth สิทธิ์เข้าถึง
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center text-xs text-slate-400 gap-2 font-sans">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+        <span>กำลังตรวจสอบสิทธิ์การเข้าใช้งาน...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col font-sans text-slate-800 antialiased pb-12">

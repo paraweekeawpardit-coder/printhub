@@ -12,9 +12,8 @@ import ShopServicesTab, {
 } from "../../../../component/shop/ShopServiceTab";
 import ShopBankTab from "../../../../component/shop/ShopBankTab";
 import ShopLocationConfirmModal from "../../../../component/shop/Shoplocationcomfirmmodal";
+import ShopBankConfirmModal from "../../../../component/shop/Shopbankconfirmmodal";
 
-
-const SHOP_ID_STORAGE_KEY = "shop_id";
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/shop";
 
@@ -25,22 +24,6 @@ type AddressData = {
   province: string;
   postcode: string;
 };
-
-function resolveShopId(raw: string | null): string | null {
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === "string") return parsed;
-    if (parsed && typeof parsed === "object" && parsed.id != null) {
-      return String(parsed.id);
-    }
-  } catch (err) {
-    console.log(err)
-  }
-
-  return raw;
-}
 
 export default function ShopSettingsPage() {
   const params = useParams();
@@ -110,6 +93,14 @@ export default function ShopSettingsPage() {
   const [isBankPending, setIsBankPending] = useState<boolean>(false);
   const [bankPendingCreatedAt, setBankPendingCreatedAt] = useState<string>("");
 
+  // ค่าบัญชีที่บันทึกอยู่ใน DB ใช้เทียบว่าผู้ใช้แก้ไขจริงหรือไม่
+  const [originalBank, setOriginalBank] = useState<{
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+  } | null>(null);
+  const [showBankConfirm, setShowBankConfirm] = useState<boolean>(false);
+
   const fetchShopSettings = useCallback(async () => {
     if (!shopId) {
       console.warn("ไม่พบ shopId ใน URL Parameters หรือ Path");
@@ -136,7 +127,7 @@ export default function ShopSettingsPage() {
       const verifyStatus =
         verifyRes.status === "fulfilled" ? verifyRes.value.data?.data : null;
 
-      // Profile Data
+      // 1. Profile Data
       if (shop) {
         if (shop.status === "suspended") {
           setIsSuspended(true);
@@ -148,7 +139,6 @@ export default function ShopSettingsPage() {
         setOwnerName(shop.owner_name ?? shop.ownerName ?? "");
         setPhone(shop.phone ?? "");
         setEmail(shop.email ?? "");
-        // Postgres ส่ง time เป็น "09:00:00" แต่ <input type="time"> ใช้ "09:00"
         setOpenTime((shop.open_time ?? "09:00").slice(0, 5));
         setCloseTime((shop.close_time ?? "18:00").slice(0, 5));
         setIsOpen(shop.is_open ?? true);
@@ -176,10 +166,10 @@ export default function ShopSettingsPage() {
         setHasProfileData(Boolean(shop.shop_name || shop.name));
       }
 
-      // Verification Status
+      // 2. Verification Status
       setIsVerified(Boolean(verifyStatus?.is_verify));
 
-      // Services Data
+      // 3. Services Data
       if (shopServices) {
         const normalizedServices: ServiceTypeGroup[] = shopServices.map((group: any) => ({
           id: group.id,
@@ -207,14 +197,20 @@ export default function ShopSettingsPage() {
         setBankName(bankAccount.bank_name ?? "");
         setAccountName(bankAccount.account_name ?? "");
         setAccountNumber(bankAccount.account_number ?? "");
+
+        setHasBankData(Boolean(bankAccount.bank_name || bankAccount.account_number));
+        setOriginalBank({
+          bankName: bankAccount.bank_name ?? "",
+          accountName: bankAccount.account_name ?? "",
+          accountNumber: bankAccount.account_number ?? "",
+        });
+
         const pendingStatus = Boolean(bankAccount.is_pending);
         setIsBankPending(pendingStatus);
 
         setBankPendingCreatedAt(
           bankAccount.created_at || bankAccount.updated_at || ""
         );
-
-        setHasBankData(true);
 
         if (pendingStatus) {
           setIsEditingBank(false);
@@ -227,6 +223,7 @@ export default function ShopSettingsPage() {
         setIsBankPending(false);
         setBankPendingCreatedAt("");
         setHasBankData(false);
+        setOriginalBank(null);
       }
     } catch (err) {
       console.error("Fetch shop settings error:", err);
@@ -239,13 +236,11 @@ export default function ShopSettingsPage() {
     fetchShopSettings();
   }, [fetchShopSettings]);
 
-  // เช็คว่าที่อยู่ถูกแก้ไขจากค่าที่บันทึกไว้หรือไม่
   const isAddressChanged = () =>
     (Object.keys(address) as (keyof AddressData)[]).some(
       (k) => (address[k] ?? "").trim() !== (savedAddress[k] ?? "").trim()
     );
 
-  // บันทึกจริง: ถ้าส่ง coords มาจะบันทึกพิกัดใหม่ไปพร้อมที่อยู่ด้วย
   const submitProfile = async (
     coords?: { lat: number; lng: number }
   ): Promise<boolean> => {
@@ -290,7 +285,6 @@ export default function ShopSettingsPage() {
     }
   };
 
-  // กดบันทึก: ถ้าแก้ที่อยู่ → เปิดแผนที่ให้ยืนยันตำแหน่งก่อน, ถ้าไม่ → บันทึกเลย
   const handleSaveProfile = () => {
     if (!shopId) return;
     if (isAddressChanged()) {
@@ -305,18 +299,15 @@ export default function ShopSettingsPage() {
     if (ok) setShowLocationModal(false);
   };
 
-  // อัปโหลดรูปโปรไฟล์ร้าน: คืนค่า null เมื่อสำเร็จ หรือข้อความ error เมื่อไม่สำเร็จ
   const handleUploadProfileImage = async (file: File): Promise<string | null> => {
     if (!shopId) return "ไม่พบ shop_id ของร้านค้า";
     try {
       setUploadingImage(true);
       const formData = new FormData();
       formData.append("image", file);
-      // ไม่ต้องตั้ง Content-Type เอง เบราว์เซอร์/axios จะใส่ boundary ให้
       const res = await axios.put(`${API_BASE}/profile/${shopId}/image`, formData);
       const newImage: string | null = res.data?.data?.profile_image ?? null;
       setProfileImage(newImage);
-      // แจ้ง navbar ให้เปลี่ยนรูปทันที ไม่ต้องรีเฟรช
       window.dispatchEvent(
         new CustomEvent("shop-profile-image-updated", {
           detail: { profile_image: newImage },
@@ -363,7 +354,6 @@ export default function ShopSettingsPage() {
         })),
       }));
 
-      // ส่ง shop_id ทาง body อย่างเดียว (custom header อาจติด CORS preflight / โดน proxy ตัด underscore)
       await axios.post(`${API_BASE}/services`, {
         shop_id: shopId,
         services: payloadServices,
@@ -375,7 +365,7 @@ export default function ShopSettingsPage() {
       const data = err?.response?.data;
       console.error("Save services error:", err?.response?.status, data ?? err.message);
       alert(
-        `บันทึกบริการพิมพ์ไม่สำเร็จ\n${data?.detail ?? data?.error ?? err.message}\n[backend: ${data?.debug?.version ?? "ไม่พบ version = โค้ดเก่า/ยังไม่ restart?"}]`
+        `บันทึกบริการพิมพ์ไม่สำเร็จ\n${data?.detail ?? data?.error ?? err.message}`
       );
       return false;
     } finally {
@@ -383,7 +373,7 @@ export default function ShopSettingsPage() {
     }
   };
 
-  const handleSaveBank = async () => {
+  const performSaveBank = async () => {
     if (!shopId) return;
     if (isSuspended) {
       console.warn("[Action Blocked] Shop is suspended. Cannot update bank account.");
@@ -404,36 +394,45 @@ export default function ShopSettingsPage() {
       setIsEditingBank(false);
       await fetchShopSettings();
     } catch (err: any) {
-      const errorMsg =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        "ไม่สามารถบันทึกข้อมูลบัญชีธนาคารได้";
-      alert(errorMsg);
-      console.error("Save bank error:", errorMsg);
+      const errorMsg = err?.response?.data?.error || err.message;
+      console.error("Save bank error:", err?.response?.data ?? err);
+      alert(`บันทึกบัญชีธนาคารไม่สำเร็จ: ${errorMsg}`);
     } finally {
       setSaving(false);
+      setShowBankConfirm(false);
     }
   };
 
+  const handleSaveBank = () => {
+    if (!shopId) return;
+
+    if (!bankName || !accountName || !accountNumber) {
+      alert("กรุณากรอกข้อมูลธนาคาร ชื่อบัญชี และเลขที่บัญชีให้ครบถ้วน");
+      return;
+    }
+
+    if (bankAccountId && originalBank) {
+      const changed =
+        originalBank.bankName !== bankName ||
+        originalBank.accountName !== accountName ||
+        originalBank.accountNumber !== accountNumber;
+
+      if (!changed) {
+        setIsEditingBank(false);
+        return;
+      }
+
+      setShowBankConfirm(true);
+      return;
+    }
+
+    performSaveBank();
+  };
+
   const tabs = [
-    {
-      key: "profile",
-      label: "ข้อมูลร้าน",
-      icon: <Store size={16} />,
-      locked: !isVerified,
-    },
-    {
-      key: "services",
-      label: "บริการพิมพ์",
-      icon: <Printer size={16} />,
-      locked: !isVerified,
-    },
-    {
-      key: "bank",
-      label: "บัญชีธนาคาร",
-      icon: <Landmark size={16} />,
-      locked: !isVerified,
-    },
+    { key: "profile", label: "ข้อมูลร้าน", icon: <Store size={16} />, locked: false },
+    { key: "services", label: "บริการพิมพ์", icon: <Printer size={16} />, locked: !isVerified },
+    { key: "bank", label: "บัญชีธนาคาร", icon: <Landmark size={16} />, locked: !isVerified },
   ];
 
   return (
@@ -559,6 +558,14 @@ export default function ShopSettingsPage() {
           saving={saving}
           onConfirm={handleConfirmLocation}
           onCancel={() => setShowLocationModal(false)}
+        />
+      )}
+
+      {showBankConfirm && (
+        <ShopBankConfirmModal
+          saving={saving}
+          onConfirm={performSaveBank}
+          onCancel={() => setShowBankConfirm(false)}
         />
       )}
     </div>

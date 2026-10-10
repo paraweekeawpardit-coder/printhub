@@ -25,7 +25,7 @@ export default function ReportStats({ total, pending, verified }: ReportStatsPro
       {/* รอตรวจสอบ */}
       <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-sm flex items-center justify-between bg-amber-50/30">
         <div>
-          <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider">รอตรวจสอบ (Pending)</p>
+          <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider">รอดำเนินการ</p>
           <h3 className="text-2xl font-bold text-amber-700 mt-1">{pending}</h3>
         </div>
         <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center">
@@ -38,7 +38,7 @@ export default function ReportStats({ total, pending, verified }: ReportStatsPro
       {/* ตรวจสอบแล้ว */}
       <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm flex items-center justify-between bg-emerald-50/30">
         <div>
-          <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">ตรวจสอบแล้ว (Verified)</p>
+          <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">ตรวจสอบแล้ว</p>
           <h3 className="text-2xl font-bold text-emerald-700 mt-1">{verified}</h3>
         </div>
         <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-xl flex items-center justify-center">

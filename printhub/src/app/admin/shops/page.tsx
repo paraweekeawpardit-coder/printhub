@@ -1,33 +1,23 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
-import {
-  FileText,
-  Landmark,
-  Store,
-  CheckCircle2,
-  RotateCw,
-  MessageSquareWarning,
-  ShieldCheck,
-  Filter,
-  AlertTriangle,
-  Clock,
-  Sparkles,
-} from "lucide-react";
+import { RotateCw } from "lucide-react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 
-import { Shop } from "../../../component/admin/ShopCard";
-import ShopDetailModal from "../../../component/admin/ShopDetailModal";
-import BankRequestCard, {
-  BankChangeRequest,
-} from "../../../component/admin/BankRequestCard";
-import AllShopsTable from "../../../component/admin/AllShopsTable";
+// Imports Components
+import { Shop } from "@/component/admin/ShopCard";
+import ShopDetailModal from "@/component/admin/ShopDetailModal";
+import { BankChangeRequest } from "@/component/admin/BankRequestCard";
+import BankRequestsTab from "@/component/admin/BankRequestsTab";
+import AllShopsTable from "@/component/admin/AllShopsTable";
 import ConfirmModal, {
   ConfirmModalState,
-} from "../../../component/admin/ConfirmModal";
-import PendingShopsTab from "../../../component/admin/PendingShopsTab";
-import ShopFilterControls from "../../../component/admin/ShopFilterControls";
-import PaginationBar from "../../../component/admin/PaginationBar";
+} from "@/component/admin/ConfirmModal";
+import PendingShopsTab from "@/component/admin/PendingShopsTab";
+import ShopFilterControls from "@/component/admin/ShopFilterControls";
+import PaginationBar from "@/component/admin/PaginationBar";
+import AppealsTab from "@/component/admin/AppealsTab";
+import ShopTabsNavigation from "@/component/admin/ShopTabsNavigation";
 
 export interface ShopAppeal {
   id: string | number;
@@ -71,62 +61,6 @@ const getAuthHeaders = (): Record<string, string> => {
   return headers;
 };
 
-const formatAddressString = (addrData: unknown) => {
-  if (!addrData) return "";
-  if (typeof addrData === "string") return addrData;
-  if (typeof addrData === "object" && addrData !== null) {
-    const addr = addrData as Record<string, string | undefined>;
-    const parts = [
-      addr.detail || addr.house_number || addr.address,
-      addr.subdistrict || addr.sub_district || addr.tambon,
-      addr.district || addr.amphoe,
-      addr.province || addr.changwat,
-      addr.postcode || addr.postal_code || addr.zipcode,
-    ];
-    return parts.filter(Boolean).join(" ").trim();
-  }
-  return "";
-};
-
-const getAppealUrgencyBadge = (createdAtStr: string, status: string) => {
-  if (status !== "pending") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-        <CheckCircle2 size={13} />
-        อนุมัติเรียบร้อย
-      </span>
-    );
-  }
-
-  const createdTime = new Date(createdAtStr).getTime();
-  const now = Date.now();
-  const diffHours =
-    (now - (isNaN(createdTime) ? now : createdTime)) / (1000 * 60 * 60);
-
-  if (diffHours >= 72) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700 animate-pulse">
-        <AlertTriangle size={13} />
-        เกินกำหนด (ล่าช้า)
-      </span>
-    );
-  } else if (diffHours >= 24) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-        <Clock size={13} />
-        รอการตรวจสอบ
-      </span>
-    );
-  } else {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-700">
-        <Sparkles size={13} />
-        ยื่นมาใหม่
-      </span>
-    );
-  }
-};
-
 function ShopsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -140,10 +74,10 @@ function ShopsContent() {
     tabParam === "all"
       ? "all"
       : tabParam === "bank"
-        ? "bank"
-        : tabParam === "appeals"
-          ? "appeals"
-          : "pending",
+      ? "bank"
+      : tabParam === "appeals"
+      ? "appeals"
+      : "pending",
   );
 
   useEffect(() => {
@@ -151,10 +85,10 @@ function ShopsContent() {
       tabParam === "all"
         ? "all"
         : tabParam === "bank"
-          ? "bank"
-          : tabParam === "appeals"
-            ? "appeals"
-            : "pending";
+        ? "bank"
+        : tabParam === "appeals"
+        ? "appeals"
+        : "pending";
     setActiveTab(currentTab);
   }, [tabParam]);
 
@@ -247,21 +181,55 @@ function ShopsContent() {
         const result = await bankRes.json();
         const data = result.data || result;
         const formatted = (Array.isArray(data) ? data : []).map(
-          (req: UnknownRecord) => ({
-            ...req,
-            created_at:
-              req.created_at ||
-              req.createdAt ||
-              req.requested_at ||
-              req.updated_at,
-            shopLogo: getImageUrl(
-              (req.shopLogo ||
-                req.logoUrl ||
-                (req.shop as UnknownRecord)?.profile_image) as
-                | string
-                | undefined,
-            ),
-          }),
+          (req: UnknownRecord) => {
+            const rawOld =
+              (req.old_account || req.old_bank || req.old_bank_account) as UnknownRecord | undefined;
+            const oldAccount = rawOld
+              ? {
+                  bank_name: (rawOld.bank_name || req.old_bank_name || "-") as string,
+                  account_number: (rawOld.account_number || req.old_account_number || "-") as string,
+                  account_name: (rawOld.account_name || req.old_account_name || "-") as string,
+                }
+              : req.old_bank_name
+              ? {
+                  bank_name: (req.old_bank_name || "-") as string,
+                  account_number: (req.old_account_number || "-") as string,
+                  account_name: (req.old_account_name || "-") as string,
+                }
+              : undefined;
+
+            const rawNew =
+              (req.new_account || req.new_bank || req.new_bank_account) as UnknownRecord | undefined;
+            const newAccount = rawNew
+              ? {
+                  bank_name: (rawNew.bank_name || req.bank_name || "-") as string,
+                  account_number: (rawNew.account_number || req.account_number || "-") as string,
+                  account_name: (rawNew.account_name || req.account_name || "-") as string,
+                }
+              : {
+                  bank_name: (req.bank_name || "-") as string,
+                  account_number: (req.account_number || "-") as string,
+                  account_name: (req.account_name || "-") as string,
+                };
+
+            return {
+              ...req,
+              created_at:
+                req.created_at ||
+                req.createdAt ||
+                req.requested_at ||
+                req.updated_at,
+              shopLogo: getImageUrl(
+                (req.shopLogo ||
+                  req.logoUrl ||
+                  (req.shop as UnknownRecord)?.profile_image) as
+                  | string
+                  | undefined,
+              ),
+              old_account: oldAccount,
+              new_account: newAccount,
+            };
+          },
         );
         setBankRequests(formatted as unknown as BankChangeRequest[]);
       }
@@ -300,25 +268,6 @@ function ShopsContent() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, sortBy, activeTab]);
-
-  const filteredAppeals = useMemo(() => {
-    if (appealSlaFilter === "ALL") return appeals;
-
-    const now = Date.now();
-    return appeals.filter((appeal) => {
-      if (appeal.status !== "pending") return false;
-
-      const createdTime = new Date(appeal.created_at).getTime();
-      const diffHours =
-        (now - (isNaN(createdTime) ? now : createdTime)) / (1000 * 60 * 60);
-
-      if (appealSlaFilter === "NEW") return diffHours < 24;
-      if (appealSlaFilter === "WAITING")
-        return diffHours >= 24 && diffHours < 72;
-      if (appealSlaFilter === "OVERDUE") return diffHours >= 72;
-      return true;
-    });
-  }, [appeals, appealSlaFilter]);
 
   const filteredAndSortedShops = useMemo(() => {
     let result = [...allShops];
@@ -535,50 +484,6 @@ function ShopsContent() {
     });
   };
 
-  const rawAddress = selectedShop
-    ? selectedShop.address ||
-      (selectedShop as UnknownRecord).Address ||
-      (selectedShop as UnknownRecord).full_address ||
-      (selectedShop as UnknownRecord).address_detail
-    : null;
-
-  const formattedSelectedShop = selectedShop
-    ? {
-        _id: String(
-          selectedShop.id || (selectedShop as UnknownRecord)._id || "",
-        ),
-        name:
-          selectedShop.shop_name ||
-          (selectedShop as UnknownRecord).name ||
-          "ไม่ระบุชื่อร้าน",
-        ownerName:
-          selectedShop.owner_name ||
-          (selectedShop as UnknownRecord).ownerName ||
-          "ไม่ระบุ",
-        email: selectedShop.email || "",
-        phone: selectedShop.phone || "",
-        openTime:
-          selectedShop.open_time || (selectedShop as UnknownRecord).openTime,
-        closeTime:
-          selectedShop.close_time || (selectedShop as UnknownRecord).closeTime,
-        address: formatAddressString(rawAddress),
-        description: (selectedShop as UnknownRecord).description as
-          | string
-          | undefined,
-        logoUrl: getImageUrl(
-          selectedShop.profile_image ||
-            ((selectedShop as UnknownRecord).logoUrl as string | undefined),
-        ),
-        documentUrl: getImageUrl(
-          ((selectedShop as UnknownRecord).documentUrl ||
-            (selectedShop as UnknownRecord).id_card_image) as
-            | string
-            | undefined,
-        ),
-        status: (selectedShop.status || "PENDING") as unknown as Shop["status"],
-      }
-    : null;
-
   const pendingAppealsCount = appeals.filter(
     (a) => a.status === "pending",
   ).length;
@@ -594,78 +499,15 @@ function ShopsContent() {
         </p>
       </div>
 
-      {/* Tabs Menu */}
-      <div className="flex gap-4 border-b border-slate-200 mb-6 overflow-x-auto">
-        <button
-          type="button"
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "pending"
-              ? "border-sky-600 text-sky-600"
-              : "border-transparent text-slate-500 hover:text-slate-700"
-          }`}
-          onClick={() => handleTabChange("pending")}
-        >
-          <FileText size={18} />
-          <span>คำขอสมัครใหม่</span>
-          {pendingShops.length > 0 && (
-            <span className="bg-sky-600 text-white text-xs px-2 py-0.5 rounded-full">
-              {pendingShops.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "bank"
-              ? "border-sky-600 text-sky-600"
-              : "border-transparent text-slate-500 hover:text-slate-700"
-          }`}
-          onClick={() => handleTabChange("bank")}
-        >
-          <Landmark size={18} />
-          <span>เปลี่ยนบัญชีธนาคาร</span>
-          {bankRequests.length > 0 && (
-            <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full">
-              {bankRequests.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "appeals"
-              ? "border-sky-600 text-sky-600"
-              : "border-transparent text-slate-500 hover:text-slate-700"
-          }`}
-          onClick={() => handleTabChange("appeals")}
-        >
-          <MessageSquareWarning size={18} />
-          <span>คำขอปลดระงับ</span>
-          {pendingAppealsCount > 0 && (
-            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-              {pendingAppealsCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "all"
-              ? "border-sky-600 text-sky-600"
-              : "border-transparent text-slate-500 hover:text-slate-700"
-          }`}
-          onClick={() => handleTabChange("all")}
-        >
-          <Store size={18} />
-          <span>ร้านค้าทั้งหมดในระบบ</span>
-          <span className="bg-slate-400 text-white text-xs px-2 py-0.5 rounded-full">
-            {allShops.length}
-          </span>
-        </button>
-      </div>
+      {/* Component Navigation Tabs */}
+      <ShopTabsNavigation
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        pendingShopsCount={pendingShops.length}
+        bankRequestsCount={bankRequests.length}
+        pendingAppealsCount={pendingAppealsCount}
+        allShopsCount={allShops.length}
+      />
 
       {loading ? (
         <div className="text-center py-16 text-slate-500 flex flex-col items-center gap-3">
@@ -684,156 +526,24 @@ function ShopsContent() {
           )}
 
           {/* TAB 2: เปลี่ยนบัญชีธนาคาร */}
-          {activeTab === "bank" &&
-            (bankRequests.length === 0 ? (
-              <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
-                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 size={32} />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-700">
-                  ไม่มีคำขอแก้ไขบัญชีธนาคาร
-                </h3>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {bankRequests.map((req) => (
-                  <BankRequestCard
-                    key={req.id}
-                    request={req}
-                    onApprove={(id) => handleVerifyBank(id, "approve")}
-                    onReject={(id) => handleVerifyBank(id, "reject")}
-                  />
-                ))}
-              </div>
-            ))}
+          {activeTab === "bank" && (
+            <BankRequestsTab
+              requests={bankRequests}
+              onApprove={(id) => handleVerifyBank(id, "approve")}
+              onReject={(id) => handleVerifyBank(id, "reject")}
+            />
+          )}
 
           {/* TAB 3: คำขอปลดระงับ */}
           {activeTab === "appeals" && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                  <Filter size={16} className="text-sky-600" />
-                  <span>กรองตามระยะเวลาดำเนินการ:</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setAppealSlaFilter("ALL")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                      appealSlaFilter === "ALL"
-                        ? "bg-slate-800 text-white shadow-sm"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    ทั้งหมด ({appeals.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAppealSlaFilter("NEW")}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                      appealSlaFilter === "NEW"
-                        ? "bg-sky-600 text-white shadow-sm"
-                        : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-100"
-                    }`}
-                  >
-                    <Sparkles size={13} /> ยื่นมาใหม่ (&lt; 24 ชม.)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAppealSlaFilter("WAITING")}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                      appealSlaFilter === "WAITING"
-                        ? "bg-amber-500 text-white shadow-sm"
-                        : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-100"
-                    }`}
-                  >
-                    <Clock size={13} /> รอการตรวจสอบ (1-3 วัน)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAppealSlaFilter("OVERDUE")}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                      appealSlaFilter === "OVERDUE"
-                        ? "bg-rose-600 text-white shadow-sm animate-pulse"
-                        : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-100"
-                    }`}
-                  >
-                    <AlertTriangle size={13} /> เกินกำหนด (&gt; 3 วัน)
-                  </button>
-                </div>
-              </div>
-
-              {filteredAppeals.length === 0 ? (
-                <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
-                  <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <CheckCircle2 size={32} />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-700">
-                    ไม่พบคำขอปลดระงับในหมวดหมู่นี้
-                  </h3>
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {filteredAppeals.map((appeal) => (
-                    <div
-                      key={appeal.id}
-                      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-                          <div>
-                            <h4 className="font-bold text-slate-800 text-base">
-                              {appeal.shop?.shop_name ||
-                                `ร้านค้า ID: ${appeal.shop_id}`}
-                            </h4>
-                            <p className="text-xs text-slate-400">
-                              {appeal.shop?.email || ""}
-                            </p>
-                          </div>
-                          {getAppealUrgencyBadge(
-                            appeal.created_at,
-                            appeal.status,
-                          )}
-                        </div>
-
-                        <div className="my-3 space-y-1.5 text-sm">
-                          <p className="font-semibold text-slate-700">
-                            เรื่อง: {appeal.subject}
-                          </p>
-                          <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 border border-slate-100">
-                            {appeal.message}
-                          </div>
-                          <p className="text-[11px] text-slate-400">
-                            วันที่ยื่นเรื่อง:{" "}
-                            {new Date(appeal.created_at).toLocaleString(
-                              "th-TH",
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
-                      {appeal.status === "pending" && (
-                        <div className="flex justify-end pt-2 border-t border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleToggleSuspendShop(
-                                appeal.shop_id,
-                                "suspended",
-                              )
-                            }
-                            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700 transition cursor-pointer"
-                          >
-                            <ShieldCheck size={16} />
-                            อนุมัติปลดระงับร้านค้า
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <AppealsTab
+              appeals={appeals}
+              appealSlaFilter={appealSlaFilter}
+              setAppealSlaFilter={setAppealSlaFilter}
+              onApproveUnsuspend={(shopId) =>
+                handleToggleSuspendShop(shopId, "suspended")
+              }
+            />
           )}
 
           {/* TAB 4: ร้านค้าทั้งหมดในระบบ */}
@@ -860,9 +570,6 @@ function ShopsContent() {
                   <h3 className="text-base font-semibold text-slate-700">
                     ไม่พบข้อมูลร้านค้าที่ค้นหา
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    ลองเปลี่ยนคำค้นหาหรือกดรีเซ็ตค่าตัวกรองด้านบน
-                  </p>
                 </div>
               ) : (
                 <>
@@ -886,9 +593,9 @@ function ShopsContent() {
       )}
 
       {/* Modal รายละเอียดร้านค้า */}
-      {selectedShop && formattedSelectedShop && (
+      {selectedShop && (
         <ShopDetailModal
-          shop={formattedSelectedShop as any}
+          shop={selectedShop as any}
           onClose={() => setSelectedShop(null)}
           onApprove={() =>
             handleVerifyShop(

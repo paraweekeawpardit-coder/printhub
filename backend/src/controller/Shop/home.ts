@@ -442,9 +442,10 @@ export const getFinancialOverview = async (
       .from("print_order")
       .select(`
         id,
+        order_no,
         order_date,
         total_price,
-        customer (first_name, last_name)
+        payment:payment_id (payout_slip_url, payout_date)
       `)
       .eq("shop_id", shop_id)
       .eq("current_status_id", statusData.id)
@@ -468,13 +469,20 @@ export const getFinancialOverview = async (
       totalFee += fee;
       totalNet += net;
 
+      // payment อาจกลับมาเป็น object หรือ array ขึ้นกับ relation
+      const payment = Array.isArray(o.payment) ? o.payment[0] : o.payment;
+      const payoutSlip = payment?.payout_slip_url?.trim() || null;
+
       return {
         id: o.id,
+        order_no: o.order_no,
         date: o.order_date,
-        customer_name: `${o.customer?.first_name || ""} ${o.customer?.last_name || ""}`.trim() || "ลูกค้าทั่วไป",
         gross,
         fee,
         net,
+        // มีสลิป = แพลตฟอร์มโอนเงินให้ร้านแล้ว, ไม่มี = กำลังดำเนินการ
+        payout_slip_url: payoutSlip,
+        payout_date: payment?.payout_date ?? null,
       };
     });
 
@@ -762,6 +770,29 @@ async function fetchOrderMap(orderIds: string[]) {
   return map;
 }
 
+// ปิดบังชื่อลูกค้า: แสดงเฉพาะตัวแรกกับตัวสุดท้าย ตัวกลางเป็น *
+// ใช้ grapheme เพื่อไม่ให้สระ/วรรณยุกต์ภาษาไทยถูกตัดแยกจากพยัญชนะ
+const toGraphemes = (text: string): string[] => {
+  try {
+    const seg = new (Intl as any).Segmenter("th", { granularity: "grapheme" });
+    return Array.from(seg.segment(text), (x: any) => x.segment as string);
+  } catch {
+    return Array.from(text);
+  }
+};
+
+const maskName = (name?: string | null): string => {
+  const chars = toGraphemes((name ?? "").trim());
+  if (chars.length === 0) return "";
+  if (chars.length <= 2) return `${chars[0]}*`;
+  return `${chars[0]}${"*".repeat(chars.length - 2)}${chars[chars.length - 1]}`;
+};
+
+const maskCustomer = (c: any) =>
+  c
+    ? { first_name: maskName(c.first_name), last_name: maskName(c.last_name) }
+    : null;
+
 export const getComplaintsAndReviews = async (
   req: Request,
   res: Response
@@ -809,10 +840,12 @@ export const getComplaintsAndReviews = async (
 
     const safeReviews = rawReviews.map((r) => ({
       ...r,
+      customer: maskCustomer(r.customer),
       print_order: r.order_id ? orderMap.get(r.order_id) ?? null : null,
     }));
     const safeReports = visibleReports.map((r) => ({
       ...r,
+      customer: maskCustomer(r.customer),
       print_order: r.order_id ? orderMap.get(r.order_id) ?? null : null,
     }));
 

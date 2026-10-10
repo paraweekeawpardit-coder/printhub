@@ -12,11 +12,11 @@ import {
   Settings, 
   LogOut,
   LayoutDashboard,
-  MessageCircle,
+  Headset, // 👈 เพิ่ม Headset Icon สำหรับ Support Chat
   Bell
 } from "lucide-react";
 import NotificationBell from "@/component/NotificationBell";
-import { supabase } from "@/config/supabase"; // 👈 เพิ่มการดึง Supabase Client
+import { supabase } from "@/config/supabase";
 
 interface NavBarProps {
   cartCount?: number;
@@ -76,6 +76,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
   // ตรวจจับ active path
   const isHomeActive = pathname === "/customer" || pathname === "/";
   const isOrdersActive = pathname.startsWith("/customer/orders") || pathname.startsWith("/customer/order");
+  const isSupportActive = pathname.startsWith("/customer/support"); // 👈 เช็ก active state ของหน้า support
   const isSettingActive = pathname.startsWith("/customer/setting") || pathname.startsWith("/customer/profile");
   const isDashboardActive = pathname.startsWith("/customer/dashboard");
 
@@ -94,7 +95,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
     router.push("/auth");
   };
 
- return (
+  return (
     <nav className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur shadow-xs">
       <div className="mx-auto max-w-6xl h-16 flex items-center justify-between gap-2 px-4">
         
@@ -111,7 +112,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
           </span>
         </Link>
 
-        {/* เมนูหลักตรงกลาง (หน้าแรก / คำสั่งซื้อของฉัน / แชท) */}
+        {/* เมนูหลักตรงกลาง (หน้าแรก / คำสั่งซื้อของฉัน / ติดต่อแอดมิน) */}
         <div className="flex items-center gap-1 text-sm font-medium">
           {/* หน้าแรก */}
           <Link
@@ -145,21 +146,21 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </span>
           </Link>
 
-          {/* แชท (ตำแหน่งเดิม) */}
-          {/* <Link
-            href="/customer/chat"
-            title="แชท"
+          {/* 🟢 ติดต่อแอดมิน (Support Chat) */}
+          <Link
+            href="/customer/support"
+            title="ติดต่อแอดมิน"
             className={`flex items-center gap-2 h-10 px-3 md:px-4 rounded-full transition-colors cursor-pointer focus:outline-none ${
-              isChatActive
+              isSupportActive
                 ? "bg-[#0F2942] text-white"
                 : "text-slate-500 hover:text-[#0F2942] hover:bg-slate-100"
             }`}
           >
-            <MessageCircle size={15} />
-            <span className={isChatActive ? "inline" : "hidden md:inline"}>
-              แชท
+            <Headset size={16} />
+            <span className={isSupportActive ? "inline" : "hidden md:inline"}>
+              ติดต่อแอดมิน
             </span>
-          </Link> */}
+          </Link>
         </div>
 
         {/* ฝั่งขวา: การแจ้งเตือน, ตะกร้า, แดชบอร์ด (ข้างซ้ายรูปโปรไฟล์), รูปโปรไฟล์, ออกจากระบบ */}

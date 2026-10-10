@@ -9,7 +9,7 @@ import ReportDetailModal, { ReportDetailItem } from "../../../component/admin/Re
 export default function ReportsAdminPage() {
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [filter, setFilter] = useState<"all" | "pending" | "verified">("all");
+  const [filter, setFilter] = useState<"all" | "pending" | "investigating" | "resolved">("all");
   const [search, setSearch] = useState("");
   const [selectedImageReport, setSelectedImageReport] = useState<ReportItem | null>(null);
   const [selectedDetailReport, setSelectedDetailReport] = useState<ReportDetailItem | null>(null);
@@ -19,30 +19,17 @@ export default function ReportsAdminPage() {
   const fetchReports = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/reports`);
-      const contentType = res.headers.get("content-type");
+      const res = await fetch(`${API_URL}/reports?t=${Date.now()}`);
 
-      if (!res.ok || !contentType || !contentType.includes("application/json")) {
+      if (!res.ok) {
         throw new Error(`Failed to fetch reports. Status: ${res.status}`);
       }
 
       const data = await res.json();
       setReports(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.warn("API Error, using fallback data for reports:", error);
-      setReports([
-        {
-          id: "rep-001",
-          customer_id: "cust-01",
-          shop_id: "shop-01",
-          admin_id: null,
-          order_id: "ORD-2026-9901",
-          description: "งานพิมพ์สีเพี้ยน ปริ้นท์ไม่ตรงตามไฟล์ PDF ที่แนบ",
-          image_url: "https://via.placeholder.com/400x300",
-          is_verified: false,
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      console.error("Error fetching reports from API:", error);
+      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -52,25 +39,19 @@ export default function ReportsAdminPage() {
     fetchReports();
   }, [fetchReports]);
 
-  const toggleVerify = async (id: string, currentVerifiedStatus: boolean) => {
-    const newStatus = !currentVerifiedStatus;
-
-    setReports((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, is_verified: newStatus } : item
-      )
-    );
-
+  // ปุ่มกดรับเรื่องพิจารณา
+  const handleAcceptReport = async (id: string) => {
     try {
       const res = await fetch(`${API_URL}/reports/verify`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ report_id: id, is_verified: newStatus }),
+        body: JSON.stringify({ report_id: id }),
       });
 
-      if (!res.ok) throw new Error("Update failed");
+      if (!res.ok) throw new Error("Accept report failed");
+      fetchReports();
     } catch (error) {
-      console.warn("Error updating verification status via API (UI updated locally):", error);
+      console.error("Error accepting report:", error);
     }
   };
 
@@ -94,11 +75,11 @@ export default function ReportsAdminPage() {
 
       if (!res.ok) throw new Error("Resolve report failed");
 
-      alert("บันทึกการตัดสินเรียบร้อยแล้ว");
+      console.log("Report resolved successfully:", { reportId, decision });
+      setSelectedDetailReport(null);
       fetchReports();
     } catch (err) {
       console.error("Error resolving report:", err);
-      alert("เกิดข้อผิดพลาดในการบันทึกการตัดสิน");
     }
   };
 
@@ -107,8 +88,10 @@ export default function ReportsAdminPage() {
       filter === "all"
         ? true
         : filter === "pending"
-        ? !item.is_verified
-        : item.is_verified;
+        ? item.status === "pending" || !item.status
+        : filter === "investigating"
+        ? item.status === "investigating"
+        : item.status === "resolved_refund" || item.status === "rejected";
 
     const matchesSearch =
       (item.description?.toLowerCase() || "").includes(search.toLowerCase()) ||
@@ -118,8 +101,11 @@ export default function ReportsAdminPage() {
     return matchesFilter && matchesSearch;
   });
 
-  const pendingCount = reports.filter((r) => !r.is_verified).length;
-  const verifiedCount = reports.filter((r) => r.is_verified).length;
+  const pendingCount = reports.filter((r) => r.status === "pending" || !r.status).length;
+  const investigatingCount = reports.filter((r) => r.status === "investigating").length;
+  const resolvedCount = reports.filter(
+    (r) => r.status === "resolved_refund" || r.status === "rejected"
+  ).length;
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 sm:p-8 font-sans text-slate-800">
@@ -141,7 +127,7 @@ export default function ReportsAdminPage() {
         <ReportStats
           total={reports.length}
           pending={pendingCount}
-          verified={verifiedCount}
+          verified={resolvedCount}
         />
 
         {/* Filter and Search Bar */}
@@ -161,15 +147,23 @@ export default function ReportsAdminPage() {
                 filter === "pending" ? "bg-amber-500 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
-              รอตรวจสอบ ({pendingCount})
+              รอดำเนินการ ({pendingCount})
             </button>
             <button
-              onClick={() => setFilter("verified")}
+              onClick={() => setFilter("investigating")}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                filter === "verified" ? "bg-emerald-600 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                filter === "investigating" ? "bg-blue-600 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
-              อนุมัติแล้ว ({verifiedCount})
+              กำลังตรวจสอบ ({investigatingCount})
+            </button>
+            <button
+              onClick={() => setFilter("resolved")}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                filter === "resolved" ? "bg-emerald-600 text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              ตัดสินเรียบร้อย ({resolvedCount})
             </button>
           </div>
 
@@ -189,12 +183,13 @@ export default function ReportsAdminPage() {
           reports={filteredReports}
           loading={loading}
           onSelectReport={(report) => setSelectedDetailReport(report as unknown as ReportDetailItem)}
-          onToggleVerify={toggleVerify}
+          onAcceptReport={handleAcceptReport}
+          onOpenImage={(report) => setSelectedImageReport(report)}
         />
 
-        {/* Image Preview Modal Component */}
+        {/* Image Preview Modal */}
         <ReportImageModal
-          report={selectedImageReport}
+          report={selectedImageReport as any}
           onClose={() => setSelectedImageReport(null)}
         />
 
@@ -202,6 +197,7 @@ export default function ReportsAdminPage() {
         <ReportDetailModal
           report={selectedDetailReport}
           onClose={() => setSelectedDetailReport(null)}
+          onAcceptReport={handleAcceptReport}
           onResolve={handleResolveReport}
         />
 

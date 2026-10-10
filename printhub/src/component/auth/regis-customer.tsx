@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, FileText, X, ShieldCheck } from "lucide-react";
 import axios from "axios";
 
 type RegisFormProps = {
@@ -12,6 +12,7 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [Regisdata, setData] = useState({
     Fname: "",
     Lname: "",
@@ -31,7 +32,7 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
     }
 
     if (!agreed) {
-      setMessage("กรุณายอมรับเงื่อนไขการใช้งาน");
+      setMessage("กรุณายอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว");
       return;
     }
 
@@ -134,19 +135,29 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
             </button>
           </div>
 
-          <label className="flex items-start gap-2 text-xs text-gray-500">
+          <div className="flex items-start gap-2.5 text-xs text-gray-500 pt-1">
             <input
               type="checkbox"
+              id="agree-customer"
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
             />
-            ฉันยอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว
-          </label>
+            <label htmlFor="agree-customer" className="leading-relaxed cursor-pointer">
+              ฉันยอมรับ{" "}
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(true)}
+                className="text-primary hover:underline font-semibold"
+              >
+                เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว
+              </button>
+            </label>
+          </div>
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-white transition hover:bg-[#005FA3]"
+            className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-white transition hover:bg-[#005FA3] shadow-sm shadow-primary/20"
           >
             สมัครสมาชิก
           </button>
@@ -162,6 +173,80 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
           </span>
         </p>
       </div>
+
+      {/* Improved PDPA Modal Design */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl max-h-[85vh] flex flex-col border border-slate-100">
+            
+            {/* Header */}
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <ShieldCheck size={22} />
+              </div>
+              <div className="flex-1 pr-6">
+                <h3 className="text-base font-bold text-slate-800">
+                  ข้อกำหนดและนโยบายความเป็นส่วนตัว
+                </h3>
+                <p className="text-xs text-slate-400">
+                  กรุณาอ่านและศึกษารายละเอียดก่อนกดยอมรับการใช้งาน
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(false)}
+                className="absolute right-5 top-5 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="overflow-y-auto space-y-4 text-xs text-slate-600 py-4 pr-2 leading-relaxed flex-1">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  1. เงื่อนไขการใช้งาน (Terms of Service)
+                </h4>
+                <p className="pl-3">• ผู้ใช้บริการต้องให้ข้อมูลที่ถูกต้องและเป็นปัจจุบันในขั้นตอนการลงทะเบียน</p>
+                <p className="pl-3">• การสั่งพิมพ์งานจะสมบูรณ์เมื่อมีการยืนยันคำสั่งซื้อและตรวจสอบหลักฐานการชำระเงินเรียบร้อยแล้ว</p>
+                <p className="pl-3">• ผู้ใช้งานต้องรับผิดชอบต่อเนื้อหาและไฟล์ที่อัปโหลด โดยต้องไม่ละเมิดลิขสิทธิ์หรือผิดกฎหมาย</p>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                  2. นโยบายคุ้มครองข้อมูลส่วนบุคคล (PDPA)
+                </h4>
+                <p className="pl-3">• <strong>การจัดเก็บข้อมูล:</strong> เราจัดเก็บข้อมูลส่วนบุคคล เช่น ชื่อ, อีเมล, เบอร์โทรศัพท์ และไฟล์งานเพื่อการให้บริการพิมพ์เอกสาร</p>
+                <p>• <strong>ความปลอดภัย:</strong> ข้อมูลของท่านจะถูกเก็บรักษาไว้อย่างปลอดภัยและไม่ถูกเปิดเผยแก่บุคคลภายนอก เว้นแต่เป็นไปตามวัตถุประสงค์ในการให้บริการ</p>
+                <p>• <strong>สิทธิของท่าน:</strong> ท่านสามารถติดต่อขอเข้าถึง แก้ไข หรือขอลบข้อมูลส่วนบุคคลของท่านได้ตลอดเวลาผ่านระบบ</p>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="pt-4 border-t border-slate-100 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(false)}
+                className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+              >
+                ปิดหน้าต่าง
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAgreed(true);
+                  setShowTermsModal(false);
+                }}
+                className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-white hover:bg-[#005FA3] shadow-md shadow-primary/20 transition"
+              >
+                ยอมรับเงื่อนไข
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

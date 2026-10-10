@@ -11,6 +11,8 @@ import {
   Loader2,
   Lock,
   ChevronDown,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 
 // ==========================================
@@ -87,11 +89,29 @@ export default function ShopBankTab({
     }
   };
 
+  // แปลงรูปแบบวันที่ยื่นเรื่อง
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "";
+    return date.toLocaleDateString("th-TH", {
+      timeZone: "Asia/Bangkok",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   // ปิด dropdown เมื่อคลิกข้างนอก
   useEffect(() => {
     if (!isBankMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (bankMenuRef.current && !bankMenuRef.current.contains(e.target as Node)) {
+      if (
+        bankMenuRef.current &&
+        !bankMenuRef.current.contains(e.target as Node)
+      ) {
         setIsBankMenuOpen(false);
       }
     };
@@ -99,9 +119,6 @@ export default function ShopBankTab({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isBankMenuOpen]);
 
-  // เผื่อค่าเดิมที่เคยบันทึกไว้ไม่ตรงกับตัวเลือกในลิสต์ (เช่นพิมพ์เอง
-  // มาก่อนตอนยังเป็น input ธรรมดา) ให้โชว์เป็นตัวเลือกพิเศษไว้ก่อน
-  // จะได้ไม่หายไปเงียบๆ จน dropdown ว่าง
   const isKnownBank = BANK_OPTIONS.some((b) => b.name === bankName);
   const bankListWithFallback =
     bankName && !isKnownBank
@@ -111,7 +128,7 @@ export default function ShopBankTab({
   return (
     <div className="relative">
       <div
-        className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${
+        className={`rounded-2xl border border-slate-200 bg-white shadow-xs ${
           !isVerified ? "pointer-events-none blur-[2px] select-none" : ""
         }`}
       >
@@ -132,13 +149,23 @@ export default function ShopBankTab({
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={onToggleEdit}
-                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-[#0F2942] transition-colors hover:border-[#0F2942]"
-              >
-                <Pencil size={14} /> แก้ไขข้อมูล
-              </button>
+
+              {/* 📌 แสดงสถานะรอดำเนินการหากมีคำขอค้างอยู่ บล็อกปุ่มแก้ไข */}
+              {isPending ? (
+                <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800 select-none">
+                  <Clock size={14} className="animate-spin text-amber-600 shrink-0" />
+                  <span>อยู่ระหว่างรอผู้ดูแลระบบตรวจสอบ</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onToggleEdit}
+                  disabled={!isVerified}
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-[#0F2942] transition-colors hover:border-[#0F2942] disabled:opacity-50 cursor-pointer"
+                >
+                  <Pencil size={14} /> แก้ไขข้อมูล
+                </button>
+              )}
             </div>
 
             <div className="border-t border-slate-100 px-6 py-4">
@@ -166,6 +193,20 @@ export default function ShopBankTab({
                 )}
               </div>
             </div>
+
+            {/* 📌 Banner แจ้งเตือนเมื่อมีคำขอแก้ไขบัญชีค้างอยู่ */}
+            {isPending && (
+              <div className="mx-6 mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-xs text-amber-900">
+                <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-bold">คุณมีคำขอแก้ไขบัญชีธนาคารที่รอดำเนินการ</p>
+                  <p className="mt-0.5 text-amber-700">
+                    ระบบไม่อนุญาตให้แก้ไขข้อมูลซ้ำได้จนกว่าคำขอเดิมจะได้รับการตรวจสอบและอนุมัติจากผู้ดูแลระบบ
+                    {pendingCreatedAt && ` (ยื่นเรื่องเมื่อ ${formatDate(pendingCreatedAt)})`}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* Edit / Form mode */
@@ -184,13 +225,13 @@ export default function ShopBankTab({
                   <div className="relative mt-1.5" ref={bankMenuRef}>
                     <Landmark
                       size={16}
-                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 z-10 text-slate-300"
+                      className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-300"
                     />
 
                     <button
                       type="button"
                       onClick={() => setIsBankMenuOpen((prev) => !prev)}
-                      className={`flex w-full items-center justify-between rounded-xl border bg-white py-2 pl-9 pr-3 text-sm outline-none transition-colors ${
+                      className={`flex w-full items-center justify-between rounded-xl border bg-white py-2 pl-9 pr-3 text-sm outline-hidden transition-colors ${
                         isBankMenuOpen
                           ? "border-[#2F6FED] ring-2 ring-[#2F6FED]/15"
                           : "border-slate-200 hover:border-slate-300"
@@ -253,7 +294,7 @@ export default function ShopBankTab({
                       value={accountName}
                       onChange={(e) => setAccountName(e.target.value)}
                       placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"
-                      className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm text-[#0F2942] outline-none transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
+                      className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm text-[#0F2942] outline-hidden transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
                     />
                   </div>
                 </div>
@@ -272,7 +313,7 @@ export default function ShopBankTab({
                       value={accountNumber}
                       onChange={(e) => setAccountNumber(e.target.value)}
                       placeholder="xxx-x-xxxxx-x"
-                      className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm tabular-nums text-[#0F2942] outline-none transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
+                      className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm tabular-nums text-[#0F2942] outline-hidden transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
                     />
                   </div>
                 </div>
@@ -289,6 +330,7 @@ export default function ShopBankTab({
                 ยกเลิก
               </button>
               <button
+                type="button"
                 onClick={onSave}
                 disabled={saving}
                 className="flex items-center gap-2 rounded-xl bg-[#0F2942] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#16385c] disabled:opacity-50"
@@ -307,7 +349,7 @@ export default function ShopBankTab({
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
             <Lock size={20} />
           </div>
-          <p className="text-center px-6 text-sm font-semibold text-gray-900">
+          <p className="px-6 text-center text-sm font-semibold text-gray-900">
             คุณจะสามารถแก้ไขบัญชีธนาคารได้ เมื่อผ่านการยืนยันตัวตนจากผู้ดูแลระบบแล้ว
           </p>
         </div>

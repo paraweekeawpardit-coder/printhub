@@ -6,26 +6,22 @@ import { Bell, CheckCheck } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 
 interface NotificationBellProps {
-  userId: string;
-  role: "customer" | "shop";
+  userId?: string;
+  role: "customer" | "shop" | "admin";
 }
 
 export default function NotificationBell({ userId, role }: NotificationBellProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   
-  // 🟢 1. สร้าง Ref สำหรับจับพื้นที่ Component
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // ดึง notifications, unreadCount, loading, markAsRead และ markAllAsRead จาก Hook
   const notificationHook = useNotifications(userId, role);
-  const { notifications, unreadCount, loading, markAsRead } = notificationHook;
-  const markAllAsRead = (notificationHook as any).markAllAsRead;
+  const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = notificationHook;
 
-  // 🟢 2. เพิ่ม useEffect สำหรับดักจับการคลิกภายนอก (Click Outside) และปุ่ม Esc
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // ถ้าคลิกนอกพื้นที่ dropdownRef ให้ปิด Dropdown
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
@@ -56,29 +52,29 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
     setIsOpen(false);
 
-    const orderId = noti.order_id;
+    // 🟢 Routing แยกตาม Role และ Link / Type
+    if (noti.link) {
+      router.push(noti.link);
+      return;
+    }
 
-    if (orderId) {
-      if (role === "shop") {
+    const orderId = noti.order_id;
+    const type = noti.type;
+
+    if (role === "admin") {
+      if (type === "report_issue" || noti.title?.includes("ร้องเรียน") || noti.title?.includes("รายงาน")) {
+        router.push("/admin/reports");
+      } else {
+        router.push("/admin/support");
+      }
+    } else if (role === "shop") {
+      if (orderId) {
         router.push(`/shop/detail/${orderId}`);
       } else {
-        router.push("/customer/orders");
-
-        setTimeout(() => {
-          const element = document.getElementById(`order-${orderId}`);
-          if (element) {
-            element.scrollIntoView({
-              behavior: "smooth",
-              block: "center",
-            });
-
-            element.classList.add("ring-2", "ring-blue-500", "shadow-lg");
-            setTimeout(() => {
-              element.classList.remove("ring-2", "ring-blue-500", "shadow-lg");
-            }, 2500);
-          }
-        }, 300);
+        router.push(`/shop/setting/${userId}`);
       }
+    } else {
+      if (orderId) router.push(`/customer/orders?highlight=${orderId}`);
     }
   };
 
@@ -89,24 +85,40 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
     if (typeof markAllAsRead === "function") {
       await markAllAsRead();
-    } else {
-      const unreadItems = notifications.filter((n: any) => !n.is_read);
-      await Promise.all(unreadItems.map((n: any) => markAsRead(n.id)));
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return "";
+      return date.toLocaleString("th-TH", {
+        day: "2-digit",
+        month: "short",
+        year: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "";
     }
   };
 
   return (
-    // 🟢 3. ผูก dropdownRef ไว้ที่ Container นอกสุด
     <div className="relative" ref={dropdownRef}>
       {/* ปุ่มกระดิ่ง */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-slate-700 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-all cursor-pointer focus:outline-none"
+        className={`relative p-2 rounded-full transition-all cursor-pointer focus:outline-none ${
+          role === "admin"
+            ? "text-slate-200 hover:text-white hover:bg-slate-800"
+            : "text-slate-700 hover:text-blue-600 hover:bg-slate-100"
+        }`}
         title="การแจ้งเตือน"
       >
         <Bell size={22} strokeWidth={2.2} />
         {unreadCount > 0 && (
-          <span className="absolute top-0.5 right-0.5 bg-rose-500 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+          <span className="absolute top-0.5 right-0.5 bg-rose-500 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-sm animate-pulse">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -124,7 +136,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
               </span>
             </div>
 
-            {/* ปุ่มอ่านทั้งหมด */}
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
@@ -164,7 +175,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
                     {noti.message}
                   </p>
                   <span className="text-[10px] text-slate-400 block font-normal">
-                    {new Date(noti.created_at).toLocaleString("th-TH")}
+                    {formatDate(noti.created_at)}
                   </span>
                 </div>
               ))
