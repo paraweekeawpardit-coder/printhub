@@ -82,7 +82,7 @@ export const getReviewOrderDetail = async (
       data: {
         ...order,
         has_reported: !!existingReport,
-        has_reviewed: !!existingReview, // 👈 ส่งสถานะ true/false กลับไปที่หน้าบ้าน
+        has_reviewed: !!existingReview,
       },
     });
   } catch (error: any) {
@@ -111,7 +111,7 @@ export const submitOrderReview = async (
       comment,
     } = req.body;
 
-    const uploadedFile = (req as any).file; // ดึงไฟล์ที่แนบมากับ FormData
+    const uploadedFile = (req as any).file;
 
     if (!order_id) {
       return res.status(400).json({
@@ -141,9 +141,6 @@ export const submitOrderReview = async (
       });
     }
 
-    // ==========================================
-    // ตรวจสอบว่า Order มีอยู่จริง
-    // ==========================================
     const { data: order, error: orderError } = await supabase
       .from("print_order")
       .select(`
@@ -165,9 +162,6 @@ export const submitOrderReview = async (
       });
     }
 
-    // ==========================================
-    // ป้องกันไม่ให้ส่ง customer_id ของคนอื่น
-    // ==========================================
     if (order.customer_id !== customer_id) {
       return res.status(403).json({
         success: false,
@@ -175,9 +169,6 @@ export const submitOrderReview = async (
       });
     }
 
-    // ==========================================
-    // ตรวจสอบร้านค้า
-    // ==========================================
     if (order.shop_id !== shop_id) {
       return res.status(400).json({
         success: false,
@@ -185,9 +176,6 @@ export const submitOrderReview = async (
       });
     }
 
-    // ==========================================
-    // ตรวจสอบว่าเคยรีวิวแล้วหรือยัง (ป้องกันรีวิวซ้ำ)
-    // ==========================================
     const { data: existingReview, error: existingReviewError } =
       await supabase
         .from("review")
@@ -206,9 +194,6 @@ export const submitOrderReview = async (
       });
     }
 
-    // ==========================================
-    // อัปโหลดไฟล์ภาพ/PDF ขึ้น Supabase Storage (Bucket: reviews)
-    // ==========================================
     let imageUrl = null;
 
     if (uploadedFile) {
@@ -227,7 +212,6 @@ export const submitOrderReview = async (
         throw new Error("ไม่สามารถอัปโหลดรูปภาพได้: " + storageError.message);
       }
 
-      // ดึง Public URL ของไฟล์ที่เพิ่งอัปโหลด
       const { data: publicUrlData } = supabase.storage
         .from("reviews")
         .getPublicUrl(filePath);
@@ -235,9 +219,6 @@ export const submitOrderReview = async (
       imageUrl = publicUrlData.publicUrl;
     }
 
-    // ==========================================
-    // บันทึกรีวิวลงฐานข้อมูล
-    // ==========================================
     const { error: insertError } = await supabase
       .from("review")
       .insert([
@@ -320,9 +301,7 @@ export const submitOrderReport = async (
       });
     }
 
-    // ==========================================
     // 🛑 ป้องกันการส่งซ้ำ: เช็กในตาราง report ก่อนบันทึก
-    // ==========================================
     const { data: existingReport, error: checkError } = await supabase
       .from("report")
       .select("id")
@@ -340,9 +319,6 @@ export const submitOrderReport = async (
       });
     }
 
-    // ==========================================
-    // ตรวจสอบ Order จาก Database
-    // ==========================================
     const { data: order, error: orderError } = await supabase
       .from("print_order")
       .select(`
@@ -378,9 +354,6 @@ export const submitOrderReport = async (
       });
     }
 
-    // ==========================================
-    // จัดการอัปโหลดรูปภาพขึ้น Supabase Storage (ถ้ามีไฟล์ส่งมา)
-    // ==========================================
     let imageUrl = null;
 
     if (uploadedFile) {
@@ -409,7 +382,7 @@ export const submitOrderReport = async (
     // ==========================================
     // บันทึกรายงานลง Database
     // ==========================================
-    const { error: insertError } = await supabase
+    const { data: createdReport, error: insertError } = await supabase
       .from("report")
       .insert([
         {
@@ -426,10 +399,36 @@ export const submitOrderReport = async (
           image_url: imageUrl,
           is_verified: false,
         },
-      ]);
+      ])
+      .select()
+      .single();
 
     if (insertError) {
       throw insertError;
+    }
+
+    // 🟢 ==========================================
+    // สร้างการแจ้งเตือนไปยังแอดมินทุกคน (System Admin & Super Admin)
+    // ==========================================
+    try {
+      const { data: adminUsers } = await supabase
+        .from("admin")
+        .select("id");
+
+      if (adminUsers && adminUsers.length > 0) {
+        const adminNotifications = adminUsers.map((admin) => ({
+          admin_id: admin.id,
+          order_id: order_id,
+          title: "มีรายการแจ้งปัญหาใหม่",
+          message: `รายการปัญหาใหม่ประเภท: ${issue_type}`,
+          type: "report_issue",
+          is_read: false,
+        }));
+
+        await supabase.from("notifications").insert(adminNotifications);
+      }
+    } catch (notiError) {
+      console.error("❌ Notification error for admins:", notiError);
     }
 
     return res.status(201).json({
@@ -449,7 +448,7 @@ export const submitOrderReport = async (
 };
 
 // ==========================================
-// 4. ดึงรายการรีวิวทั้งหมดของร้านค้า (ดึงชื่อ-นามสกุลจริงจากตาราง customer)
+// 4. ดึงรายการรีวิวทั้งหมดของร้านค้า
 // ==========================================
 export const getShopReviews = async (req: Request, res: Response) => {
   try {
@@ -462,7 +461,6 @@ export const getShopReviews = async (req: Request, res: Response) => {
       });
     }
 
-    // 1. ดึงรีวิวพร้อมเชื่อมข้อมูลตาราง customer โดยใช้ first_name และ last_name
     const { data: reviews, error } = await supabase
       .from("review")
       .select(`
@@ -492,7 +490,6 @@ export const getShopReviews = async (req: Request, res: Response) => {
       });
     }
 
-    // 2. จัดรูปแบบชื่อลูกค้า (รวม first_name และ last_name เข้าด้วยกัน)
     const formattedReviews = reviews.map((rev: any) => {
       const cust = rev.customer;
       let customerName = "ลูกค้าผู้ใช้บริการ";

@@ -474,6 +474,24 @@ export const createContactAdmin = async (
       return res.status(400).json({ error: error.message });
     }
 
+    // 🟢 กระจายแจ้งเตือนยื่นเรื่องปลดระงับไปยังแอดมินทุกคน
+    try {
+      const { data: admins } = await supabase.from("admin").select("id");
+      if (admins && admins.length > 0) {
+        const notis = admins.map((admin) => ({
+          admin_id: admin.id,
+          shop_id: shop_id,
+          title: "คำร้องขอปลดระงับสิทธิ์ร้านค้าใหม่",
+          message: `ร้านค้ายื่นคำร้องปลดระงับสิทธิ์: ${subject || "ขอปลดการระงับใช้งานร้านค้า"}`,
+          type: "report_issue",
+          is_read: false,
+        }));
+        await supabase.from("notifications").insert(notis);
+      }
+    } catch (notiErr) {
+      console.error("Noti Insert Error (CreateContactAdmin):", notiErr);
+    }
+
     return res.status(201).json({
       success: true,
       message: "ส่งข้อความถึงผู้ดูแลระบบเรียบร้อยแล้ว",
@@ -577,6 +595,24 @@ export const nudgeShopAppeal = async (
         success: false,
         message: `ไม่สามารถอัปเดตสถานะได้: ${error.message}`,
       });
+    }
+
+    // 🟢 กระจายแจ้งเตือนเร่งติดตามคำร้อง (ผ่านไป 3 วัน) ไปยังแอดมินทุกคน
+    try {
+      const { data: admins } = await supabase.from("admin").select("id");
+      if (admins && admins.length > 0) {
+        const notis = admins.map((admin) => ({
+          admin_id: admin.id,
+          shop_id: data?.shop_id || shopId || null,
+          title: "⚡ เร่งติดตามคำร้องปลดระงับสิทธิ์",
+          message: "ร้านค้าได้กดเร่งติดตามคำร้องขอปลดการระงับสิทธิ์ (เกินกำหนด 3 วัน)",
+          type: "report_issue",
+          is_read: false,
+        }));
+        await supabase.from("notifications").insert(notis);
+      }
+    } catch (notiErr) {
+      console.error("Noti Insert Error (nudgeShopAppeal):", notiErr);
     }
 
     return res.status(200).json({

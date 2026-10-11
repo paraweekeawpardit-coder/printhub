@@ -77,18 +77,25 @@ export const getAllReports = async (req: Request, res: Response): Promise<Respon
  */
 export const verifyReport = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { report_id } = req.body;
+    const { report_id, admin_id } = req.body;
     if (!report_id) return res.status(400).json({ error: "report_id is required" });
 
     const nowIso = new Date().toISOString();
 
+    // 🟢 อัปเดตสถานะพร้อมผูก admin_id ของคนที่กดรับเรื่อง
+    const updateData: any = {
+      status: "investigating",
+      is_verified: true,
+      updated_at: nowIso,
+    };
+
+    if (admin_id) {
+      updateData.admin_id = admin_id;
+    }
+
     const { data, error } = await supabase
       .from("report")
-      .update({
-        status: "investigating",
-        is_verified: true,
-        updated_at: nowIso,
-      })
+      .update(updateData)
       .eq("id", report_id)
       .select()
       .single();
@@ -106,7 +113,7 @@ export const verifyReport = async (req: Request, res: Response): Promise<Respons
  */
 export const resolveReport = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { report_id, decision, admin_note } = req.body;
+    const { report_id, decision, admin_note, admin_id } = req.body;
     
     if (!report_id || !decision || !admin_note?.trim()) {
       return res.status(400).json({ error: "report_id, decision, and admin_note are required" });
@@ -117,14 +124,20 @@ export const resolveReport = async (req: Request, res: Response): Promise<Respon
 
     const { data: report } = await supabase.from("report").select("*").eq("id", report_id).single();
 
+    const updatePayload: any = {
+      status: statusValue,
+      admin_note: admin_note.trim(),
+      is_verified: true,
+      updated_at: nowIso,
+    };
+
+    if (admin_id) {
+      updatePayload.admin_id = admin_id;
+    }
+
     const { data: updatedReport, error } = await supabase
       .from("report")
-      .update({
-        status: statusValue,
-        admin_note: admin_note.trim(),
-        is_verified: true,
-        updated_at: nowIso,
-      })
+      .update(updatePayload)
       .eq("id", report_id)
       .select()
       .single();
@@ -184,6 +197,36 @@ export const resolveReport = async (req: Request, res: Response): Promise<Respon
           })
           .eq("order_id", report.order_id);
       }
+    }
+
+    // 🟢 ยิง Notification แจ้งเตือนไปยัง Customer และ Shop เมื่อผลการพิจารณาออก
+    const notificationsToInsert = [];
+    const decisionText = decision === "approved" ? "อนุมัติคำร้องเรียน (คืนเงิน)" : "ปฏิเสธคำร้องเรียน";
+
+    if (report?.customer_id) {
+      notificationsToInsert.push({
+        customer_id: report.customer_id,
+        order_id: report.order_id || null,
+        title: "ผลการพิจารณารายงานปัญหา",
+        message: `รายงานปัญหาของคุณได้รับการพิจารณาแล้ว: ${decisionText} - ${admin_note}`,
+        type: "report_result",
+        is_read: false,
+      });
+    }
+
+    if (report?.shop_id) {
+      notificationsToInsert.push({
+        shop_id: report.shop_id,
+        order_id: report.order_id || null,
+        title: "ผลการพิจารณารายงานปัญหา",
+        message: `รายงานปัญหาจากคำสั่งซื้อได้รับการพิจารณาแล้ว: ${decisionText}`,
+        type: "report_result",
+        is_read: false,
+      });
+    }
+
+    if (notificationsToInsert.length > 0) {
+      await supabase.from("notifications").insert(notificationsToInsert);
     }
 
     return res.status(200).json({ message: "Report resolved successfully", data: updatedReport });
