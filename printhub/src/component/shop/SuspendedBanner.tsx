@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import ContactAdminModal from "./ContactAdminModal";
-import { Clock, ShieldAlert, AlertTriangle, BellRing } from "lucide-react";
+import { Clock, ShieldAlert, AlertTriangle, BellRing, MessageCircle } from "lucide-react";
 
 interface SuspendedBannerProps {
   reason?: string;
   shopId?: string;
+  onOpenChat?: () => void;
 }
 
 interface AppealData {
@@ -18,9 +19,9 @@ interface AppealData {
   is_nudge?: boolean;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps) {
+export default function SuspendedBanner({ reason, shopId, onOpenChat }: SuspendedBannerProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [appeal, setAppeal] = useState<AppealData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,8 +49,10 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
 
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/shop-appeal/${id}`);
-      if (res.ok) {
+      const res = await fetch(`${API_URL}/admin/shop-appeal/${id}`).catch(() =>
+        fetch(`${API_URL}/shop/appeal-status/${id}`)
+      );
+      if (res && res.ok) {
         const result = await res.json();
         if (result.success && result.appeal) {
           setAppeal(result.appeal);
@@ -74,7 +77,7 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
 
     try {
       setNudgeLoading(true);
-      const res = await fetch(`${API_URL}/shop-appeal/nudge`, {
+      const res = await fetch(`${API_URL}/admin/shop-appeal/nudge`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ appeal_id: appeal.id }),
@@ -84,7 +87,6 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
 
       if (res.ok && result.success) {
         setIsNudged(true);
-        console.log("[Nudge Success]:", result.message || "ส่งสัญญาณเร่งติดตามคำร้องเรียบร้อยแล้ว");
       } else {
         console.error("[Nudge Failed]:", result.message || "ไม่สามารถส่งข้อความติดตามได้");
       }
@@ -136,9 +138,11 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
 
   return (
     <>
-      <div className="relative z-50 w-full bg-rose-600 px-4 py-3 text-white shadow-md">
+      {/* 📌 เปลี่ยนจาก relative เป็น sticky top-0 z-[9999] pointer-events-auto เพื่อให้ลอยติดขอบบนสุดเสมอ และกดปุ่มบนแบนเนอร์ได้ปกติ */}
+      <div className="sticky top-0 z-[9999] w-full bg-rose-600 px-4 py-3 text-white shadow-md pointer-events-auto">
         <div className="mx-auto flex max-w-7xl flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           
+          {/* ข้อมูลการโดนระงับ */}
           <div className="flex items-start gap-3">
             <ShieldAlert className="h-6 w-6 shrink-0 text-white mt-0.5" />
             <div>
@@ -146,14 +150,16 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
                 บัญชีร้านค้าของคุณถูกระงับการใช้งานชั่วคราว
               </p>
               <p className="text-xs text-rose-100 opacity-90">
-                เหตุผล: {reason || "เนื่องจากตรวจพบกิจกรรมที่เข้าข่ายผิดเงื่อนไขระบบ"}
+                สาเหตุ: {reason || "เนื่องจากตรวจพบกิจกรรมที่เข้าข่ายผิดเงื่อนไขระบบ"}
               </p>
             </div>
           </div>
 
+          {/* ส่วนแสดงสถานะตาม Flow การยื่นเรื่อง */}
           <div className="w-full lg:w-auto flex flex-col sm:flex-row items-start sm:items-center justify-end gap-3">
             {appeal?.status === "pending" ? (
               isOverdue() ? (
+                /* 🔴 สถานะที่ 3: เกินกำหนด 3 วัน -> ขึ้นแจ้งเตือน + ปุ่มเร่งติดตาม */
                 <div className="w-full lg:w-auto flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-lg bg-amber-500/25 border border-amber-300/50 p-2.5 text-xs text-amber-100">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-amber-300 shrink-0 animate-bounce" />
@@ -186,19 +192,34 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2.5 rounded-lg bg-amber-500/20 border border-amber-300/40 px-3.5 py-2 text-xs text-amber-100">
-                  <Clock className="h-4 w-4 text-amber-300 animate-pulse shrink-0" />
-                  <div>
-                    <p className="font-semibold text-amber-200">
-                      ยื่นเรื่องแล้วเมื่อ {formatThaiDateTime(appeal.created_at)}
-                    </p>
-                    <p className="text-[11px] text-amber-100/80">
-                      {renderTimeRemaining()}
-                    </p>
+                /* 🟡 สถานะที่ 2: ยื่นเรื่องแล้ว (อยู่ในระยะเวลา 1-3 วัน) -> แสดงเวลานับถอยหลัง + ปุ่มแชท */
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 rounded-lg bg-amber-500/20 border border-amber-300/40 px-3.5 py-2 text-xs text-amber-100">
+                    <Clock className="h-4 w-4 text-amber-300 animate-pulse shrink-0" />
+                    <div>
+                      <p className="font-semibold text-amber-200">
+                        ยื่นเรื่องแล้วเมื่อ {formatThaiDateTime(appeal.created_at)}
+                      </p>
+                      <p className="text-[11px] text-amber-100/80">
+                        {renderTimeRemaining()}
+                      </p>
+                    </div>
                   </div>
+
+                  {onOpenChat && (
+                    <button
+                      type="button"
+                      onClick={onOpenChat}
+                      className="flex items-center gap-1.5 rounded-lg bg-white/15 hover:bg-white/25 px-3 py-2 text-xs font-semibold text-white border border-white/20 transition cursor-pointer"
+                    >
+                      <MessageCircle size={14} />
+                      แชทกับแอดมิน
+                    </button>
+                  )}
                 </div>
               )
             ) : (
+              /* ⚪ สถานะที่ 1: ยังไม่ได้ยื่นเรื่อง -> ปุ่มยื่นเรื่องปลดระงับ */
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
@@ -214,6 +235,7 @@ export default function SuspendedBanner({ reason, shopId }: SuspendedBannerProps
 
       <ContactAdminModal
         isOpen={isModalOpen}
+        reason={reason}
         onClose={() => {
           setIsModalOpen(false);
           fetchAppealStatus();

@@ -40,7 +40,10 @@ type GroupedRows = {
   rows: { row: ServiceDetailRow; idx: number }[];
 };
 
-const SERVICE_TEMPLATES: Record<string, { group_type: string; detail: string; price: string }[]> = {
+const SERVICE_TEMPLATES: Record<
+  string,
+  { group_type: string; detail: string; price: string }[]
+> = {
   "พิมพ์เอกสาร / รายงาน": [
     { group_type: "ขนาดกระดาษ", detail: "A4 ขาวดำ (หน้าเดียว)", price: "1.5" },
     { group_type: "ขนาดกระดาษ", detail: "A4 ขาวดำ (หน้า-หลัง)", price: "2" },
@@ -87,11 +90,11 @@ const SERVICE_TEMPLATES: Record<string, { group_type: string; detail: string; pr
   ],
 };
 
+// 🌟 สร้าง Array รายชื่อประเภทบริการสำเร็จรูป
+const SERVICE_TYPE_TEMPLATES = Object.keys(SERVICE_TEMPLATES);
+
 const OTHER_OPTION = "__other__";
 
-// 🟢 แก้ไข: จัดกลุ่มข้อมูลให้ถูกต้องเพื่อรองรับการแสดงผลทุกรายการ
-// includeEmpty = true (โหมดแก้ไข): แสดงแถวที่ยังว่างด้วย ไม่งั้นแถวที่เพิ่งกด "เพิ่ม" จะถูกซ่อนทันที
-// includeEmpty = false (โหมดดู): ซ่อนแถวว่าง
 const groupItems = (
   items: ServiceDetailRow[],
   includeEmpty = false
@@ -115,14 +118,11 @@ const groupItems = (
   return groups;
 };
 
-// ==========================================
-// Validation
-// ==========================================
 type ServiceErrors = {
   type?: string;
   noItems?: string;
-  groupName: Record<number, string>; // key = index ของแถวแรกในกลุ่ม
-  row: Record<number, { detail?: string; price?: string }>; // key = index ของแถว
+  groupName: Record<number, string>;
+  row: Record<number, { detail?: string; price?: string }>;
   count: number;
 };
 
@@ -187,13 +187,11 @@ const validateAll = (services: ServiceTypeGroup[]): ServiceErrors[] => {
   });
 };
 
-// มีข้อผิดพลาดที่ต้องแก้ก่อนเพิ่มแถว/กลุ่มต่อหรือไม่ (ไม่นับ noItems เพราะต้องเพิ่มแถวถึงจะแก้ได้)
 const hasFieldErrors = (e: ServiceErrors) =>
   !!e.type ||
   Object.keys(e.groupName).length > 0 ||
   Object.keys(e.row).length > 0;
 
-// เลื่อน index ของ state ที่ key ด้วยตำแหน่ง เมื่อมีการลบรายการออก
 const shiftIndexMap = (prev: Record<number, boolean>, removed: number) => {
   const next: Record<number, boolean> = {};
   Object.entries(prev).forEach(([k, v]) => {
@@ -225,7 +223,6 @@ export default function ShopServicesTab({
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [customTypeIndexes, setCustomTypeIndexes] = useState<Record<number, boolean>>({});
 
-  // แสดง error หลังผู้ใช้พยายามบันทึกแล้ว หรือหลังกดเพิ่มแถว/กลุ่มทั้งที่ยังกรอกไม่ครบ (แยกตามประเภทบริการ)
   const [attemptedSave, setAttemptedSave] = useState<boolean>(false);
   const [errorScope, setErrorScope] = useState<Record<number, boolean>>({});
   const editRef = useRef<HTMLDivElement>(null);
@@ -233,7 +230,6 @@ export default function ShopServicesTab({
   const allErrors = useMemo(() => validateAll(services), [services]);
   const totalErrors = allErrors.reduce((sum, e) => sum + e.count, 0);
 
-  // โฟกัส + เลื่อนหน้าจอไปที่ช่องแรกที่ยังไม่ถูกต้อง
   const focusFirstInvalid = (serviceIndex?: number) => {
     setTimeout(() => {
       const scope =
@@ -317,7 +313,6 @@ export default function ShopServicesTab({
     );
   };
 
-  // เพิ่มตัวเลือกในกลุ่มเดียวกัน: ต้องตั้งชื่อกลุ่มและกรอกแถวที่มีอยู่ให้ครบก่อน
   const addRowToGroup = (groupIndex: number, grp: GroupedRows) => {
     const err = allErrors[groupIndex] ?? emptyErrors;
     const groupHasError =
@@ -338,7 +333,6 @@ export default function ShopServicesTab({
     );
   };
 
-  // เพิ่มกลุ่มตัวเลือกใหม่: ต้องเลือกประเภทบริการและกรอกกลุ่ม/รายการเดิมให้ครบก่อน
   const addNewGroup = (groupIndex: number) => {
     const err = allErrors[groupIndex] ?? emptyErrors;
 
@@ -413,7 +407,7 @@ export default function ShopServicesTab({
     }
     const ok = await onSave();
     if (ok) {
-      setIsEditing(false); // บันทึกไม่สำเร็จ -> อยู่โหมดแก้ไขต่อ ข้อมูลที่กรอกไม่หาย
+      setIsEditing(false);
       resetValidation();
     }
   };
@@ -518,6 +512,7 @@ export default function ShopServicesTab({
             {services.map((group, gIdx) => {
               const groupedRows = groupItems(group.items, true);
               const isPreset = SERVICE_TYPE_TEMPLATES.includes(group.type);
+              const isCustomMode = customTypeIndexes[gIdx] || (!isPreset && group.type !== "");
               const selectValue =
                 group.type === "" ? "" : isPreset ? group.type : OTHER_OPTION;
 
@@ -753,4 +748,4 @@ export default function ShopServicesTab({
       )}
     </div>
   );
-} 
+}
