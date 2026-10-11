@@ -29,7 +29,7 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
     setLoading(true);
 
     try {
-      const res = await axios.post(`${API_URL}/api/auth/login`, logindata);
+      const res = await axios.post(`${API_URL}/auth/login`, logindata);
 
       if (!res.data.token) return;
 
