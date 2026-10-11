@@ -63,7 +63,15 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
     // 2. Routing แยกตาม Role
     if (role === "admin") {
+      // 🟢 เพิ่มการเช็กเรื่องคำขอปลดระงับร้านค้า ให้วาร์ปไปหน้า /admin/shops?tab=appeals
       if (
+        type === "shop_appeal" ||
+        type === "contact_admin" ||
+        noti.title?.includes("ปลดระงับ") ||
+        noti.message?.includes("ปลดระงับ")
+      ) {
+        router.push("/admin/shops?tab=appeals");
+      } else if (
         type === "report_issue" || 
         noti.title?.includes("ร้องเรียน") || 
         noti.title?.includes("รายงาน") ||
