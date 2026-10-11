@@ -379,7 +379,9 @@ export const getShopServices = async (req: Request, res: Response) => {
           category,
           group_type,
           detail,
-          price
+          price,
+          is_required, 
+          price_type
         )
       `)
       .eq("shop_id", shopId);

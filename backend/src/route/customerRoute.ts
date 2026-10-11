@@ -1,39 +1,42 @@
 import express from 'express';
-import multer from 'multer'; // 
+import multer from 'multer';
 import { createClient } from "@supabase/supabase-js";
-import { 
-  getShops, 
-  getAllServiceTypes, 
-  getShopServices 
+import {
+  getShops,
+  getAllServiceTypes,
+  getShopServices
 } from '../controller/shopController.js';
 
-import { 
-  getCart, 
-  addToCart, 
+import {
+  getCart,
+  addToCart,
   clearCart,
   removeCartItem
 } from '../controller/cartController.js';
 
-import { 
-  createOrder, 
-  getCustomerOrders, 
+import {
+  createOrder,
+  getCustomerOrders,
   updateWorkStatus,
-  cancelOrder, 
+  cancelOrder,
   confirmReceivedOrder,
-  uploadPaymentSlip, // 
+  uploadPaymentSlip,
   cancelOrderTimeout,
   rejectPaymentSlip,
   upload as slipUpload
 } from '../controller/orderController.js';
 
-import { 
-  getReviewOrderDetail, 
-  submitOrderReview, 
+import {
+  getReviewOrderDetail,
+  submitOrderReview,
   submitOrderReport,
+  getShopReviews, // 👈 1. นำเข้าฟังก์ชันดึงรีวิวร้านค้า
 } from '../controller/reviewController.js';
 
-import { 
-  getCustomerDashboard
+import {
+  getCustomerDashboard,
+  createReport,
+  checkOrderStatusReported
 } from '../controller/customerController.js';
 
 import { getCustomerProfile, updateCustomerProfile } from '../controller/settingController.js';
@@ -50,8 +53,11 @@ router.get('/shops', getShops);
 router.get('/service-types', getAllServiceTypes);
 router.get('/shops/:shopId/services', getShopServices);
 
+// 💡 2. เพิ่ม Route สำหรับดึงรายการรีวิวทั้งหมดของร้านค้า
+router.get('/shops/:shopId/reviews', getShopReviews);
+
 // ==========================================
-// 2. ตะกร้าสินค้า (Cart)
+// 3. ตะกร้าสินค้า (Cart)
 // ==========================================
 router.get('/cart', getCart);
 router.post('/cart', addToCart);
@@ -59,7 +65,7 @@ router.delete('/cart', clearCart);
 router.delete('/cart/item/:itemId', removeCartItem);
 
 // ==========================================
-// 3. คำสั่งซื้อและสถานะ (Order)
+// 4. คำสั่งซื้อและสถานะ (Order)
 // ==========================================
 router.post('/order', createOrder);
 router.get('/orders', getCustomerOrders);
@@ -75,11 +81,16 @@ router.put('/order/:orderId/cancel-timeout', cancelOrderTimeout);
 router.put('/order/:orderId/reject-slip', rejectPaymentSlip);
 
 // ==========================================
-// 4. รีวิวและรายงานปัญหา (Review & Report)
+// 5. รีวิวและรายงานปัญหา (Review & Report)
 // ==========================================
 router.get('/order/:orderId/review', getReviewOrderDetail);
-router.post('/review', submitOrderReview);
+
+router.post('/review', upload.single('image'), submitOrderReview);
+
 router.post('/report', upload.single('image'), submitOrderReport);
+
+// Route สำหรับเช็กสถานะรายงานปัญหา
+router.get("/customer/report/check/:orderId", checkOrderStatusReported);
 
 // Route หน้า Dashboard
 router.get("/dashboard", getCustomerDashboard);
@@ -105,7 +116,6 @@ router.post("/upload-file", upload.single("file"), async (req, res) => {
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
     const filePath = `orders/${fileName}`;
 
-    // Backend อัปโหลดตรงเข้า bucket print_files
     const { data, error } = await supabase.storage
       .from("print_files")
       .upload(filePath, file.buffer, {
@@ -118,7 +128,6 @@ router.post("/upload-file", upload.single("file"), async (req, res) => {
       return res.status(500).json({ message: error.message });
     }
 
-    // ดึง Public URL คืนกลับไปให้หน้าบ้าน
     const { data: publicData } = supabase.storage
       .from("print_files")
       .getPublicUrl(filePath);
@@ -129,10 +138,7 @@ router.post("/upload-file", upload.single("file"), async (req, res) => {
   }
 });
 
-
 router.get('/profile', getCustomerProfile);
 router.put('/profile', updateCustomerProfile);
 
 export default router;
-
-
