@@ -19,6 +19,7 @@ export type ServiceDetailRow = {
   detail: string;
   group_type: string;
   price: string;
+  is_required?: boolean; // ลูกค้าต้องเลือกกลุ่มนี้หรือไม่ (ค่าเริ่มต้น false)
 };
 
 export type ServiceTypeGroup = {
@@ -44,49 +45,64 @@ const SERVICE_TEMPLATES: Record<
   string,
   { group_type: string; detail: string; price: string }[]
 > = {
-  "พิมพ์เอกสาร / รายงาน": [
-    { group_type: "ขนาดกระดาษ", detail: "A4 ขาวดำ (หน้าเดียว)", price: "1.5" },
-    { group_type: "ขนาดกระดาษ", detail: "A4 ขาวดำ (หน้า-หลัง)", price: "2" },
-    { group_type: "ขนาดกระดาษ", detail: "A4 สี (หน้าเดียว)", price: "5" },
-    { group_type: "ชนิดกระดาษ", detail: "กระดาษปอนด์ 80 แกรม", price: "0" },
-    { group_type: "ชนิดกระดาษ", detail: "กระดาษถนอมสายตา 75 แกรม", price: "1" },
+  "เอกสาร": [
+    { group_type: "ขนาด", detail: "A3", price: "5" },
+    { group_type: "ขนาด", detail: "A4", price: "1.5" },
+    { group_type: "ขนาด", detail: "A5", price: "1" },
+    { group_type: "ขนาด", detail: "A6", price: "0.75" },
+    { group_type: "ระบบสี", detail: "ขาว-ดำ", price: "0.5" },
+    { group_type: "ระบบสี", detail: "สี", price: "3" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "เย็บมุม", price: "5" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "สันกาว", price: "35" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "กระดูกงู", price: "30" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "สันเกลียว", price: "40" },
   ],
-  "งานเข้าเล่ม": [
-    { group_type: "รูปแบบการเข้าเล่ม", detail: "เข้าเล่มกระดูกงู / ห่วงพลาสติก", price: "30" },
-    { group_type: "รูปแบบการเข้าเล่ม", detail: "เข้าเล่มสันเกลียว", price: "40" },
-    { group_type: "รูปแบบการเข้าเล่ม", detail: "เข้าเล่มกาวร้อน / สันกาว", price: "50" },
-    { group_type: "ปกรายงาน", detail: "ปกใส + กระดาษแข็ง", price: "10" },
-  ],
-  "พิมพ์โปสเตอร์": [
-    { group_type: "ขนาดโปสเตอร์", detail: "A3 (Art Paper 160g)", price: "40" },
-    { group_type: "ขนาดโปสเตอร์", detail: "A2 (Photo Paper)", price: "150" },
-    { group_type: "ขนาดโปสเตอร์", detail: "A1 (Photo Paper)", price: "250" },
-    { group_type: "การเคลือบ", detail: "เคลือบเงา / เคลือบด้าน", price: "20" },
-  ],
-  "นามบัตร": [
-    { group_type: "จำนวนและวัสดุ", detail: "กระดาษอาร์ตการ์ด 300g (100 ใบ)", price: "150" },
-    { group_type: "จำนวนและวัสดุ", detail: "กระดาษอาร์ตการ์ด เคลือบด้าน (100 ใบ)", price: "200" },
-    { group_type: "ตัวเลือกเสริม", detail: "ตัดมุมมน", price: "30" },
-  ],
-  "สติกเกอร์": [
-    { group_type: "ชนิดสติกเกอร์", detail: "สติกเกอร์กระดาษ (A4)", price: "35" },
-    { group_type: "ชนิดสติกเกอร์", detail: "สติกเกอร์ PP กันน้ำ (A4)", price: "50" },
-    { group_type: "ชนิดสติกเกอร์", detail: "สติกเกอร์ใส (A4)", price: "55" },
-    { group_type: "งานไดคัท", detail: "ไดคัทพร้อมลอกแปะ", price: "15" },
-  ],
-  "พิมพ์ภาพถ่าย": [
-    { group_type: "ขนาดรูปภาพ", detail: "4x6 นิ้ว (4R)", price: "5" },
-    { group_type: "ขนาดรูปภาพ", detail: "5x7 นิ้ว (5R)", price: "15" },
-    { group_type: "ขนาดรูปภาพ", detail: "8x10 นิ้ว (8R)", price: "40" },
+  "แผ่นสติกเกอร์": [
+    { group_type: "วัสดุ", detail: "สติกเกอร์พีพี", price: "40" },
+    { group_type: "วัสดุ", detail: "สติกเกอร์กระดาษ", price: "25" },
+    { group_type: "วัสดุ", detail: "สติกเกอร์โฮโลแกรม", price: "65" },
+    { group_type: "วัสดุ", detail: "สติกเกอร์พีพีใส", price: "45" },
+    { group_type: "ขนาด", detail: "3x3 ซม.", price: "10" },
+    { group_type: "ขนาด", detail: "5x5 ซม.", price: "15" },
+    { group_type: "ขนาด", detail: "7x7 ซม.", price: "20" },
+    { group_type: "ขนาด", detail: "10x10 ซม.", price: "30" },
   ],
   "ป้ายไวนิล": [
-    { group_type: "ความหนาไวนิล", detail: "ไวนิลหนา 360gsm (ตร.ม.)", price: "120" },
-    { group_type: "ความหนาไวนิล", detail: "ไวนิลหนา 440gsm (ตร.ม.)", price: "150" },
-    { group_type: "การพับขอบ", detail: "พับขอบ เจาะรูตาไก่", price: "0" },
+    { group_type: "ขนาด", detail: "60x160 ซม.", price: "150" },
+    { group_type: "ขนาด", detail: "160x60 ซม.", price: "150" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "พับขอบ", price: "20" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "เจาะตาไก่", price: "30" },
   ],
-  "งานเสื้อ / ของพรีเมียม": [
-    { group_type: "สกรีนเสื้อ", detail: "สกรีน DTF ขนาด A4 (หน้าเดียว)", price: "120" },
-    { group_type: "สกรีนเสื้อ", detail: "สกรีน DTF ขนาด A3 (หน้าเดียว)", price: "180" },
+  "นามบัตร": [
+    { group_type: "ขนาด", detail: "9x5.5 ซม.", price: "120" },
+    { group_type: "ขนาด", detail: "9x5 ซม.", price: "120" },
+    { group_type: "ขนาด", detail: "8.5x5.5 ซม.", price: "120" },
+    { group_type: "การพิมพ์", detail: "หน้าเดียว", price: "0" },
+    { group_type: "การพิมพ์", detail: "หน้า-หลัง", price: "50" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดมัน 300 แกรม", price: "0" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดมัน 350 แกรม", price: "15" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดมัน 400 แกรม", price: "30" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดด้าน 300 แกรม", price: "0" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดด้าน 350 แกรม", price: "15" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดด้าน 400 แกรม", price: "30" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "เคลือบมัน (หน้าเดียว)", price: "25" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "เคลือบมัน (สองด้าน)", price: "45" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "เคลือบด้าน (หน้าเดียว)", price: "30" },
+    { group_type: "การเข้าเล่มและตกแต่ง", detail: "เคลือบด้าน (สองด้าน)", price: "50" },
+  ],
+  "โปสเตอร์": [
+    { group_type: "ขนาด", detail: "A3", price: "60" },
+    { group_type: "ขนาด", detail: "A4", price: "30" },
+    { group_type: "ขนาด", detail: "A5", price: "20" },
+    { group_type: "ขนาด", detail: "A6", price: "15" },
+    { group_type: "ระบบสี", detail: "ขาว-ดำ", price: "0" },
+    { group_type: "ระบบสี", detail: "สี", price: "10" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดมัน 300 แกรม", price: "0" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดมัน 350 แกรม", price: "10" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดมัน 400 แกรม", price: "20" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดด้าน 300 แกรม", price: "0" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดด้าน 350 แกรม", price: "10" },
+    { group_type: "วัสดุ", detail: "อาร์ตการ์ดด้าน 400 แกรม", price: "20" },
   ],
 };
 
@@ -227,6 +243,10 @@ export default function ShopServicesTab({
   const [errorScope, setErrorScope] = useState<Record<number, boolean>>({});
   const editRef = useRef<HTMLDivElement>(null);
 
+  // สำเนาของ services ตอนเริ่มแก้ไข ใช้ย้อนค่ากลับเมื่อกด "ยกเลิก"
+  // (services เก็บอยู่ที่ parent และถูกแก้ตรง ๆ ระหว่างแก้ไข จึงต้องเก็บของเดิมไว้เอง)
+  const snapshotRef = useRef<ServiceTypeGroup[] | null>(null);
+
   const allErrors = useMemo(() => validateAll(services), [services]);
   const totalErrors = allErrors.reduce((sum, e) => sum + e.count, 0);
 
@@ -247,7 +267,7 @@ export default function ShopServicesTab({
   const addServiceType = () => {
     setServices((prev) => [
       ...prev,
-      { type: "", items: [{ detail: "", group_type: "", price: "" }] },
+      { type: "", items: [{ detail: "", group_type: "", price: "", is_required: false }] },
     ]);
   };
 
@@ -258,6 +278,9 @@ export default function ShopServicesTab({
   };
 
   const updateServiceType = (index: number, selectedValue: string) => {
+    // เปลี่ยนประเภทบริการ = เริ่มรายละเอียดใหม่ ไม่เก็บค่าของประเภทเดิมไว้
+    setErrorScope((prev) => ({ ...prev, [index]: false }));
+
     if (selectedValue === OTHER_OPTION) {
       setCustomTypeIndexes((prev) => ({ ...prev, [index]: true }));
       setServices((prev) =>
@@ -266,10 +289,7 @@ export default function ShopServicesTab({
             ? {
                 ...g,
                 type: "",
-                items:
-                  g.items.length > 0
-                    ? g.items
-                    : [{ detail: "", group_type: "", price: "" }],
+                items: [{ detail: "", group_type: "", price: "", is_required: false }],
               }
             : g
         )
@@ -280,6 +300,7 @@ export default function ShopServicesTab({
         detail: item.detail,
         group_type: item.group_type,
         price: item.price,
+        is_required: false,
       }));
       setServices((prev) =>
         prev.map((g, i) =>
@@ -313,6 +334,27 @@ export default function ShopServicesTab({
     );
   };
 
+  // ตั้งค่า "จำเป็น" ให้ทุกแถวในกลุ่มเดียวกัน (ค่าเก็บต่อแถวใน service_detail แต่กำหนดเป็นระดับกลุ่ม)
+  const setGroupRequired = (
+    groupIndex: number,
+    grpRows: { row: ServiceDetailRow; idx: number }[],
+    value: boolean
+  ) => {
+    const targetIndices = new Set(grpRows.map((item) => item.idx));
+
+    setServices((prev) =>
+      prev.map((g, i) => {
+        if (i !== groupIndex) return g;
+        return {
+          ...g,
+          items: g.items.map((r, rIdx) =>
+            targetIndices.has(rIdx) ? { ...r, is_required: value } : r
+          ),
+        };
+      })
+    );
+  };
+
   const addRowToGroup = (groupIndex: number, grp: GroupedRows) => {
     const err = allErrors[groupIndex] ?? emptyErrors;
     const groupHasError =
@@ -327,7 +369,19 @@ export default function ShopServicesTab({
     setServices((prev) =>
       prev.map((g, i) =>
         i === groupIndex
-          ? { ...g, items: [...g.items, { detail: "", group_type: grp.name, price: "" }] }
+          ? {
+              ...g,
+              items: [
+                ...g.items,
+                {
+                  detail: "",
+                  group_type: grp.name,
+                  price: "",
+                  // แถวใหม่ในกลุ่มเดิมใช้ค่าเดียวกับกลุ่ม
+                  is_required: grp.rows.some((r) => !!r.row.is_required),
+                },
+              ],
+            }
           : g
       )
     );
@@ -345,7 +399,7 @@ export default function ShopServicesTab({
     setServices((prev) =>
       prev.map((g, i) =>
         i === groupIndex
-          ? { ...g, items: [...g.items, { detail: "", group_type: "", price: "" }] }
+          ? { ...g, items: [...g.items, { detail: "", group_type: "", price: "", is_required: false }] }
           : g
       )
     );
@@ -407,12 +461,26 @@ export default function ShopServicesTab({
     }
     const ok = await onSave();
     if (ok) {
+      snapshotRef.current = null; // บันทึกสำเร็จ ไม่ต้องย้อนค่าแล้ว
       setIsEditing(false);
       resetValidation();
     }
   };
 
+  const handleStartEdit = () => {
+    snapshotRef.current = JSON.parse(JSON.stringify(services));
+    setCustomTypeIndexes({});
+    resetValidation();
+    setIsEditing(true);
+  };
+
   const handleCancel = () => {
+    // ย้อน services กลับเป็นค่าก่อนเริ่มแก้ไข (ทิ้งสิ่งที่เพิ่ม/แก้ระหว่างนั้นทั้งหมด)
+    if (snapshotRef.current) {
+      setServices(snapshotRef.current);
+      snapshotRef.current = null;
+    }
+    setCustomTypeIndexes({});
     setIsEditing(false);
     resetValidation();
   };
@@ -435,7 +503,7 @@ export default function ShopServicesTab({
           {isVerified && !isEditing && (
             <button
               type="button"
-              onClick={() => setIsEditing(true)}
+              onClick={handleStartEdit}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <Edit2 size={13} />
@@ -481,6 +549,15 @@ export default function ShopServicesTab({
                               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
                                 <Tag size={12} className="text-slate-400" />
                                 <span>{grp.name}</span>
+                                {grp.rows.some((r) => !!r.row.is_required) ? (
+                                  <span className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">
+                                    จำเป็น
+                                  </span>
+                                ) : (
+                                  <span className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+                                    ไม่บังคับ
+                                  </span>
+                                )}
                               </div>
                             ) : null}
 
@@ -608,6 +685,17 @@ export default function ShopServicesTab({
                                     : "text-slate-700 placeholder:text-slate-300"
                                 }`}
                               />
+                              <label className="flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-[11px] font-medium text-slate-500">
+                                <input
+                                  type="checkbox"
+                                  checked={grp.rows.some((r) => !!r.row.is_required)}
+                                  onChange={(ev) =>
+                                    setGroupRequired(gIdx, grp.rows, ev.target.checked)
+                                  }
+                                  className="h-3.5 w-3.5 accent-[#2F6FED]"
+                                />
+                                จำเป็นต้องเลือก
+                              </label>
                               <button
                                 type="button"
                                 onClick={() => removeGroup(gIdx, grp.rows)}

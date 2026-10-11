@@ -180,6 +180,7 @@ export default function ShopSettingsPage() {
             detail: d.detail ?? "",
             group_type: d.group_type ?? "",
             price: d.price != null ? String(d.price) : "",
+            is_required: d.is_required === true,
           })),
         }));
         setServices(normalizedServices);
@@ -351,6 +352,7 @@ export default function ShopSettingsPage() {
           detail: item.detail,
           group_type: item.group_type,
           price: item.price,
+          is_required: item.is_required ?? false,
         })),
       }));
 
