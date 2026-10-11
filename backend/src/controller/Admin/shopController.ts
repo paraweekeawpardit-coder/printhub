@@ -474,7 +474,7 @@ export const createContactAdmin = async (
       return res.status(400).json({ error: error.message });
     }
 
-    // 🟢 กระจายแจ้งเตือนยื่นเรื่องปลดระงับไปยังแอดมินทุกคน
+    // 🟢 สร้าง Notification แยกตาม admin_id ของแอดมินทุกคนเหมือนกับ Report
     try {
       const { data: admins } = await supabase.from("admin").select("id");
       if (admins && admins.length > 0) {
@@ -597,7 +597,7 @@ export const nudgeShopAppeal = async (
       });
     }
 
-    // 🟢 กระจายแจ้งเตือนเร่งติดตามคำร้อง (ผ่านไป 3 วัน) ไปยังแอดมินทุกคน
+    // 🟢 สร้าง Notification แยกตาม admin_id ของแอดมินทุกคนเหมือนกับ Report
     try {
       const { data: admins } = await supabase.from("admin").select("id");
       if (admins && admins.length > 0) {
