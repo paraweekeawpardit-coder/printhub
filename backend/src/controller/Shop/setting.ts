@@ -218,7 +218,8 @@ export const getShopServices = async (
           category,
           group_type,
           detail,
-          price
+          price,
+          is_required
         )
       `
       )
@@ -238,6 +239,7 @@ export const getShopServices = async (
         group_type: d.group_type ?? "",
         detail: d.detail ?? "",
         price: d.price != null ? String(d.price) : "",
+        is_required: d.is_required === true,
       })),
     }));
 
@@ -323,6 +325,7 @@ type DetailRow = {
   detail: string;
   category: string;
   price: number | null;
+  is_required: boolean | null;
 };
 
 const detailKey = (group_type: string, detail: string) =>
@@ -346,7 +349,10 @@ export const saveShopServices = async (
 
     const merged = new Map<
       string,
-      Map<string, { category: string; group_type: string; detail: string; price: number }>
+      Map<
+        string,
+        { category: string; group_type: string; detail: string; price: number; is_required: boolean }
+      >
     >();
 
     for (const s of services) {
@@ -369,6 +375,7 @@ export const saveShopServices = async (
           group_type,
           detail,
           price: Number(d?.price) || 0,
+          is_required: d?.is_required === true, // ไม่ส่งมา = ไม่จำเป็น (default false)
         });
       }
     }
@@ -395,7 +402,7 @@ export const saveShopServices = async (
     if (oldTypeIds.length > 0) {
       const { data: rows, error: rowsErr } = await supabase
         .from("service_detail")
-        .select("id, type_id, group_type, detail, category, price")
+        .select("id, type_id, group_type, detail, category, price, is_required")
         .in("type_id", oldTypeIds);
 
       if (rowsErr) {
@@ -437,7 +444,7 @@ export const saveShopServices = async (
 
             const { data: rows, error: rowsErr } = await supabase
               .from("service_detail")
-              .select("id, type_id, group_type, detail, category, price")
+              .select("id, type_id, group_type, detail, category, price, is_required")
               .eq("type_id", typeId);
             if (rowsErr) throw rowsErr;
             existingDetailsByType.set(typeId, (rows ?? []) as DetailRow[]);
@@ -457,7 +464,12 @@ export const saveShopServices = async (
 
         const incomingKeys = new Set<string>();
         const toInsert: any[] = [];
-        const toUpdate: { row: DetailRow; category: string; price: number }[] = [];
+        const toUpdate: {
+          row: DetailRow;
+          category: string;
+          price: number;
+          is_required: boolean;
+        }[] = [];
 
         for (const d of s.details) {
           const key = detailKey(d.group_type, d.detail);
@@ -466,8 +478,17 @@ export const saveShopServices = async (
           const ex = existingByKey.get(key);
           if (!ex) {
             toInsert.push({ ...d, type_id: typeId });
-          } else if (Number(ex.price) !== d.price || ex.category !== d.category) {
-            toUpdate.push({ row: ex, category: d.category, price: d.price });
+          } else if (
+            Number(ex.price) !== d.price ||
+            ex.category !== d.category ||
+            Boolean(ex.is_required) !== d.is_required
+          ) {
+            toUpdate.push({
+              row: ex,
+              category: d.category,
+              price: d.price,
+              is_required: d.is_required,
+            });
           }
         }
 
@@ -490,7 +511,7 @@ export const saveShopServices = async (
         for (const u of toUpdate) {
           const { error: updErr } = await supabase
             .from("service_detail")
-            .update({ category: u.category, price: u.price })
+            .update({ category: u.category, price: u.price, is_required: u.is_required })
             .eq("id", u.row.id);
 
           if (updErr) throw updErr;
@@ -503,7 +524,11 @@ export const saveShopServices = async (
       for (const b of updatedBackups) {
         await supabase
           .from("service_detail")
-          .update({ category: b.category, price: b.price })
+          .update({
+            category: b.category,
+            price: b.price,
+            is_required: Boolean(b.is_required),
+          })
           .eq("id", b.id);
       }
       if (createdDetailIds.length > 0) {
