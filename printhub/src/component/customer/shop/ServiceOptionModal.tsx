@@ -221,7 +221,7 @@ export default function ServiceOptionModal({
     }
 
     if (uploadedFiles.length + files.length > 10) {
-      setFileError("สามารถอัปโหลดได้สูงสุดไม่เกิน 10 ไฟล์ต่อรายการ (FR-2.3)");
+      setFileError("สามารถอัปโหลดได้สูงสุดไม่เกิน 10 ไฟล์ต่อรายการ");
       e.target.value = "";
       return;
     }
@@ -234,12 +234,12 @@ export default function ServiceOptionModal({
       const file = files[i];
 
       if (file.size > 50 * 1024 * 1024) {
-        setFileError(`ไฟล์ ${file.name} มีขนาดเกิน 50MB (FR-2.3)`);
+        setFileError(`ไฟล์ ${file.name} มีขนาดเกิน 50MB`);
         continue;
       }
 
       if (currentTotalSize + file.size > 100 * 1024 * 1024) {
-        setFileError("ขนาดไฟล์รวมทั้งหมดเกิน 100MB (FR-2.3)");
+        setFileError("ขนาดไฟล์รวมทั้งหมดเกิน 100MB");
         break;
       }
 
