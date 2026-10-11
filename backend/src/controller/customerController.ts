@@ -301,3 +301,69 @@ export const getAllCustomers = async (req: Request, res: Response) => {
     return res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
+// ==========================================
+// ตรวจเช็คการรายงาน ว่าลูกค้ามีการรายงานคำสั่งซื้อไปแล้วหรือยัง ถ้ารายงานไปแล้ว จะไม่สามารถรายงานใหม่ได้
+// ==========================================
+// ตัวอย่างฟังก์ชันบันทึกรายงานใน customerController.ts
+export const createReport = async (req: Request, res: Response) => {
+  try {
+    const { order_id, customer_id, issue_type, description, resolution } = req.body;
+
+    if (!order_id) {
+      return res.status(400).json({ success: false, message: "ไม่พบรหัสคำสั่งซื้อ" });
+    }
+
+    // 🛑 1. เช็กตรงนี้: ถ้า order_id นี้เคยถูกแจ้งรายงานไปแล้ว ให้ตีกลับทันที!
+    const { data: existingReport, error: checkErr } = await supabase
+      .from("report")
+      .select("id")
+      .eq("order_id", order_id)
+      .maybeSingle();
+
+    if (existingReport) {
+      return res.status(400).json({
+        success: false,
+        message: "คุณได้ส่งคำร้องขอคืนเงินสำหรับคำสั่งซื้อนี้ไปแล้ว ไม่สามารถส่งซ้ำได้",
+      });
+    }
+
+    // 2. โค้ดเดิมสำหรับบันทึกข้อมูลรายงาน (Insert ลงตาราง report และอัปโหลดรูปภาพต่อจากตรงนี้...)
+
+  } catch (err: any) {
+    console.error("Create Report Error:", err);
+    return res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+};
+
+// ==========================================
+// ตรวจสอบว่าออร์เดอร์นี้เคยถูกรายงานไปแล้วหรือยัง (สำหรับให้ Frontend เช็กตอนโหลดหน้า)
+// ==========================================
+export const checkOrderStatusReported = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({ success: false, error: "Missing orderId" });
+    }
+
+    const { data: reportData, error } = await supabase
+      .from("report")
+      .select("id, created_at, description")
+      .eq("order_id", orderId)
+      .maybeSingle();
+
+    if (error) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      hasReported: !!reportData, // จะเป็น true ทันทีถ้าเคยรายงานแล้ว
+      report: reportData || null,
+    });
+  } catch (err: any) {
+    console.error("Check Report Exception:", err);
+    return res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+};
