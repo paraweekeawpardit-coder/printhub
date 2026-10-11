@@ -125,7 +125,6 @@ export default function ShopPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
 
-        // ใช้ Promise.allSettled เพื่อป้องกัน API บางตัวพังหรือส่งค่า null กลับมาแล้วทำให้แอปพังทั้งหน้า
         const [
           numRes,
           scoreRes,
@@ -149,19 +148,13 @@ export default function ShopPage() {
             .get(`${API_URL}/shop/getTopOrder`, { headers })
             .catch(() => ({ data: [] })),
           axios
-            .get(`${API_URL}/shop/getFinancialOverview`, {
-              headers,
-            })
+            .get(`${API_URL}/shop/getFinancialOverview`, { headers })
             .catch(() => ({ data: null })),
           axios
-            .get(`${API_URL}/shop/getOrderStatusBreakdown`, {
-              headers,
-            })
+            .get(`${API_URL}/shop/getOrderStatusBreakdown`, { headers })
             .catch(() => ({ data: null })),
           axios
-            .get(`${API_URL}/shop/getComplaintsAndReviews`, {
-              headers,
-            })
+            .get(`${API_URL}/shop/getComplaintsAndReviews`, { headers })
             .catch(() => ({ data: null })),
           axios
             .get(`${API_URL}/shop/profile/${shopId}`, { headers })
@@ -172,6 +165,7 @@ export default function ShopPage() {
             ),
         ]);
 
+        // 🌟 1. เช็กสถานะการโดนระงับของร้านค้า
         const profData = profileRes?.data?.data || profileRes?.data;
         if (profData && profData.status === "suspended") {
           setIsSuspended(true);
@@ -179,45 +173,51 @@ export default function ShopPage() {
           setIsSuspended(false);
         }
 
-        setNum(`${numRes.data.numWork ?? 0} รายการ`);
-        setScore(`${Number(scoreRes.data.score ?? 0).toFixed(1)} / 5.0`);
-        setIncome(
-          `${Number(incomeRes.data.income ?? 0).toLocaleString()} บาท`
-        );
+        // 🌟 2. อัปเดตการแสดงผลการ์ดสรุป 3 ใบ
+        const numVal = numRes?.data?.numWork ?? 0;
+        const scoreVal = Number(scoreRes?.data?.score ?? 0);
+        const totalReviewsVal = scoreRes?.data?.totalReviews ?? 0;
+        const incomeVal = Number(incomeRes?.data?.income ?? 0);
+        const orderCountVal = incomeRes?.data?.orderCount ?? 0;
 
-        setNum(`${numData?.numWork ?? 0} รายการ`);
-        setScore(`${scoreData?.score ?? 0.0} / 5.0`);
-        setIncome(`${incomeData?.income ?? 0} บาท`);
+        setNum(`${numVal} รายการ`);
+        setScore(`${scoreVal.toFixed(1)} / 5.0`);
+        setIncome(`${incomeVal.toLocaleString()} บาท`);
 
-        setTodayOrdersCount(incomeData?.orderCount ?? 0);
-        setTotalReviewsCount(scoreData?.totalReviews ?? 0);
+        setTodayOrdersCount(orderCountVal);
+        setTotalReviewsCount(totalReviewsVal);
 
-        setOrders(ordersData ?? []);
-        setFinancialData(
-          financeDataRes ?? {
+        // 🌟 3. อัปเดตข้อมูลตารางและรายละเอียดแต่ละส่วน
+        setOrders(ordersRes?.data ?? []);
+
+        if (financeRes?.data) {
+          setFinancialData(financeRes.data);
+        } else {
+          setFinancialData({
             totalGross: 0,
             totalFee: 0,
             totalNet: 0,
             transactions: [],
-            financialTrend: {
-              daily: [],
-              weekly: [],
-              monthly: [],
-              yearly: [],
-            },
-          }
-        );
-        setBreakdownData(
-          breakdownDataRes ?? {
+            financialTrend: { daily: [], weekly: [], monthly: [], yearly: [] },
+          });
+        }
+
+        if (breakdownRes?.data) {
+          setBreakdownData(breakdownRes.data);
+        } else {
+          setBreakdownData({
             total: 0,
             counts: {},
             orders: [],
             trendData: { daily: [], weekly: [], monthly: [], yearly: [] },
-          }
-        );
-        setReviewData(
-          reviewDataRes ?? { reviews: [], complaints: [] }
-        );
+          });
+        }
+
+        if (reviewRes?.data) {
+          setReviewData(reviewRes.data);
+        } else {
+          setReviewData({ reviews: [], complaints: [] });
+        }
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
       } finally {
@@ -247,7 +247,7 @@ export default function ShopPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50">
+    <div className="min-h-screen bg-slate-50/50 font-['Prompt',sans-serif]">
       <ShopNavbar />
 
       <div className="mx-auto max-w-7xl px-6 py-8 md:px-12">
