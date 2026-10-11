@@ -19,7 +19,6 @@ export default function ShopMainPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // ดึง shopId ให้ครอบคลุมทุกชื่อ parameter ของ Next.js
   const shopId = (params?.shop_id || params?.id || "") as string;
 
   const [shop, setShop] = useState<any>(null);
@@ -28,6 +27,7 @@ export default function ShopMainPage() {
   const [totalCartCount, setTotalCartCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [selectedService, setSelectedService] = useState<ServiceType | null>(null);
+  const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
@@ -62,7 +62,6 @@ export default function ShopMainPage() {
     try {
       setLoading(true);
 
-      // 1. ดึงข้อมูลร้านค้าและบริการ
       const resServices = await fetch(
         `http://localhost:5000/api/customer/shops/${shopId}/services`
       );
@@ -77,7 +76,6 @@ export default function ShopMainPage() {
         );
       }
 
-      // 2. ดึงข้อมูลตะกร้าสินค้า
       if (cid) {
         const resCart = await fetch(
           `http://localhost:5000/api/customer/cart?customer_id=${cid}`
@@ -152,10 +150,18 @@ export default function ShopMainPage() {
         quantity: qty,
         unit_price: unitPrice,
         price: unitPrice,
+        subtotal: itemPayload.subtotal || unitPrice * qty,
         total_pages: extractedPages,
         page_count: extractedPages,
         side_type: itemPayload.finishing_option?.includes("หน้า-หลัง") ? "DOUBLE" : "SINGLE",
       };
+
+      // หากเป็นการแก้ไข ให้ลบรายการเดิมออกก่อนแล้วเพิ่มตัวใหม่
+      if (editingCartItem?.id) {
+        await fetch(`http://localhost:5000/api/customer/cart/item/${editingCartItem.id}`, {
+          method: "DELETE",
+        });
+      }
 
       const res = await fetch("http://localhost:5000/api/customer/cart", {
         method: "POST",
@@ -171,12 +177,34 @@ export default function ShopMainPage() {
       }
 
       setSelectedService(null);
+      setEditingCartItem(null);
 
       if (customerId) {
         await loadData(customerId);
       }
     } catch (err) {
       console.error("Add item to cart error:", err);
+    }
+  };
+
+  // ดึงบริการที่สอดคล้องเพื่อเปิด Modal แก้ไข
+  const handleEditCartItem = (item: CartItem) => {
+    // 1. ปิดตะกร้าสินค้าทันที
+    setIsCartOpen(false);
+
+    // 2. ค้นหาบริการที่ตรงกัน
+    const matchedService = services.find((s) => {
+      const sName = (s.type_name || s.type || "").trim().toLowerCase();
+      const catName = (item.category || "").trim().toLowerCase();
+      return sName === catName || sName.includes(catName) || catName.includes(sName);
+    });
+
+    if (matchedService) {
+      setEditingCartItem(item);
+      setSelectedService(matchedService);
+    } else if (services.length > 0) {
+      setEditingCartItem(item);
+      setSelectedService(services[0]);
     }
   };
 
@@ -207,15 +235,13 @@ export default function ShopMainPage() {
   };
 
   const handleProceedToPayment = async (appointmentData: any) => {
-    if (!shopId || !cartItems || cartItems.length === 0) {
-      return;
-    }
+    if (!shopId || !cartItems || cartItems.length === 0) return;
 
     const formattedItems = cartItems.map((item: any) => {
       const itemSubtotal =
         Number(item.subtotal) || Number(item.unit_price * item.quantity) || 0;
       const itemPages =
-        Number(item.page_count || item.total_pages || item.pagesPerSet) || 1;
+        Number(item.page_count || item.total_pages || item.pages_per_set) || 1;
 
       return {
         fileName: item.category || "งานพิมพ์เอกสาร",
@@ -262,7 +288,10 @@ export default function ShopMainPage() {
       }
 
       const realOrderId = result.data?.order_id || result.data?.id || fallbackOrderId;
-      const finalPrice = result.data?.total_price || appointmentData.total_price || formattedItems.reduce((a, b) => a + b.totalPrice, 0);
+      const finalPrice =
+        result.data?.total_price ||
+        appointmentData.total_price ||
+        formattedItems.reduce((a, b) => a + b.totalPrice, 0);
       const expiresAt = result.data?.expires_at || "";
 
       setCartItems([]);
@@ -330,7 +359,10 @@ export default function ShopMainPage() {
 
           <ServiceMenuGrid
             services={services}
-            onSelectService={(srv) => setSelectedService(srv)}
+            onSelectService={(srv) => {
+              setEditingCartItem(null);
+              setSelectedService(srv);
+            }}
           />
         </main>
       </div>
@@ -344,7 +376,11 @@ export default function ShopMainPage() {
       {selectedService && (
         <ServiceOptionModal
           service={selectedService}
-          onClose={() => setSelectedService(null)}
+          initialItem={editingCartItem}
+          onClose={() => {
+            setSelectedService(null);
+            setEditingCartItem(null);
+          }}
           onAddToCart={handleAddToCart}
         />
       )}
@@ -355,6 +391,7 @@ export default function ShopMainPage() {
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         onClearCart={handleClearCart}
+        onEditItem={handleEditCartItem}
         onRemoveItem={handleRemoveCartItem}
         onProceedToPayment={handleProceedToPayment}
         isSubmitting={isSubmittingOrder}

@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { X, FileUp, Plus, Eye, FileText, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { X } from "lucide-react";
 import { ServiceType, OptionItem } from "./ServiceMenuGrid";
-
 import supabase from "@/config/supabase";
+
+import DocumentUploadPreview, { UploadedFileInfo } from "./DocumentUploadPreview";
+import ServiceOptionForm from "./ServiceOptionForm";
+import ServiceOptionFooter from "./ServiceOptionFooter";
 
 let pdfjsLib: any = null;
 if (typeof window !== "undefined") {
@@ -12,41 +15,23 @@ if (typeof window !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 }
 
-interface UploadedFileInfo {
-  file: File;
-  previewUrl: string;
-  pageCount: number;
-  isPdf: boolean;
-  isImage: boolean;
-}
-
 interface ServiceOptionModalProps {
   service: ServiceType;
+  initialItem?: any;
   onClose: () => void;
-  onAddToCart: (itemData: {
-    category: string;
-    selected_size: string;
-    color_type: string;
-    paper_type: string;
-    finishing_option: string;
-    quantity: number;
-    unit_price: number;
-    subtotal: number;
-    file_url: string;
-    total_pages: number;
-    page_count?: number;
-    pages_per_set?: number;
-  }) => void;
+  onAddToCart: (itemData: any) => void;
 }
 
 export default function ServiceOptionModal({
   service,
+  initialItem,
   onClose,
   onAddToCart,
 }: ServiceOptionModalProps) {
   const [modalOptions, setModalOptions] = useState<Record<string, OptionItem>>({});
-  const [isDoubleSided, setIsDoubleSided] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(
+    initialItem?.quantity ? Number(initialItem.quantity) : 1
+  );
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>([]);
   const [activePreviewIndex, setActivePreviewIndex] = useState<number>(0);
@@ -57,45 +42,123 @@ export default function ServiceOptionModal({
   const serviceTypeName = service.type_name || service.type || "บริการงานพิมพ์";
 
   const rawOptions: OptionItem[] = useMemo(() => {
-    return (service.options && service.options.length > 0)
+    return service.options && service.options.length > 0
       ? service.options
-      : (service.service_detail || []);
+      : service.service_detail || [];
   }, [service]);
 
   useEffect(() => {
     return () => {
-      uploadedFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+      uploadedFiles.forEach((f) => {
+        if (f.file.size > 0) URL.revokeObjectURL(f.previewUrl);
+      });
     };
   }, []);
 
-  // 🌟 Helper ตรวจสอบว่าเป็นกลุ่มประเภท "ค่าบริการต่อชุด/ค่าปก/ค่าเข้าเล่ม" หรือไม่
-  const checkIsPerSetGroup = (groupName: string) => {
-    const lower = groupName.toLowerCase();
-    return (
-      lower.includes("เข้าเล่ม") ||
-      lower.includes("ปก") ||
-      lower.includes("ตกแต่ง") ||
-      lower.includes("finishing") ||
-      lower.includes("เย็บมุม") ||
-      lower.includes("รูปแบบ")
-    );
-  };
+  const dynamicGroups = useMemo(() => {
+    return Array.from(new Set(rawOptions.map((o) => o.group_type).filter(Boolean)));
+  }, [rawOptions]);
 
   const requiredGroups = useMemo(() => {
-    const allGroups = Array.from(new Set(rawOptions.map((o) => o.group_type)));
-    return allGroups.filter((g) => !checkIsPerSetGroup(g));
+    return Array.from(
+      new Set(
+        rawOptions
+          .filter((o) => {
+            const req = (o as any).is_required;
+            return req === true || req === "true" || req === 1;
+          })
+          .map((o) => o.group_type)
+          .filter(Boolean)
+      )
+    );
   }, [rawOptions]);
+
+  const isMultiPageService = useMemo(() => {
+    return rawOptions.some((opt) => (opt as any).price_type === "per_page");
+  }, [rawOptions]);
+
+  // 1. ดึงสเปกตัวเลือกเดิมกลับมาแสดงเมื่อเปิดโหมดแก้ไข
+  useEffect(() => {
+    if (initialItem && rawOptions.length > 0) {
+      const prefilled: Record<string, OptionItem> = {};
+
+      dynamicGroups.forEach((group) => {
+        const groupOptions = rawOptions.filter((o) => o.group_type === group);
+        const matched = groupOptions.find((opt) => {
+          const optName = opt.detail || opt.option_name || "";
+          return (
+            optName === initialItem.selected_size ||
+            optName === initialItem.color_type ||
+            optName === initialItem.paper_type ||
+            (initialItem.finishing_option &&
+              initialItem.finishing_option.includes(optName))
+          );
+        });
+
+        if (matched) {
+          prefilled[group] = matched;
+        }
+      });
+
+      if (Object.keys(prefilled).length > 0) {
+        setModalOptions(prefilled);
+      }
+    }
+  }, [initialItem, rawOptions, dynamicGroups]);
+
+  // 2. 🌟 ดึงไฟล์เดิมจาก initialItem.file_url มาแสดงในรายการและกล่องพรีวิว
+  useEffect(() => {
+    if (initialItem?.file_url && uploadedFiles.length === 0) {
+      const urls = initialItem.file_url
+        .split(",")
+        .map((u: string) => u.trim())
+        .filter(Boolean);
+
+      const existingItems: UploadedFileInfo[] = urls.map((url: string, index: number) => {
+        const cleanName =
+          url.split("/").pop()?.split("?")[0] ||
+          `${initialItem.category || "เอกสาร"}_ไฟล์ที่_${index + 1}`;
+        const isPdf = url.toLowerCase().includes(".pdf");
+        const isImage = /\.(jpg|jpeg|png|webp)/i.test(url) || !isPdf;
+
+        const totalP = Number(initialItem.total_pages || initialItem.page_count) || 1;
+        const pageCount =
+          urls.length > 1 ? Math.max(1, Math.round(totalP / urls.length)) : totalP;
+
+        return {
+          file: new File([""], cleanName, {
+            type: isPdf ? "application/pdf" : "image/jpeg",
+          }),
+          previewUrl: url,
+          pageCount,
+          isPdf,
+          isImage,
+        };
+      });
+
+      if (existingItems.length > 0) {
+        setUploadedFiles(existingItems);
+        setActivePreviewIndex(0);
+      }
+    }
+  }, [initialItem]);
 
   const missingGroups = useMemo(() => {
     return requiredGroups.filter((g) => !modalOptions[g]);
   }, [requiredGroups, modalOptions]);
 
-  const canAddToCart = uploadedFiles.length > 0 && missingGroups.length === 0 && !isUploading;
+  const hasExistingFile = Boolean(initialItem?.file_url);
+  const canAddToCart =
+    (uploadedFiles.length > 0 || hasExistingFile) &&
+    missingGroups.length === 0 &&
+    !isUploading;
 
   const totalPages = useMemo(() => {
-    if (uploadedFiles.length === 0) return 1;
+    if (uploadedFiles.length === 0) {
+      return Number(initialItem?.total_pages || initialItem?.page_count) || 1;
+    }
     return uploadedFiles.reduce((sum, f) => sum + f.pageCount, 0);
-  }, [uploadedFiles]);
+  }, [uploadedFiles, initialItem]);
 
   const handleToggleOption = (group: string, opt: OptionItem) => {
     setModalOptions((prev) => {
@@ -109,33 +172,30 @@ export default function ServiceOptionModal({
   };
 
   const priceCalculations = useMemo(() => {
-    let perPageOptionsSum = 0; // ราคารวมตัวเลือกที่ต้องคูณจำนวนหน้า (เช่น ชนิดกระดาษ, สี)
-    let perSetOptionsSum = 0;  // ราคารวมตัวเลือกที่คิดเป็นต่อชุด (เช่น ปกรายงาน, การเข้าเล่ม)
+    let perPageSum = 0;
+    let fixedPerSetSum = 0;
 
-    Object.entries(modalOptions).forEach(([groupName, item]) => {
-      const price = Number(item.unit_price ?? item.price ?? 0);
-
-      if (checkIsPerSetGroup(groupName)) {
-        perSetOptionsSum += price;
+    Object.entries(modalOptions).forEach(([, item]) => {
+      const price = Number(item.price ?? item.unit_price ?? 0);
+      if ((item as any).price_type === "per_set") {
+        fixedPerSetSum += price;
       } else {
-        perPageOptionsSum += price;
+        perPageSum += price;
       }
     });
 
-    const effectivePages = totalPages > 0 ? totalPages : 1;
+    const singleSetPrice = isMultiPageService
+      ? perPageSum * totalPages + fixedPerSetSum
+      : perPageSum + fixedPerSetSum;
 
-    // 🌟 สูตรราคาสุทธิ 1 ชุด = (ราคาต่อหน้า * จำนวนหน้าจริง) + ราคาบวกเพิ่มต่อชุด
-    const singleSetPrice = (perPageOptionsSum * effectivePages) + perSetOptionsSum;
-
-    // ราคารวมตามจำนวนชุดที่สั่งซื้อ
     const finalTotalPrice = singleSetPrice * quantity;
 
     return {
-      pricePerPage: perPageOptionsSum,
+      pricePerPage: perPageSum,
       singleSetPrice,
       finalTotalPrice,
     };
-  }, [modalOptions, totalPages, quantity]);
+  }, [modalOptions, isMultiPageService, totalPages, quantity]);
 
   const countPdfPages = async (file: File): Promise<number> => {
     try {
@@ -153,6 +213,12 @@ export default function ServiceOptionModal({
     setFileError("");
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    if (!isMultiPageService && uploadedFiles.length + files.length > 1) {
+      setFileError(`บริการนี้เป็นงานพิมพ์แผ่นเดี่ยว รองรับเพียง 1 ไฟล์ต่อรายการ`);
+      e.target.value = "";
+      return;
+    }
 
     if (uploadedFiles.length + files.length > 10) {
       setFileError("สามารถอัปโหลดได้สูงสุดไม่เกิน 10 ไฟล์ต่อรายการ (FR-2.3)");
@@ -188,6 +254,13 @@ export default function ServiceOptionModal({
         pageCount = await countPdfPages(file);
       }
 
+      if (!isMultiPageService && pageCount > 1) {
+        setFileError(`บริการนี้รองรับไฟล์เพียง 1 หน้าเท่านั้น (ไฟล์ของคุณมี ${pageCount} หน้า)`);
+        setIsProcessingFile(false);
+        e.target.value = "";
+        return;
+      }
+
       newItems.push({
         file,
         previewUrl,
@@ -203,7 +276,9 @@ export default function ServiceOptionModal({
   };
 
   const handleRemoveFile = (index: number) => {
-    URL.revokeObjectURL(uploadedFiles[index].previewUrl);
+    if (uploadedFiles[index].file.size > 0) {
+      URL.revokeObjectURL(uploadedFiles[index].previewUrl);
+    }
     setUploadedFiles((prev) => {
       const updated = prev.filter((_, i) => i !== index);
       if (activePreviewIndex >= updated.length) {
@@ -221,25 +296,43 @@ export default function ServiceOptionModal({
     return fallback;
   };
 
-  const uploadFilesToSupabase = async (): Promise<string[]> => {
+  const uploadFilesToSupabase = async (filesToUpload: UploadedFileInfo[]): Promise<string[]> => {
     const urls: string[] = [];
 
-    for (const item of uploadedFiles) {
-      const formData = new FormData();
-      formData.append("file", item.file);
+    for (const item of filesToUpload) {
+      if (item.file.size === 0) continue; // ข้ามไฟล์เดิมที่เป็น URL อยู่แล้ว
 
-      const response = await fetch("http://localhost:5000/api/customer/upload-file", {
-        method: "POST",
-        body: formData,
-      });
+      const ext = item.file.name.split(".").pop()?.toLowerCase() || "pdf";
+      const randomString = Math.random().toString(36).substring(2, 8);
+      const safeFileName = `${Date.now()}_${randomString}.${ext}`;
+      const filePath = `orders/${safeFileName}`;
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Upload failed");
+      const fileContentType = item.isPdf
+        ? "application/pdf"
+        : item.file.type || "application/octet-stream";
+
+      const { error } = await supabase.storage
+        .from("print_files")
+        .upload(filePath, item.file, {
+          cacheControl: "3600",
+          upsert: true,
+          contentType: fileContentType,
+        });
+
+      if (error) {
+        console.error("Storage upload error:", error);
+        throw new Error(`อัปโหลดไฟล์ ${item.file.name} ไม่สำเร็จ: ${error.message}`);
       }
 
-      const resData = await response.json();
-      urls.push(resData.url);
+      const { data: publicData } = supabase.storage
+        .from("print_files")
+        .getPublicUrl(filePath);
+
+      if (!publicData?.publicUrl) {
+        throw new Error("ไม่สามารถสร้าง URL สำหรับไฟล์ที่อัปโหลดได้");
+      }
+
+      urls.push(publicData.publicUrl);
     }
 
     return urls;
@@ -250,22 +343,36 @@ export default function ServiceOptionModal({
       setIsUploading(true);
       setFileError("");
 
-      const fileUrls = await uploadFilesToSupabase();
-      const combinedFileUrls = fileUrls.join(", ");
+      const newFilesToUpload = uploadedFiles.filter((item) => item.file.size > 0);
+      const existingUrls = uploadedFiles
+        .filter((item) => item.file.size === 0)
+        .map((item) => item.previewUrl);
+
+      let finalFileUrls: string[] = [...existingUrls];
+
+      if (newFilesToUpload.length > 0) {
+        const uploadedUrls = await uploadFilesToSupabase(newFilesToUpload);
+        finalFileUrls = [...finalFileUrls, ...uploadedUrls];
+      }
+
+      const combinedFileUrls =
+        finalFileUrls.length > 0
+          ? finalFileUrls.join(", ")
+          : initialItem?.file_url || "";
 
       onAddToCart({
         category: serviceTypeName,
         selected_size: getOptionValue(["ขนาด", "ขนาดกระดาษ", "ขนาดมาตรฐาน", "size"], "A4"),
         color_type: getOptionValue(["ระบบสี", "รูปแบบสีการพิมพ์", "color", "สี"], ""),
-        paper_type: getOptionValue(["วัสดุ", "ความหนาและชนิดกระดาษ", "paper", "กระดาษ", "ปกรายงาน"], ""),
-        finishing_option: `${getOptionValue(["การเข้าเล่มและตกแต่ง", "รูปแบบการเข้าเล่ม/ตกแต่ง", "finishing", "เข้าเล่ม", "เย็บมุม", "รูปแบบการเข้าเล่ม", "ปกรายงาน"], "ไม่มี")}${
-          isDoubleSided ? " (พิมพ์หน้า-หลัง)" : ""
-        }`,
+        paper_type: getOptionValue(["วัสดุ", "ความหนาและชนิดกระดาษ", "paper", "กระดาษ"], ""),
+        finishing_option: getOptionValue(
+          ["การเข้าเล่มและตกแต่ง", "รูปแบบการเข้าเล่ม/ตกแต่ง", "finishing", "เข้าเล่ม", "เย็บมุม"],
+          "ไม่มี"
+        ),
         quantity: Number(quantity),
         unit_price: priceCalculations.singleSetPrice,
         subtotal: priceCalculations.finalTotalPrice,
         file_url: combinedFileUrls,
-        
         page_count: totalPages,
         total_pages: totalPages,
         pages_per_set: totalPages,
@@ -277,316 +384,65 @@ export default function ServiceOptionModal({
     }
   };
 
-  const currentPreviewFile = uploadedFiles[activePreviewIndex];
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+      <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden">
+        <div className="p-5 sm:px-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
           <div>
-            <h3 className="font-bold text-base sm:text-lg text-slate-900">
-              กำหนดสเปก: {serviceTypeName}
-            </h3>
-            <span className="text-xs text-slate-400">
-              อัปโหลดไฟล์ (สูงสุด 50MB/ไฟล์, รวมไม่เกิน 100MB, สูงสุด 10 ไฟล์)
-            </span>
+            <h2 className="text-base sm:text-lg font-extrabold text-slate-800">
+              {initialItem ? `แก้ไขสเปก: ${serviceTypeName}` : `กำหนดสเปก: ${serviceTypeName}`}
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {isMultiPageService
+                ? "อัปโหลดไฟล์ (สูงสุด 50MB/ไฟล์, รวมไม่เกิน 100MB, สูงสุด 10 ไฟล์)"
+                : "งานพิมพ์แผ่นเดี่ยว (1 ไฟล์ 1 หน้า, ไม่เกิน 50MB)"}
+            </p>
           </div>
           <button
             type="button"
             disabled={isUploading}
             onClick={onClose}
-            className="w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Content 2 คอลัมน์ */}
         <div className="flex-1 grid grid-cols-1 md:grid-cols-12 overflow-hidden">
-          {/* ฝั่งซ้าย: อัปโหลด + พรีวิว */}
-          <div className="md:col-span-6 p-5 sm:p-6 bg-slate-50/70 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col overflow-y-auto space-y-4">
-            <div>
-              <span className="text-xs font-bold text-slate-700 block mb-1.5">
-                อัปโหลดไฟล์งาน (เลือกได้หลายไฟล์)
-              </span>
+          <DocumentUploadPreview
+            uploadedFiles={uploadedFiles}
+            activePreviewIndex={activePreviewIndex}
+            setActivePreviewIndex={setActivePreviewIndex}
+            isProcessingFile={isProcessingFile}
+            isUploading={isUploading}
+            fileError={fileError}
+            totalPages={totalPages}
+            isMultiPageService={isMultiPageService}
+            onFileChange={handleFileChange}
+            onRemoveFile={handleRemoveFile}
+          />
 
-              <label className="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-white rounded-2xl p-4 text-center transition cursor-pointer block group">
-                {isProcessingFile ? (
-                  <div className="flex flex-col items-center justify-center py-2">
-                    <Loader2 className="w-6 h-6 text-blue-600 animate-spin mb-1" />
-                    <span className="text-xs text-slate-500">กำลังประมวลผลและนับหน้า...</span>
-                  </div>
-                ) : (
-                  <>
-                    <FileUp className="w-7 h-7 text-blue-500 mx-auto mb-1.5 group-hover:scale-110 transition" />
-                    <span className="text-xs font-bold text-slate-800 block">
-                      คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวาง
-                    </span>
-                    <span className="text-[11px] text-slate-400 block mt-0.5">
-                      PDF, JPG, PNG (ไม่เกิน 50MB ต่อไฟล์, รวมไม่เกิน 100MB)
-                    </span>
-                  </>
-                )}
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,image/png,image/jpeg,image/jpg"
-                  className="hidden"
-                  disabled={isProcessingFile || isUploading}
-                  onChange={handleFileChange}
-                />
-              </label>
-
-              {fileError && (
-                <p className="text-xs text-rose-500 mt-1.5 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {fileError}
-                </p>
-              )}
-            </div>
-
-            {/* รายการไฟล์ */}
-            {uploadedFiles.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-700">
-                    ไฟล์ที่เลือก ({uploadedFiles.length})
-                  </span>
-                  <span className="text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-md">
-                    รวมทั้งสิ้น {totalPages} หน้า
-                  </span>
-                </div>
-
-                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                  {uploadedFiles.map((item, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => setActivePreviewIndex(idx)}
-                      className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer transition ${
-                        activePreviewIndex === idx
-                          ? "bg-blue-50 border-blue-400 shadow-2xs"
-                          : "bg-white border-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <FileText className="w-4 h-4 text-blue-600 shrink-0" />
-                        <span className="truncate text-slate-800 font-medium">
-                          {item.file.name}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[11px] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
-                          {item.pageCount} หน้า
-                        </span>
-                        <button
-                          type="button"
-                          disabled={isUploading}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveFile(idx);
-                          }}
-                          className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* พรีวิว */}
-            <div className="flex-1 flex flex-col min-h-[220px]">
-              <span className="text-xs font-bold text-slate-700 block mb-1">
-                ตัวอย่างเอกสาร: {currentPreviewFile?.file.name || "(ยังไม่มีไฟล์)"}
-              </span>
-
-              <div className="flex-1 w-full bg-white rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center relative min-h-[200px]">
-                {currentPreviewFile ? (
-                  currentPreviewFile.isPdf ? (
-                    <iframe
-                      src={`${currentPreviewFile.previewUrl}#toolbar=0`}
-                      className="w-full h-full min-h-[220px] border-0"
-                      title="PDF Preview"
-                    />
-                  ) : currentPreviewFile.isImage ? (
-                    <img
-                      src={currentPreviewFile.previewUrl}
-                      alt="Preview"
-                      className="max-h-[220px] w-auto object-contain p-2"
-                    />
-                  ) : (
-                    <div className="text-center p-4">
-                      <FileText className="w-10 h-10 text-slate-400 mx-auto mb-1" />
-                      <p className="text-xs text-slate-500">{currentPreviewFile.file.name}</p>
-                    </div>
-                  )
-                ) : (
-                  <div className="text-center p-6 space-y-2">
-                    <Eye className="w-8 h-8 text-slate-300 mx-auto" />
-                    <p className="text-xs text-slate-400">อัปโหลดไฟล์เพื่อดูตัวอย่างเอกสาร</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ฝั่งขวา: กำหนดสเปก */}
-          <div className="md:col-span-6 p-5 sm:p-6 overflow-y-auto space-y-4 bg-white">
-            <div className="space-y-1.5 bg-blue-50/60 p-3.5 rounded-2xl border border-blue-100">
-              <span className="text-xs font-bold text-blue-900 block">หน้าที่ต้องการพิมพ์</span>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDoubleSided(false)}
-                  className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                    !isDoubleSided
-                      ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  พิมพ์หน้าเดียว 
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsDoubleSided(true)}
-                  className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                    isDoubleSided
-                      ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  พิมพ์หน้า-หลัง
-                </button>
-              </div>
-            </div>
-
-            {/* แสดงตัวเลือกย่อยจาก Supabase */}
-            {(() => {
-              const groups = Array.from(new Set(rawOptions.map((o) => o.group_type)))
-                .sort((a, b) => {
-                  const isFinishingA = checkIsPerSetGroup(a);
-                  const isFinishingB = checkIsPerSetGroup(b);
-
-                  if (isFinishingA && !isFinishingB) return 1;
-                  if (!isFinishingA && isFinishingB) return -1;
-
-                  return 0;
-                });
-
-              return groups.map((group) => {
-                const groupItems = rawOptions.filter((o) => o.group_type === group);
-                const isOptionalGroup = checkIsPerSetGroup(group);
-
-                return (
-                  <div key={group} className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700 block">{group}</span>
-                      {isOptionalGroup ? (
-                        <span className="text-[10px] text-slate-400">(ไม่บังคับเลือก)</span>
-                      ) : (
-                        <span className="text-[10px] text-rose-500 font-bold">* จำเป็น</span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      {groupItems.map((opt) => {
-                        const isSelected = modalOptions[group]?.id === opt.id;
-                        const displayName = opt.detail || opt.option_name || "ตัวเลือก";
-                        const itemPrice = Number(opt.price ?? opt.unit_price ?? 0);
-
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => handleToggleOption(group, opt)}
-                            className={`p-2.5 rounded-xl text-left border text-xs transition cursor-pointer flex items-center justify-between ${
-                              isSelected
-                                ? "bg-blue-50 border-blue-600 text-blue-700 font-bold shadow-2xs"
-                                : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                            }`}
-                          >
-                            <span className="truncate pr-2">{displayName}</span>
-                            <span className="text-[11px] text-slate-500 shrink-0">
-                              {itemPrice > 0 ? `฿${itemPrice}` : "ฟรี"}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              });
-            })()}
-
-            {/* จำนวนชุด */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-700 block">จำนวนชุดที่ต้องการ</span>
-                <span className="text-[10px] text-slate-400">พิมพ์ซ้ำตามจำนวนสำเนา</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-8 h-8 rounded-lg border border-slate-200 font-bold hover:bg-slate-100 cursor-pointer text-slate-700"
-                >
-                  -
-                </button>
-                <span className="text-xs font-bold w-6 text-center text-slate-800">{quantity}</span>
-                <button
-                  type="button"
-                  onClick={() => setQuantity(quantity + 1)}
-                  className="w-8 h-8 rounded-lg border border-slate-200 font-bold hover:bg-slate-100 cursor-pointer text-slate-700"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          </div>
+          <ServiceOptionForm
+            dynamicGroups={dynamicGroups}
+            rawOptions={rawOptions}
+            modalOptions={modalOptions}
+            quantity={quantity}
+            onToggleOption={handleToggleOption}
+            onQuantityChange={setQuantity}
+          />
         </div>
 
-        {/* Footer */}
-        <div className="p-4 sm:px-6 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div>
-            <span className="text-[11px] text-slate-400 block">
-              ราคาคำนวณ ({totalPages} หน้า × {quantity} ชุด)
-            </span>
-            <span className="text-base font-extrabold text-blue-600">
-              ฿{priceCalculations.finalTotalPrice.toFixed(2)}
-            </span>
-            {uploadedFiles.length > 0 && missingGroups.length > 0 && (
-              <span className="text-[10px] text-amber-600 font-medium block mt-0.5">
-                * กรุณาเลือก: {missingGroups.join(", ")}
-              </span>
-            )}
-          </div>
-
-          <button
-            type="button"
-            disabled={!canAddToCart}
-            onClick={handleSubmit}
-            className={`w-full sm:w-auto px-6 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md transition cursor-pointer ${
-              canAddToCart
-                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20"
-                : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-            }`}
-          >
-            {isUploading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>กำลังอัปโหลดไฟล์ขึ้นเซิร์ฟเวอร์...</span>
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" />
-                <span>ใส่ตะกร้า</span>
-              </>
-            )}
-          </button>
-        </div>
+        <ServiceOptionFooter
+          isMultiPageService={isMultiPageService}
+          totalPages={totalPages}
+          quantity={quantity}
+          finalTotalPrice={priceCalculations.finalTotalPrice}
+          hasUploadedFiles={uploadedFiles.length > 0 || hasExistingFile}
+          missingGroups={missingGroups}
+          canAddToCart={canAddToCart}
+          isUploading={isUploading}
+          onSubmit={handleSubmit}
+        />
       </div>
     </div>
   );
