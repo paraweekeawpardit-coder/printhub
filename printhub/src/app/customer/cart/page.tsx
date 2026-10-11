@@ -82,7 +82,7 @@ export default function CustomerCartOverviewPage() {
   }, [router, loadAllCarts]);
 
   const handleClearShopCart = async (shopId: string) => {
-    if (!confirm("ต้องการล้างรายการสินค้าของร้านนี้ใช่หรือไม่?")) return;
+    // if (!confirm("ต้องการล้างรายการสินค้าของร้านนี้ใช่หรือไม่?")) return;
 
     try {
       await fetch("http://localhost:5000/api/customer/cart", {
