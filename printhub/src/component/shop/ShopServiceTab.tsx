@@ -40,7 +40,10 @@ type GroupedRows = {
   rows: { row: ServiceDetailRow; idx: number }[];
 };
 
-const SERVICE_TEMPLATES: Record<string, { group_type: string; detail: string; price: string }[]> = {
+const SERVICE_TEMPLATES: Record<
+  string,
+  { group_type: string; detail: string; price: string }[]
+> = {
   "พิมพ์เอกสาร / รายงาน": [
     { group_type: "ขนาดกระดาษ", detail: "A4 ขาวดำ (หน้าเดียว)", price: "1.5" },
     { group_type: "ขนาดกระดาษ", detail: "A4 ขาวดำ (หน้า-หลัง)", price: "2" },
@@ -87,8 +90,14 @@ const SERVICE_TEMPLATES: Record<string, { group_type: string; detail: string; pr
   ],
 };
 
+<<<<<<< HEAD
 // 🟢 เพิ่มการประกาศรายการประเภทบริการและค่าวัดพื้นฐาน
 export const SERVICE_TYPE_TEMPLATES = Object.keys(SERVICE_TEMPLATES);
+=======
+// 🌟 สร้าง Array รายชื่อประเภทบริการสำเร็จรูป
+const SERVICE_TYPE_TEMPLATES = Object.keys(SERVICE_TEMPLATES);
+
+>>>>>>> feature/admin
 const OTHER_OPTION = "__other__";
 
 const groupItems = (

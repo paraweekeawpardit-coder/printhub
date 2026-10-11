@@ -165,6 +165,7 @@ export default function ShopPage() {
             ),
         ]);
 
+        // 🌟 1. เช็กสถานะการโดนระงับของร้านค้า
         const profData = profileRes?.data?.data || profileRes?.data;
         if (profData && profData.status === "suspended") {
           setIsSuspended(true);
@@ -172,6 +173,7 @@ export default function ShopPage() {
           setIsSuspended(false);
         }
 
+<<<<<<< HEAD
         // 🟢 อัปเดตค่า State ทั้งหมดโดยดึงจาก Response Object
         setNum(`${numRes?.data?.numWork ?? 0} รายการ`);
         setScore(`${Number(scoreRes?.data?.score ?? 0).toFixed(1)} / 5.0`);
@@ -186,10 +188,34 @@ export default function ShopPage() {
 
         setFinancialData(
           financeRes?.data ?? {
+=======
+        // 🌟 2. อัปเดตการแสดงผลการ์ดสรุป 3 ใบ
+        const numVal = numRes?.data?.numWork ?? 0;
+        const scoreVal = Number(scoreRes?.data?.score ?? 0);
+        const totalReviewsVal = scoreRes?.data?.totalReviews ?? 0;
+        const incomeVal = Number(incomeRes?.data?.income ?? 0);
+        const orderCountVal = incomeRes?.data?.orderCount ?? 0;
+
+        setNum(`${numVal} รายการ`);
+        setScore(`${scoreVal.toFixed(1)} / 5.0`);
+        setIncome(`${incomeVal.toLocaleString()} บาท`);
+
+        setTodayOrdersCount(orderCountVal);
+        setTotalReviewsCount(totalReviewsVal);
+
+        // 🌟 3. อัปเดตข้อมูลตารางและรายละเอียดแต่ละส่วน
+        setOrders(ordersRes?.data ?? []);
+
+        if (financeRes?.data) {
+          setFinancialData(financeRes.data);
+        } else {
+          setFinancialData({
+>>>>>>> feature/admin
             totalGross: 0,
             totalFee: 0,
             totalNet: 0,
             transactions: [],
+<<<<<<< HEAD
             financialTrend: {
               daily: [],
               weekly: [],
@@ -201,16 +227,37 @@ export default function ShopPage() {
 
         setBreakdownData(
           breakdownRes?.data ?? {
+=======
+            financialTrend: { daily: [], weekly: [], monthly: [], yearly: [] },
+          });
+        }
+
+        if (breakdownRes?.data) {
+          setBreakdownData(breakdownRes.data);
+        } else {
+          setBreakdownData({
+>>>>>>> feature/admin
             total: 0,
             counts: {},
             orders: [],
             trendData: { daily: [], weekly: [], monthly: [], yearly: [] },
+<<<<<<< HEAD
           }
         );
 
         setReviewData(
           reviewRes?.data ?? { reviews: [], complaints: [] }
         );
+=======
+          });
+        }
+
+        if (reviewRes?.data) {
+          setReviewData(reviewRes.data);
+        } else {
+          setReviewData({ reviews: [], complaints: [] });
+        }
+>>>>>>> feature/admin
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
       } finally {
@@ -240,7 +287,7 @@ export default function ShopPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50">
+    <div className="min-h-screen bg-slate-50/50 font-['Prompt',sans-serif]">
       <ShopNavbar />
 
       <div className="mx-auto max-w-7xl px-6 py-8 md:px-12">

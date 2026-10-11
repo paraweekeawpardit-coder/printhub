@@ -32,8 +32,8 @@ export function useNotifications(
   }, [role]);
 
   const fetchNotifications = useCallback(async () => {
-    // กรณี customer/shop แต่ไม่มี userId ให้เคลียร์ค่า
-    if (role !== "admin" && (!userId || userId === "undefined" || userId === "null")) {
+    // ต้องมี userId ที่ถูกต้องก่อนดึงข้อมูล
+    if (!userId || userId === "undefined" || userId === "null" || userId === "admin") {
       setNotifications([]);
       setUnreadCount(0);
       setLoading(false);
@@ -44,19 +44,12 @@ export function useNotifications(
       setLoading(true);
       const columnCheck = getColumnName();
 
-      let query = supabase
+      // 🟢 ดึงเฉพาะ Notification ของ userId ตนเองเท่านั้น
+      const { data, error } = await supabase
         .from("notifications")
         .select("*")
+        .eq(columnCheck, userId)
         .order("created_at", { ascending: false });
-
-      // ถ้าเป็น Admin และไม่มี userId เฉพาะเจาะจง ให้ดึงรายการทั้งหมดที่ admin_id ไม่เป็น null
-      if (role === "admin" && (!userId || userId === "admin" || userId === "undefined")) {
-        query = query.not("admin_id", "is", null);
-      } else {
-        query = query.eq(columnCheck, userId as string);
-      }
-
-      const { data, error } = await query;
 
       if (error) {
         console.error("Supabase notification fetch error:", error);
@@ -69,7 +62,7 @@ export function useNotifications(
     } finally {
       setLoading(false);
     }
-  }, [userId, role, getColumnName]);
+  }, [userId, getColumnName]);
 
   const markAsRead = async (id: string) => {
     try {
@@ -91,23 +84,16 @@ export function useNotifications(
 
   // 🟢 ฟังก์ชันอัปเดตสถานะเป็น "อ่านแล้วทั้งหมด"
   const markAllAsRead = async () => {
-    if (unreadCount === 0) return;
+    if (unreadCount === 0 || !userId) return;
 
     try {
       const columnCheck = getColumnName();
 
-      let query = supabase
+      const { error } = await supabase
         .from("notifications")
         .update({ is_read: true })
+        .eq(columnCheck, userId)
         .eq("is_read", false);
-
-      if (role === "admin" && (!userId || userId === "admin")) {
-        query = query.not("admin_id", "is", null);
-      } else {
-        query = query.eq(columnCheck, userId as string);
-      }
-
-      const { error } = await query;
 
       if (!error) {
         setNotifications((prev) =>
@@ -121,12 +107,12 @@ export function useNotifications(
   };
 
   useEffect(() => {
-    if (role !== "admin" && (!userId || userId === "undefined" || userId === "null")) return;
+    if (!userId || userId === "undefined" || userId === "null" || userId === "admin") return;
 
     fetchNotifications();
 
     const columnCheck = getColumnName();
-    const channelId = `noti_channel_${role}_${userId || "all"}`;
+    const channelId = `noti_channel_${role}_${userId}`;
 
     // 🟢 Realtime Supabase Postgres Changes
     const channel = supabase
@@ -137,16 +123,16 @@ export function useNotifications(
           event: "INSERT",
           schema: "public",
           table: "notifications",
-          filter: role === "admin" && (!userId || userId === "admin")
-            ? undefined // แอดมินดึงข้อความใหม่ของแอดมินทั้งหมด
-            : `${columnCheck}=eq.${userId}`,
+          filter: `${columnCheck}=eq.${userId}`, // 🟢 กรอง Event ให้รับเฉพาะ ID ตัวเอง
         },
         (payload) => {
           const newNoti = payload.new as NotificationItem;
-          // ตรวจสอบความถูกต้องฝั่ง Admin
-          if (role === "admin" && !newNoti.admin_id) return;
 
-          setNotifications((prev) => [newNoti, ...prev]);
+          // 🟢 ป้องกัน Notification ตัวเองเพิ่มซ้ำใน State
+          setNotifications((prev) => {
+            if (prev.some((item) => item.id === newNoti.id)) return prev;
+            return [newNoti, ...prev];
+          });
           setUnreadCount((prev) => prev + 1);
         }
       )
