@@ -86,7 +86,9 @@ export default function ShopSettingsPage() {
   const [services, setServices] = useState<ServiceTypeGroup[]>([]);
 
   // Bank Account States
-  const [bankAccountId, setBankAccountId] = useState<number | string | null>(null);
+  const [bankAccountId, setBankAccountId] = useState<number | string | null>(
+    null,
+  );
   const [bankName, setBankName] = useState<string>("");
   const [accountName, setAccountName] = useState<string>("");
   const [accountNumber, setAccountNumber] = useState<string>("");
@@ -111,19 +113,22 @@ export default function ShopSettingsPage() {
     try {
       setLoading(true);
 
-      const [profileRes, bankRes, servicesRes, verifyRes] = await Promise.allSettled([
-        axios.get(`${API_BASE}/profile/${shopId}`),
-        axios.get(`${API_BASE}/bank-account/${shopId}`),
-        axios.get(`${API_BASE}/services/${shopId}`),
-        axios.get(`${API_BASE}/verify-status/${shopId}`),
-      ]);
+      const [profileRes, bankRes, servicesRes, verifyRes] =
+        await Promise.allSettled([
+          axios.get(`${API_BASE}/profile/${shopId}`),
+          axios.get(`${API_BASE}/bank-account/${shopId}`),
+          axios.get(`${API_BASE}/services/${shopId}`),
+          axios.get(`${API_BASE}/verify-status/${shopId}`),
+        ]);
 
       const shop =
         profileRes.status === "fulfilled" ? profileRes.value.data?.data : null;
       const bankAccount =
         bankRes.status === "fulfilled" ? bankRes.value.data?.data : null;
       const shopServices =
-        servicesRes.status === "fulfilled" ? servicesRes.value.data?.data : null;
+        servicesRes.status === "fulfilled"
+          ? servicesRes.value.data?.data
+          : null;
       const verifyStatus =
         verifyRes.status === "fulfilled" ? verifyRes.value.data?.data : null;
 
@@ -156,10 +161,14 @@ export default function ShopSettingsPage() {
           setAddress(loaded);
           setSavedAddress(loaded);
           setLatitude(
-            shop.address.latitude != null ? Number(shop.address.latitude) : null
+            shop.address.latitude != null
+              ? Number(shop.address.latitude)
+              : null,
           );
           setLongitude(
-            shop.address.longitude != null ? Number(shop.address.longitude) : null
+            shop.address.longitude != null
+              ? Number(shop.address.longitude)
+              : null,
           );
         }
 
@@ -171,18 +180,20 @@ export default function ShopSettingsPage() {
 
       // 3. Services Data
       if (shopServices) {
-        const normalizedServices: ServiceTypeGroup[] = shopServices.map((group: any) => ({
-          id: group.id,
-          type: group.type ?? "",
-          items: (group.items ?? []).map((d: any) => ({
-            id: d.id,
-            category: d.category ?? "",
-            detail: d.detail ?? "",
-            group_type: d.group_type ?? "",
-            price: d.price != null ? String(d.price) : "",
-            is_required: d.is_required === true,
-          })),
-        }));
+        const normalizedServices: ServiceTypeGroup[] = shopServices.map(
+          (group: any) => ({
+            id: group.id,
+            type: group.type ?? "",
+            items: (group.items ?? []).map((d: any) => ({
+              id: d.id,
+              category: d.category ?? "",
+              detail: d.detail ?? "",
+              group_type: d.group_type ?? "",
+              price: d.price != null ? String(d.price) : "",
+              is_required: d.is_required === true,
+            })),
+          }),
+        );
         setServices(normalizedServices);
       } else {
         setServices([]);
@@ -199,7 +210,9 @@ export default function ShopSettingsPage() {
         setAccountName(bankAccount.account_name ?? "");
         setAccountNumber(bankAccount.account_number ?? "");
 
-        setHasBankData(Boolean(bankAccount.bank_name || bankAccount.account_number));
+        setHasBankData(
+          Boolean(bankAccount.bank_name || bankAccount.account_number),
+        );
         setOriginalBank({
           bankName: bankAccount.bank_name ?? "",
           accountName: bankAccount.account_name ?? "",
@@ -210,7 +223,7 @@ export default function ShopSettingsPage() {
         setIsBankPending(pendingStatus);
 
         setBankPendingCreatedAt(
-          bankAccount.created_at || bankAccount.updated_at || ""
+          bankAccount.created_at || bankAccount.updated_at || "",
         );
 
         if (pendingStatus) {
@@ -239,12 +252,13 @@ export default function ShopSettingsPage() {
 
   const isAddressChanged = () =>
     (Object.keys(address) as (keyof AddressData)[]).some(
-      (k) => (address[k] ?? "").trim() !== (savedAddress[k] ?? "").trim()
+      (k) => (address[k] ?? "").trim() !== (savedAddress[k] ?? "").trim(),
     );
 
-  const submitProfile = async (
-    coords?: { lat: number; lng: number }
-  ): Promise<boolean> => {
+  const submitProfile = async (coords?: {
+    lat: number;
+    lng: number;
+  }): Promise<boolean> => {
     if (!shopId) return false;
     try {
       setSaving(true);
@@ -300,24 +314,33 @@ export default function ShopSettingsPage() {
     if (ok) setShowLocationModal(false);
   };
 
-  const handleUploadProfileImage = async (file: File): Promise<string | null> => {
+  const handleUploadProfileImage = async (
+    file: File,
+  ): Promise<string | null> => {
     if (!shopId) return "ไม่พบ shop_id ของร้านค้า";
     try {
       setUploadingImage(true);
       const formData = new FormData();
       formData.append("image", file);
-      const res = await axios.put(`${API_BASE}/profile/${shopId}/image`, formData);
+      const res = await axios.put(
+        `${API_BASE}/profile/${shopId}/image`,
+        formData,
+      );
       const newImage: string | null = res.data?.data?.profile_image ?? null;
       setProfileImage(newImage);
       window.dispatchEvent(
         new CustomEvent("shop-profile-image-updated", {
           detail: { profile_image: newImage },
-        })
+        }),
       );
       return null;
     } catch (err: any) {
       const data = err?.response?.data;
-      console.error("Upload profile image error:", err?.response?.status, data ?? err.message);
+      console.error(
+        "Upload profile image error:",
+        err?.response?.status,
+        data ?? err.message,
+      );
       return data?.error ?? "อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
     } finally {
       setUploadingImage(false);
@@ -347,7 +370,7 @@ export default function ShopSettingsPage() {
 
       const payloadServices = services.map((s) => ({
         type: s.type,
-        items: s.items.map((item) => ({
+        items: s.items.map((item: any) => ({
           category: item.category || s.type,
           detail: item.detail,
           group_type: item.group_type,
@@ -365,9 +388,13 @@ export default function ShopSettingsPage() {
       return true;
     } catch (err: any) {
       const data = err?.response?.data;
-      console.error("Save services error:", err?.response?.status, data ?? err.message);
+      console.error(
+        "Save services error:",
+        err?.response?.status,
+        data ?? err.message,
+      );
       alert(
-        `บันทึกบริการพิมพ์ไม่สำเร็จ\n${data?.detail ?? data?.error ?? err.message}`
+        `บันทึกบริการพิมพ์ไม่สำเร็จ\n${data?.detail ?? data?.error ?? err.message}`,
       );
       return false;
     } finally {
@@ -378,7 +405,9 @@ export default function ShopSettingsPage() {
   const performSaveBank = async () => {
     if (!shopId) return;
     if (isSuspended) {
-      console.warn("[Action Blocked] Shop is suspended. Cannot update bank account.");
+      console.warn(
+        "[Action Blocked] Shop is suspended. Cannot update bank account.",
+      );
       return;
     }
 
@@ -432,9 +461,24 @@ export default function ShopSettingsPage() {
   };
 
   const tabs = [
-    { key: "profile", label: "ข้อมูลร้าน", icon: <Store size={16} />, locked: false },
-    { key: "services", label: "บริการพิมพ์", icon: <Printer size={16} />, locked: !isVerified },
-    { key: "bank", label: "บัญชีธนาคาร", icon: <Landmark size={16} />, locked: !isVerified },
+    {
+      key: "profile",
+      label: "ข้อมูลร้าน",
+      icon: <Store size={16} />,
+      locked: false,
+    },
+    {
+      key: "services",
+      label: "บริการพิมพ์",
+      icon: <Printer size={16} />,
+      locked: !isVerified,
+    },
+    {
+      key: "bank",
+      label: "บัญชีธนาคาร",
+      icon: <Landmark size={16} />,
+      locked: !isVerified,
+    },
   ];
 
   return (
@@ -454,7 +498,8 @@ export default function ShopSettingsPage() {
           <div className="mb-8 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-amber-900 shadow-sm">
             <Lock className="h-5 w-5 shrink-0 text-amber-600" />
             <p className="text-sm font-medium">
-              บัญชีถูกระงับการใช้งาน ระบบปิดการแก้ไขข้อมูลร้านค้า เวลาเปิด-ปิด บริการพิมพ์ และบัญชีธนาคารชั่วคราว
+              บัญชีถูกระงับการใช้งาน ระบบปิดการแก้ไขข้อมูลร้านค้า เวลาเปิด-ปิด
+              บริการพิมพ์ และบัญชีธนาคารชั่วคราว
             </p>
           </div>
         )}
@@ -504,10 +549,14 @@ export default function ShopSettingsPage() {
                 profileImage={profileImage}
                 onUploadImage={handleUploadProfileImage}
                 uploadingImage={uploadingImage}
-                openTime={openTime} setOpenTime={setOpenTime}
-                closeTime={closeTime} setCloseTime={setCloseTime}
-                address={address} setAddress={setAddress}
-                onSave={handleSaveProfile} saving={saving}
+                openTime={openTime}
+                setOpenTime={setOpenTime}
+                closeTime={closeTime}
+                setCloseTime={setCloseTime}
+                address={address}
+                setAddress={setAddress}
+                onSave={handleSaveProfile}
+                saving={saving}
                 hasData={hasProfileData}
                 isEditing={isEditingProfile && !isSuspended}
                 onToggleEdit={() => {
