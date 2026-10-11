@@ -44,7 +44,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     };
   }, [isOpen]);
 
-  // ฟังก์ชันเมื่อคลิกที่การแจ้งเตือนแต่ละรายการ
+  // 🟢 ฟังก์ชันเมื่อคลิกที่การแจ้งเตือนแต่ละรายการ
   const handleNotificationClick = async (noti: any) => {
     if (!noti.is_read) {
       await markAsRead(noti.id);
@@ -52,7 +52,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
     setIsOpen(false);
 
-    // 🟢 Routing แยกตาม Role และ Link / Type
+    // 1. ถ้ามี link ตรงๆ ให้เด้งไป link นั้น
     if (noti.link) {
       router.push(noti.link);
       return;
@@ -61,9 +61,20 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     const orderId = noti.order_id;
     const type = noti.type;
 
+    // 2. Routing แยกตาม Role
     if (role === "admin") {
-      if (type === "report_issue" || noti.title?.includes("ร้องเรียน") || noti.title?.includes("รายงาน")) {
-        router.push("/admin/reports");
+      if (
+        type === "report_issue" || 
+        noti.title?.includes("ร้องเรียน") || 
+        noti.title?.includes("รายงาน") ||
+        noti.title?.includes("แจ้งปัญหา")
+      ) {
+        // วาร์ปไปหน้ารายงานปัญหา (ถ้ามี order_id แนบไปเพื่อเสิร์ชด้วย)
+        if (orderId) {
+          router.push(`/admin/reports?search=${orderId}`);
+        } else {
+          router.push("/admin/reports");
+        }
       } else {
         router.push("/admin/support");
       }
