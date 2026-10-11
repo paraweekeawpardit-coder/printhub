@@ -125,7 +125,6 @@ export default function ShopPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
 
-        // ใช้ Promise.allSettled เพื่อป้องกัน API บางตัวพังหรือส่งค่า null กลับมาแล้วทำให้แอปพังทั้งหน้า
         const [
           numRes,
           scoreRes,
@@ -149,19 +148,13 @@ export default function ShopPage() {
             .get(`${API_URL}/shop/getTopOrder`, { headers })
             .catch(() => ({ data: [] })),
           axios
-            .get(`${API_URL}/shop/getFinancialOverview`, {
-              headers,
-            })
+            .get(`${API_URL}/shop/getFinancialOverview`, { headers })
             .catch(() => ({ data: null })),
           axios
-            .get(`${API_URL}/shop/getOrderStatusBreakdown`, {
-              headers,
-            })
+            .get(`${API_URL}/shop/getOrderStatusBreakdown`, { headers })
             .catch(() => ({ data: null })),
           axios
-            .get(`${API_URL}/shop/getComplaintsAndReviews`, {
-              headers,
-            })
+            .get(`${API_URL}/shop/getComplaintsAndReviews`, { headers })
             .catch(() => ({ data: null })),
           axios
             .get(`${API_URL}/shop/profile/${shopId}`, { headers })
@@ -179,22 +172,20 @@ export default function ShopPage() {
           setIsSuspended(false);
         }
 
-        setNum(`${numRes.data.numWork ?? 0} รายการ`);
-        setScore(`${Number(scoreRes.data.score ?? 0).toFixed(1)} / 5.0`);
+        // 🟢 อัปเดตค่า State ทั้งหมดโดยดึงจาก Response Object
+        setNum(`${numRes?.data?.numWork ?? 0} รายการ`);
+        setScore(`${Number(scoreRes?.data?.score ?? 0).toFixed(1)} / 5.0`);
         setIncome(
-          `${Number(incomeRes.data.income ?? 0).toLocaleString()} บาท`
+          `${Number(incomeRes?.data?.income ?? 0).toLocaleString()} บาท`
         );
 
-        setNum(`${numData?.numWork ?? 0} รายการ`);
-        setScore(`${scoreData?.score ?? 0.0} / 5.0`);
-        setIncome(`${incomeData?.income ?? 0} บาท`);
+        setTodayOrdersCount(incomeRes?.data?.orderCount ?? 0);
+        setTotalReviewsCount(scoreRes?.data?.totalReviews ?? 0);
 
-        setTodayOrdersCount(incomeData?.orderCount ?? 0);
-        setTotalReviewsCount(scoreData?.totalReviews ?? 0);
+        setOrders(ordersRes?.data ?? []);
 
-        setOrders(ordersData ?? []);
         setFinancialData(
-          financeDataRes ?? {
+          financeRes?.data ?? {
             totalGross: 0,
             totalFee: 0,
             totalNet: 0,
@@ -207,16 +198,18 @@ export default function ShopPage() {
             },
           }
         );
+
         setBreakdownData(
-          breakdownDataRes ?? {
+          breakdownRes?.data ?? {
             total: 0,
             counts: {},
             orders: [],
             trendData: { daily: [], weekly: [], monthly: [], yearly: [] },
           }
         );
+
         setReviewData(
-          reviewDataRes ?? { reviews: [], complaints: [] }
+          reviewRes?.data ?? { reviews: [], complaints: [] }
         );
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
