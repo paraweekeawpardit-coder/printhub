@@ -3,17 +3,18 @@ import supabase from "../../config/supabase.js";
 
 /**
  * GET /api/admin/shops/pending
- * ดึงรายการร้านค้าที่รออนุมัติ (is_verify = false) พร้อมข้อมูลที่อยู่ (address) และบัญชีธนาคาร (bank_account)
+ * ดึงรายการร้านค้าที่รออนุมัติ (status = 'pending')
  */
 export const getPendingShops = async (
   _req: Request,
   res: Response
 ): Promise<Response> => {
   try {
+    // 🟢 แก้ไข: กรองเฉพาะร้านค้าที่สถานะเป็น 'pending' จริงๆ (ไม่ดึงร้านที่โดนแบน suspended)
     const { data: shops, error: shopError } = await supabase
       .from("print_shop")
       .select("*, address:address_id(*)")
-      .eq("is_verify", false)
+      .eq("status", "pending")
       .order("created_at", { ascending: false });
 
     if (shopError) {
@@ -64,7 +65,7 @@ export const getPendingShops = async (
 
 /**
  * GET /api/admin/shops/all
- * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่อนุมัติแล้ว (is_verify = true)
+ * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่เคยผ่านการอนุมัติแล้ว (is_verify = true)
  */
 export const getAllShops = async (
   req: Request,
@@ -159,7 +160,6 @@ export const verifyShop = async (
       return res.status(400).json({ error: error.message });
     }
 
-    // 📌 หากอนุมัติร้านค้า ให้อนุมัติบัญชีธนาคารค้างอนุมัติ (pending) ของร้านนั้นทันที
     if (isApproved) {
       await supabase
         .from("bank_account")
@@ -198,11 +198,14 @@ export const toggleSuspendShop = async (
     const isSuspend = suspend === true || suspend === "true";
     const newStatus = isSuspend ? "suspended" : "approved";
 
+    // 🟢 แก้ไข: ร้านค้าที่ผ่านการอนุมัติแล้ว แม้โดนระงับใช้งาน (suspended) ค่า is_verify ยังคงเป็น true
+    // เพื่อไม่ให้หลุดไปโผล่ในหน้า "คำขอสมัครใหม่"
     const { data: updatedShop, error } = await supabase
       .from("print_shop")
       .update({
-        is_verify: !isSuspend,
+        is_verify: true,
         status: newStatus,
+        is_open: !isSuspend, // ถ้าโดนแบนให้ปิดร้านอัตโนมัติ
         suspend_reason: isSuspend ? reason : null,
       })
       .eq("id", shop_id)
@@ -214,6 +217,7 @@ export const toggleSuspendShop = async (
       return res.status(400).json({ error: error.message });
     }
 
+    // 🟢 เมื่อปลดการระงับสำเร็จ ให้เคลียร์สถานะคำขอปลดระงับที่ค้างอยู่เป็น 'approved'
     if (!isSuspend) {
       await supabase
         .from("shop_appeals")
@@ -242,10 +246,6 @@ export const toggleSuspendShop = async (
 // จัดการคำขออนุมัติบัญชีธนาคาร (ฝั่ง Admin)
 // ==========================================
 
-/**
- * GET /api/admin/bank-accounts/pending
- * ดึงรายการบัญชีธนาคารที่รออนุมัติทั้งหมด
- */
 export const getPendingBankAccounts = async (
   _req: Request,
   res: Response
@@ -332,7 +332,7 @@ export const getPendingBankAccounts = async (
 
 /**
  * PATCH /api/admin/bank-accounts/verify
- * อนุมัติ (approve) หรือ ปปฏิเสธ (reject) บัญชีธนาคาร
+ * อนุมัติ (approve) หรือ ปฏิเสธ (reject) บัญชีธนาคาร
  */
 export const approveOrRejectBankAccount = async (
   req: Request,
@@ -367,21 +367,22 @@ export const approveOrRejectBankAccount = async (
 
     if (action === "approve") {
       if (targetShopId) {
-        // 1. เปลี่ยนสถานะบัญชีเดิมของร้านที่เป็น 'approved' ให้กลายเป็น 'rejected' (ยกเลิกการใช้งานเดิม)
+        // 1. เปลี่ยนสถานะบัญชีเดิมของร้านที่เป็น 'approved' ให้กลายเป็น 'rejected'
         await supabase
           .from("bank_account")
           .update({ status: "rejected" })
           .eq("shop_id", targetShopId)
           .eq("status", "approved");
 
-        // 2. ป้องกันปัญหาร้านค้าโดนล็อค: ยืนยันสถานะร้านค้าใน print_shop ว่าอนุมัติเรียบร้อย
+        // 🟢 แก้ไข: ยกเลิกการอัปเดต status = 'approved' ของร้านค้าออก เพื่อป้องกันไม่ให้แบนหลุด
+        // ถ้าผู้ใช้เคยผ่านการยืนยันตัวตนแล้ว แค่ยืนยัน is_verify = true พอ
         await supabase
           .from("print_shop")
-          .update({ is_verify: true, status: "approved" })
+          .update({ is_verify: true })
           .eq("id", targetShopId);
       }
 
-      // 3. เปลี่ยนบัญชีใหม่ที่ยื่นมาให้กลายเป็น 'approved'
+      // 2. เปลี่ยนบัญชีใหม่ที่ยื่นมาให้กลายเป็น 'approved'
       const { data: approvedData, error: approveError } = await supabase
         .from("bank_account")
         .update({ status: "approved" })
@@ -399,7 +400,6 @@ export const approveOrRejectBankAccount = async (
         data: approvedData,
       });
     } else if (action === "reject") {
-      // ปฏิเสธคำขอใหม่ บัญชีเดิมที่เป็น 'approved' จะยังคงแสดงผลเหมือนเดิมในระบบ
       const { data: rejectedData, error: rejectError } = await supabase
         .from("bank_account")
         .update({ status: "rejected" })

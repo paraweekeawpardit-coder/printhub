@@ -5,7 +5,6 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { ShieldAlert, LogOut, Mail, RefreshCw } from "lucide-react";
 
-const API_BASE = "http://localhost:5000";
 const LOGIN_PATH = "/auth";
 const SUPPORT_EMAIL = "printhub.service@printhub.co.th";
 
@@ -25,15 +24,21 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
   const checkStatus = useCallback(async (): Promise<boolean | null> => {
     try {
-      const res = await axios.get("http://localhost:5000/api/shop/status")
-      setBan(res.data.isBanned ? { reason: res.data.reason ?? null } : null);
-      return !!res.data.isBanned;
+      const res = await axios.get("http://localhost:5000/api/shop/status");
+      // 🟢 เช็กเฉพาะกรณีที่เซิร์ฟเวอร์ยืนยันว่า isBanned เป็น true
+      if (res.data && res.data.isBanned) {
+        setBan({ reason: res.data.reason ?? null });
+        return true;
+      }
+      setBan(null);
+      return false;
     } catch (err: any) {
-      // หากโดน 403 (SHOP_BANNED) ให้เซ็ตสถานะแบนทันทีโดยไม่ให้เกิด error หลุดไป
-      if (err.response?.status === 403) {
+      // 🟢 เช็กว่าสถานะ 403 นั้นเกิดจากการแบนจริง ไม่ใช่ error ทั่วไป
+      if (err.response?.status === 403 && err.response?.data?.code === "SHOP_BANNED") {
         setBan({ reason: err.response?.data?.reason ?? null });
         return true;
       }
+      setBan(null);
       return null;
     } finally {
       setChecked(true);
@@ -51,7 +56,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           return Promise.reject(err);
         }
         
-        // ดักจับ 403 กรณีร้านถูกแบน เพื่อไม่ให้ Axios โยน Error ไปรบกวนหน้าจอ Next.js
+        // ดักจับ 403 กรณีร้านถูกแบนจริงเท่านั้น
         if (status === 403 && err.response?.data?.code === "SHOP_BANNED") {
           setBan({ reason: err.response.data.reason ?? null });
           return Promise.resolve({ data: null, isBannedHandled: true });
@@ -95,11 +100,10 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="relative min-h-screen">
-      {/* 🔴 แบนเนอร์แจ้งเตือนระงับการใช้งาน ลอยตรึงอยู่ด้านบนสุด */}
+      {/* 🔴 แบนเนอร์แจ้งเตือนระงับการใช้งาน */}
       {ban && (
         <div className="sticky top-0 z-[9999] w-full bg-rose-600 text-white shadow-md border-b border-rose-700">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-            
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 backdrop-blur-xs">
                 <ShieldAlert className="h-5 w-5 text-white" />
@@ -142,12 +146,10 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
                 <LogOut className="h-3.5 w-3.5" />
               </button>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* 🌫️ เนื้อหาหน้าเว็บเดิม: เบลอและปิดการคลิกเมื่อถูกแบน */}
       <div
         className={`transition-all duration-300 ${
           ban
