@@ -181,6 +181,8 @@ export default function ShopSettingsPage() {
             group_type: d.group_type ?? "",
             price: d.price != null ? String(d.price) : "",
             is_required: d.is_required === true,
+            // แถวเก่าที่ยังไม่เคยระบุ ถือเป็นต่อหน้า (ไม่ติ๊ก)
+            price_type: d.price_type === "per_set" ? "per_set" : "per_page",
           })),
         }));
         setServices(normalizedServices);
@@ -353,6 +355,7 @@ export default function ShopSettingsPage() {
           group_type: item.group_type,
           price: item.price,
           is_required: item.is_required ?? false,
+          price_type: item.price_type === "per_set" ? "per_set" : "per_page",
         })),
       }));
 
