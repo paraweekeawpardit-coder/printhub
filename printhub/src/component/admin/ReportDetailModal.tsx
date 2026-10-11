@@ -2,6 +2,15 @@
 
 import { useState, useEffect } from "react";
 
+export interface OrderItemDetail {
+  id?: string;
+  item_name?: string;
+  paper_type?: string;
+  quantity?: number;
+  price?: number;
+  details?: string;
+}
+
 export interface ReportDetailItem {
   id: string;
   order_id?: string;
@@ -11,12 +20,15 @@ export interface ReportDetailItem {
   customer_phone?: string;
   shop_name?: string;
   shop_phone?: string;
+  issue_type?: string;
+  category?: string;
   description?: string;
   image_url?: string | null;
   status?: string;
   created_at?: string;
   total_price?: number;
   admin_note?: string;
+  order_items?: OrderItemDetail[];
 }
 
 interface ReportDetailModalProps {
@@ -49,10 +61,31 @@ export default function ReportDetailModal({
 
   if (!report) return null;
 
+  // 🟢 แปลงเวลาให้แสดงผลตาม Local Time (เวลาไทย UTC+7)
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "-";
+    let formattedStr = dateString;
+    if (formattedStr.includes("T") && !formattedStr.endsWith("Z") && !formattedStr.includes("+")) {
+      formattedStr += "Z";
+    }
+    const d = new Date(formattedStr);
+    if (isNaN(d.getTime())) return dateString;
+    return d.toLocaleString("th-TH", {
+      timeZone: "Asia/Bangkok",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   const totalPrice = report.total_price || 0;
   const isNoteValid = adminNote.trim().length > 0;
   const isPending = !report.status || report.status === "pending";
   const isResolved = report.status === "resolved_refund" || report.status === "rejected";
+
+  const issueCategoryDisplay = report.issue_type || report.category || "ไม่ระบุประเภทปัญหา";
 
   const handleSubmit = async () => {
     if (!isNoteValid || isPending) return;
@@ -86,7 +119,7 @@ export default function ReportDetailModal({
     (report.order_id ? `#${report.order_id.slice(0, 8)}` : "-");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-hidden font-sans">
       <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Modal Header */}
@@ -96,10 +129,7 @@ export default function ReportDetailModal({
               รายละเอียดรายงานปัญหาและการตัดสินเคส
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Ticket ID: {report.id} • ยื่นเรื่องเมื่อ:{" "}
-              {report.created_at
-                ? new Date(report.created_at).toLocaleString("th-TH")
-                : "-"}
+              Ticket ID: {report.id} • ยื่นเรื่องเมื่อ: {formatDate(report.created_at)}
             </p>
           </div>
           <button
@@ -110,7 +140,7 @@ export default function ReportDetailModal({
           </button>
         </div>
 
-        {/* Modal Content - Single Scroll Point */}
+        {/* Modal Content */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {/* Section 1: ข้อมูลคำสั่งซื้อ & หลักฐาน */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -193,13 +223,47 @@ export default function ReportDetailModal({
             </div>
           </div>
 
-          {/* Issue Details */}
-          <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200 text-xs">
-            <p className="font-bold text-amber-900 mb-1">รายละเอียดปัญหาที่แจ้งเข้ามา:</p>
-            <p className="text-amber-800 leading-relaxed font-medium">
-              {report.description || "ไม่ได้ระบุรายละเอียด"}
-            </p>
+          {/* Section 2: ประเภทปัญหา & รายละเอียดปัญหา */}
+          <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200 text-xs space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-amber-900">ประเภทปัญหา:</span>
+              <span className="px-2.5 py-1 rounded-md bg-amber-200/70 font-semibold text-amber-950 border border-amber-300/50">
+                {issueCategoryDisplay}
+              </span>
+            </div>
+            <div>
+              <p className="font-bold text-amber-900 mb-1">รายละเอียดปัญหาที่แจ้งเข้ามา:</p>
+              <p className="text-amber-900 leading-relaxed font-medium bg-white/70 p-2.5 rounded-lg border border-amber-200/60">
+                {report.description || "ไม่ได้ระบุรายละเอียด"}
+              </p>
+            </div>
           </div>
+
+          {/* Section 3: รายละเอียดงานพิมพ์ในออเดอร์ */}
+          {report.order_items && report.order_items.length > 0 && (
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
+              <p className="font-bold text-slate-800 text-xs border-b border-slate-200 pb-2">
+                รายละเอียดสินค้า/งานพิมพ์ในคำสั่งซื้อ:
+              </p>
+              <div className="space-y-2">
+                {report.order_items.map((item, idx) => (
+                  <div key={item.id || idx} className="bg-white p-3 rounded-lg border border-slate-200 flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-slate-900">{item.item_name || `รายการที่ ${idx + 1}`}</p>
+                      <p className="text-slate-500 text-[11px] mt-0.5">
+                        {item.paper_type && `กระดาษ: ${item.paper_type} | `}
+                        {item.details || "-"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-slate-700">จำนวน: {item.quantity || 1} ชุด</p>
+                      {item.price && <p className="font-bold text-slate-900">฿{item.price}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Decision Section / Lock for Pending */}
           {isPending ? (
@@ -219,7 +283,7 @@ export default function ReportDetailModal({
                 <button
                   onClick={handleAccept}
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm whitespace-nowrap transition-all"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm whitespace-nowrap transition-all cursor-pointer"
                 >
                   {isSubmitting ? "กำลังบันทึก..." : "กดรับเรื่องพิจารณา"}
                 </button>
@@ -306,7 +370,7 @@ export default function ReportDetailModal({
         <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex justify-end gap-3 shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
           >
             {isPending || isResolved ? "ปิดหน้าต่าง" : "ยกเลิก"}
           </button>
@@ -314,7 +378,7 @@ export default function ReportDetailModal({
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || !isNoteValid}
-              className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all ${
+              className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all cursor-pointer ${
                 decision === "approved"
                   ? "bg-emerald-600 hover:bg-emerald-700"
                   : "bg-rose-600 hover:bg-rose-700"

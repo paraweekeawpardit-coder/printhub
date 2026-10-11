@@ -1,5 +1,7 @@
 "use client";
 
+import { Image as ImageIcon } from "lucide-react";
+
 export interface ReportItem {
   id: string;
   customer_id?: string;
@@ -42,9 +44,13 @@ export default function ReportTable({
       formattedStr = dateString.replace(/^(\d{4})/, String(adYear));
     }
 
+    if (formattedStr.includes("T") && !formattedStr.endsWith("Z") && !formattedStr.includes("+")) {
+      formattedStr += "Z";
+    }
+
     let d = new Date(formattedStr);
     if (isNaN(d.getTime())) {
-      d = new Date(formattedStr.replace(" ", "T") + "Z");
+      d = new Date(formattedStr.replace(" ", "T"));
     }
     return isNaN(d.getTime()) ? null : d;
   };
@@ -53,6 +59,7 @@ export default function ReportTable({
     const date = parseDate(dateString);
     if (!date) return "-";
     return date.toLocaleString("th-TH", {
+      timeZone: "Asia/Bangkok",
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -61,19 +68,19 @@ export default function ReportTable({
     });
   };
 
-  // คำนวณเวลานับถอยหลัง 48 ชม. จากเวลาที่กดรับเรื่อง (updated_at)
+  // คำนวณเวลานับถอยหลัง 48 ชม. (เวลารับเรื่อง + 48 ชม. - เวลาปัจจุบัน)
   const getRemainingCountdown = (updatedAt?: string) => {
-    const targetDate = parseDate(updatedAt);
-    if (!targetDate) return null;
+    const acceptedDate = parseDate(updatedAt);
+    if (!acceptedDate) return null;
 
-    const startTime = targetDate.getTime();
-    const now = Date.now();
+    // วันเวลารับเรื่อง + 48 ชั่วโมงเต็ม (มิลลิวินาที)
+    const targetDeadlineMs = acceptedDate.getTime() + (48 * 60 * 60 * 1000);
+    const nowMs = Date.now();
 
-    const elapsedMs = now - startTime;
-    const limitMs = 48 * 60 * 60 * 1000; // 48 ชั่วโมง
+    const diffMs = targetDeadlineMs - nowMs;
 
-    if (elapsedMs >= limitMs) {
-      const overdueMs = elapsedMs - limitMs;
+    if (diffMs <= 0) {
+      const overdueMs = Math.abs(diffMs);
       const overdueHours = Math.floor(overdueMs / (1000 * 60 * 60));
       const overdueMinutes = Math.floor((overdueMs % (1000 * 60 * 60)) / (1000 * 60));
 
@@ -83,9 +90,8 @@ export default function ReportTable({
       };
     }
 
-    const remainingMs = limitMs - elapsedMs;
-    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
-    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
     return {
       text: `เหลือเวลา ${hours} ชม. ${minutes} นาที`,
@@ -122,7 +128,6 @@ export default function ReportTable({
                   item.order_id_display ||
                   (item.order_id ? `#${item.order_id.slice(0, 8)}` : "-");
 
-                // ตรวจสอบว่าแอดมินกดรับเรื่องแล้วหรือยัง (ต้องไม่ใช่สถานะ pending)
                 const isAccepted = item.status !== "pending" && Boolean(item.updated_at);
                 const countdown = isAccepted ? getRemainingCountdown(item.updated_at) : null;
 
@@ -177,16 +182,14 @@ export default function ReportTable({
                       </p>
                     </td>
 
-                    {/* หลักฐาน */}
+                    {/* หลักฐาน - ไอคอนรูปภาพแบบ Lucide Image */}
                     <td className="py-4 px-4 whitespace-nowrap">
                       {item.image_url ? (
                         <button
                           onClick={() => onOpenImage(item)}
                           className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
+                          <ImageIcon className="w-3.5 h-3.5" />
                           ดูรูปถ่าย
                         </button>
                       ) : (

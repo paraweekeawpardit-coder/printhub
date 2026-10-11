@@ -180,20 +180,20 @@ export default function ShopSettingsPage() {
 
       // 3. Services Data
       if (shopServices) {
-        const normalizedServices: ServiceTypeGroup[] = shopServices.map(
-          (group: any) => ({
-            id: group.id,
-            type: group.type ?? "",
-            items: (group.items ?? []).map((d: any) => ({
-              id: d.id,
-              category: d.category ?? "",
-              detail: d.detail ?? "",
-              group_type: d.group_type ?? "",
-              price: d.price != null ? String(d.price) : "",
-              is_required: d.is_required === true,
-            })),
-          }),
-        );
+        const normalizedServices: ServiceTypeGroup[] = shopServices.map((group: any) => ({
+          id: group.id,
+          type: group.type ?? "",
+          items: (group.items ?? []).map((d: any) => ({
+            id: d.id,
+            category: d.category ?? "",
+            detail: d.detail ?? "",
+            group_type: d.group_type ?? "",
+            price: d.price != null ? String(d.price) : "",
+            is_required: d.is_required === true,
+            // แถวเก่าที่ยังไม่เคยระบุ ถือเป็นต่อหน้า (ไม่ติ๊ก)
+            price_type: d.price_type === "per_set" ? "per_set" : "per_page",
+          })),
+        }));
         setServices(normalizedServices);
       } else {
         setServices([]);
@@ -376,6 +376,7 @@ export default function ShopSettingsPage() {
           group_type: item.group_type,
           price: item.price,
           is_required: item.is_required ?? false,
+          price_type: item.price_type === "per_set" ? "per_set" : "per_page",
         })),
       }));
 

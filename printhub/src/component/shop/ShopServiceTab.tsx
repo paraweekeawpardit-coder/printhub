@@ -13,6 +13,14 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+// per_page = คิดต่อหน้า, per_set = คิดรวมทั้งไฟล์/ชุด (บวกครั้งเดียว), "" = ยังไม่ได้เลือก
+export type PriceType = "per_page" | "per_set" | "";
+
+const PRICE_TYPE_LABEL: Record<string, string> = {
+  per_page: "ต่อหน้า",
+  per_set: "รวมทั้งไฟล์",
+};
+
 export type ServiceDetailRow = {
   id?: string;
   category?: string;
@@ -20,6 +28,7 @@ export type ServiceDetailRow = {
   group_type: string;
   price: string;
   is_required?: boolean; // ลูกค้าต้องเลือกกลุ่มนี้หรือไม่ (ค่าเริ่มต้น false)
+  price_type?: PriceType; // per_page = คิดต่อหน้า (ค่าเริ่มต้น), per_set = คิดรวมทั้งไฟล์ บวกครั้งเดียว
 };
 
 export type ServiceTypeGroup = {
@@ -138,7 +147,7 @@ type ServiceErrors = {
   type?: string;
   noItems?: string;
   groupName: Record<number, string>;
-  row: Record<number, { detail?: string; price?: string }>;
+  row: Record<number, { detail?: string; price?: string; price_type?: string }>;
   count: number;
 };
 
@@ -165,7 +174,7 @@ const validateService = (group: ServiceTypeGroup): ServiceErrors => {
 
     const seen = new Set<string>();
     for (const { row, idx } of grp.rows) {
-      const rowErr: { detail?: string; price?: string } = {};
+      const rowErr: { detail?: string; price?: string; price_type?: string } = {};
 
       const detail = row.detail.trim();
       if (!detail) rowErr.detail = "กรุณากรอกรายละเอียด เช่น A4 ขาวดำ";
@@ -177,9 +186,10 @@ const validateService = (group: ServiceTypeGroup): ServiceErrors => {
       else if (!Number.isFinite(Number(priceStr)) || Number(priceStr) < 0)
         rowErr.price = "ราคาต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป";
 
-      if (rowErr.detail || rowErr.price) {
+      if (rowErr.detail || rowErr.price || rowErr.price_type) {
         errors.row[idx] = rowErr;
-        errors.count += (rowErr.detail ? 1 : 0) + (rowErr.price ? 1 : 0);
+        errors.count +=
+          (rowErr.detail ? 1 : 0) + (rowErr.price ? 1 : 0) + (rowErr.price_type ? 1 : 0);
       }
     }
   }
@@ -267,7 +277,7 @@ export default function ShopServicesTab({
   const addServiceType = () => {
     setServices((prev) => [
       ...prev,
-      { type: "", items: [{ detail: "", group_type: "", price: "", is_required: false }] },
+      { type: "", items: [{ detail: "", group_type: "", price: "", is_required: false, price_type: "per_page" }] },
     ]);
   };
 
@@ -289,7 +299,7 @@ export default function ShopServicesTab({
             ? {
                 ...g,
                 type: "",
-                items: [{ detail: "", group_type: "", price: "", is_required: false }],
+                items: [{ detail: "", group_type: "", price: "", is_required: false, price_type: "per_page" }],
               }
             : g
         )
@@ -301,6 +311,7 @@ export default function ShopServicesTab({
         group_type: item.group_type,
         price: item.price,
         is_required: false,
+        price_type: "per_page" as PriceType, // ค่าเริ่มต้น = คิดต่อหน้า (ติ๊กเพื่อเปลี่ยนเป็นรวมทั้งไฟล์)
       }));
       setServices((prev) =>
         prev.map((g, i) =>
@@ -379,6 +390,7 @@ export default function ShopServicesTab({
                   price: "",
                   // แถวใหม่ในกลุ่มเดิมใช้ค่าเดียวกับกลุ่ม
                   is_required: grp.rows.some((r) => !!r.row.is_required),
+                  price_type: "per_page" as PriceType,
                 },
               ],
             }
@@ -399,7 +411,7 @@ export default function ShopServicesTab({
     setServices((prev) =>
       prev.map((g, i) =>
         i === groupIndex
-          ? { ...g, items: [...g.items, { detail: "", group_type: "", price: "", is_required: false }] }
+          ? { ...g, items: [...g.items, { detail: "", group_type: "", price: "", is_required: false, price_type: "per_page" as PriceType }] }
           : g
       )
     );
@@ -433,7 +445,7 @@ export default function ShopServicesTab({
   const updateRow = (
     groupIndex: number,
     rowIdx: number,
-    field: "detail" | "price",
+    field: "detail" | "price" | "price_type",
     value: string
   ) => {
     setServices((prev) =>
@@ -568,8 +580,17 @@ export default function ShopServicesTab({
                                   className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                                 >
                                   <span className="text-slate-700">{row.detail || "-"}</span>
-                                  <span className="font-semibold text-[#0F2942]">
+                                  <span className="text-right font-semibold text-[#0F2942]">
                                     {row.price ? `${row.price} บาท` : "0 บาท"}
+                                    {row.price_type && PRICE_TYPE_LABEL[row.price_type] ? (
+                                      <span className="ml-1 text-[11px] font-normal text-slate-400">
+                                        / {PRICE_TYPE_LABEL[row.price_type]}
+                                      </span>
+                                    ) : (
+                                      <span className="ml-1 text-[11px] font-medium text-amber-600">
+                                        ยังไม่ระบุวิธีคิด
+                                      </span>
+                                    )}
                                   </span>
                                 </div>
                               ))}
@@ -713,13 +734,13 @@ export default function ShopServicesTab({
 
                               return (
                                 <div key={row.id || `item-${idx}`} className="px-3 py-2">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <input
                                       value={row.detail}
                                       onChange={(e) => updateRow(gIdx, idx, "detail", e.target.value)}
                                       placeholder="เช่น A4 ขาวดำ"
                                       aria-invalid={!!rowErr?.detail}
-                                      className={`flex-1 rounded-md border bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none ${
+                                      className={`min-w-[120px] flex-1 rounded-md border bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none ${
                                         rowErr?.detail
                                           ? "border-rose-400 focus:border-rose-500"
                                           : "border-slate-200 focus:border-[#2F6FED]"
@@ -740,6 +761,25 @@ export default function ShopServicesTab({
                                       />
                                       <span className="text-xs text-slate-400">บาท</span>
                                     </div>
+                                    <label
+                                      title="ติ๊ก = คิดรวมทั้งไฟล์ (บวกเพิ่มครั้งเดียว) / ไม่ติ๊ก = คิดต่อหน้า"
+                                      className="flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-xs text-slate-600"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={row.price_type === "per_set"}
+                                        onChange={(ev) =>
+                                          updateRow(
+                                            gIdx,
+                                            idx,
+                                            "price_type",
+                                            ev.target.checked ? "per_set" : "per_page"
+                                          )
+                                        }
+                                        className="h-3.5 w-3.5 accent-[#2F6FED]"
+                                      />
+                                      คิดรวมทั้งไฟล์
+                                    </label>
                                     <button
                                       type="button"
                                       onClick={() => removeRow(gIdx, idx)}
@@ -750,6 +790,11 @@ export default function ShopServicesTab({
                                   </div>
                                   <FieldError message={rowErr?.detail} />
                                   <FieldError message={rowErr?.price} />
+                                  <p className="mt-1 text-[11px] text-slate-400">
+                                    {row.price_type === "per_set"
+                                      ? "ราคานี้บวกเพิ่มครั้งเดียวต่อทั้งไฟล์"
+                                      : "ราคานี้คิดคูณตามจำนวนหน้า"}
+                                  </p>
                                 </div>
                               );
                             })}

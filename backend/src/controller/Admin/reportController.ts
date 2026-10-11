@@ -20,7 +20,8 @@ export const getAllReports = async (req: Request, res: Response): Promise<Respon
     const shopIds = [...new Set(reports.map((r: any) => r.shop_id).filter(Boolean))];
     const orderIds = [...new Set(reports.map((r: any) => r.order_id).filter(Boolean))];
 
-    const [{ data: customers }, { data: shops }, { data: orders }] = await Promise.all([
+    // 🟢 ดึงข้อมูล customer, print_shop, print_order และ print_order_item ร่วมกัน
+    const [{ data: customers }, { data: shops }, { data: orders }, { data: orderItems }] = await Promise.all([
       customerIds.length > 0
         ? supabase.from("customer").select("id, first_name, last_name, contact").in("id", customerIds)
         : Promise.resolve({ data: [] }),
@@ -30,16 +31,37 @@ export const getAllReports = async (req: Request, res: Response): Promise<Respon
       orderIds.length > 0
         ? supabase.from("print_order").select("id, order_no, total_price, total_amount, platform_fee, small_order_fee").in("id", orderIds)
         : Promise.resolve({ data: [] }),
+      orderIds.length > 0
+        ? supabase.from("print_order_item").select("*").in("order_id", orderIds)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const customerMap = new Map((customers || []).map((c: any) => [c.id, c]));
     const shopMap = new Map((shops || []).map((s: any) => [s.id, s]));
     const orderMap = new Map((orders || []).map((o: any) => [o.id, o]));
 
+    // จัดกลุ่มรายการสั่งพิมพ์ (Order Items) ตาม order_id
+    const orderItemsMap = new Map<string, any[]>();
+    (orderItems || []).forEach((item: any) => {
+      const oid = String(item.order_id);
+      if (!orderItemsMap.has(oid)) {
+        orderItemsMap.set(oid, []);
+      }
+      orderItemsMap.get(oid)!.push({
+        id: item.id,
+        item_name: item.item_name || item.service_name || item.category || "งานพิมพ์",
+        paper_type: item.paper_type || item.paper_detail || "",
+        quantity: item.quantity || item.amount || 1,
+        price: item.price || item.total_price || 0,
+        details: item.details || item.description || item.option_detail || "",
+      });
+    });
+
     const formattedReports = reports.map((item: any) => {
       const cust: any = customerMap.get(item.customer_id);
       const shp: any = shopMap.get(item.shop_id);
       const ord: any = orderMap.get(item.order_id);
+      const itemsInOrder = orderItemsMap.get(String(item.order_id)) || [];
 
       const custName = cust
         ? `${cust.first_name || ""} ${cust.last_name || ""}`.trim() || cust.contact
@@ -54,6 +76,8 @@ export const getAllReports = async (req: Request, res: Response): Promise<Respon
       return {
         ...item,
         status: item.status || "pending",
+        issue_type: item.issue_type || item.category || item.problem_type || "ไม่ระบุประเภทปัญหา",
+        category: item.category || item.issue_type || "ไม่ระบุประเภทปัญหา",
         order_no: displayOrderNo,
         order_id_display: displayOrderNo,
         total_price: ord?.total_amount || ord?.total_price || 0,
@@ -62,6 +86,7 @@ export const getAllReports = async (req: Request, res: Response): Promise<Respon
         shop_name: shp?.shop_name || "-",
         shop_phone: shp?.phone || "-",
         updated_at: item.updated_at || null,
+        order_items: itemsInOrder, // ส่งต่อรายการสินค้าไปใช้ใน Modal
       };
     });
 
@@ -82,7 +107,6 @@ export const verifyReport = async (req: Request, res: Response): Promise<Respons
 
     const nowIso = new Date().toISOString();
 
-    // 🟢 อัปเดตสถานะพร้อมผูก admin_id ของคนที่กดรับเรื่อง
     const updateData: any = {
       status: "investigating",
       is_verified: true,
@@ -171,7 +195,6 @@ export const resolveReport = async (req: Request, res: Response): Promise<Respon
         const smallFee = Number(order?.small_order_fee || 0);
         const percentFee = Number(order?.platform_fee || 0);
 
-        // รวมค่าธรรมเนียมถ้าเป็น Small Order หรือ ออเดอร์ปกติ
         let totalFee = smallFee + percentFee;
         if (totalFee === 0 && amount > 0) {
           totalFee = Math.round(amount * 0.08 * 100) / 100;
@@ -179,7 +202,6 @@ export const resolveReport = async (req: Request, res: Response): Promise<Respon
 
         const shopIncome = Math.max(0, amount - totalFee);
 
-        // อัปเดตใน print_order
         await supabase
           .from("print_order")
           .update({
@@ -187,7 +209,6 @@ export const resolveReport = async (req: Request, res: Response): Promise<Respon
           })
           .eq("id", report.order_id);
 
-        // อัปเดตตาราง payment ให้สถานะเป็น 'pending_payout' เพื่อให้โผล่ในหน้า Shop Payouts ทันที
         await supabase
           .from("payment")
           .update({
