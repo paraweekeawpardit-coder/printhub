@@ -2,14 +2,14 @@
 
 import React, { useState } from "react";
 import axios from "axios";
-import supabase from "@/config/supabase"; // 📌 เรียกใช้ Client supabase ในโปรเจกต์ของคุณ
+import supabase from "@/config/supabase";
 import {
   X,
   CheckCircle2,
   Loader2,
   Upload,
   FileText,
-  Image as ImageIcon,
+  ImageIcon,
   Trash2,
   AlertCircle,
   Info,
@@ -21,8 +21,8 @@ interface ContactAdminModalProps {
   reason?: string;
 }
 
-const MAX_FILES = 3; // 📌 จำกัดแนบไฟล์ได้สูงสุด 3 ไฟล์
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 📌 ขนาดไม่เกิน 5MB ต่อไฟล์
+const MAX_FILES = 3;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 export default function ContactAdminModal({
   isOpen,
@@ -42,13 +42,11 @@ export default function ContactAdminModal({
     const selectedFiles = Array.from(e.target.files || []);
     setErrorMessage(null);
 
-    // ตรวจสอบจำนวนไฟล์รวม
     if (files.length + selectedFiles.length > MAX_FILES) {
       setErrorMessage(`สามารถแนบหลักฐานได้สูงสุดไม่เกิน ${MAX_FILES} ไฟล์เท่านั้น`);
       return;
     }
 
-    // ตรวจสอบขนาดแต่ละไฟล์
     for (const f of selectedFiles) {
       if (f.size > MAX_FILE_SIZE) {
         setErrorMessage(`ไฟล์ "${f.name}" มีขนาดเกิน 5MB กรุณาเลือกไฟล์ที่มีขนาดเล็กลง`);
@@ -81,7 +79,6 @@ export default function ContactAdminModal({
 
       const uploadedUrls: string[] = [];
 
-      // 1. อัปโหลดไฟล์หลักฐานขึ้น Supabase Storage Bucket 'appeals'
       for (const file of files) {
         const fileExt = file.name.split(".").pop();
         const fileName = `${shopId}_${Date.now()}_${Math.random()
@@ -105,7 +102,6 @@ export default function ContactAdminModal({
         }
       }
 
-      // 2. ส่งข้อมูลคำร้องพร้อม Public URLs ไปยัง Backend API
       await axios.post(
         `${backendUrl}/api/admin/contact-admin`,
         {
@@ -119,7 +115,7 @@ export default function ContactAdminModal({
         }
       );
 
-      console.log("[ContactAdminModal] Appeal submitted successfully.");
+      console.warn("[ContactAdminModal] Appeal submitted successfully.");
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
@@ -128,7 +124,7 @@ export default function ContactAdminModal({
         onClose();
       }, 2000);
     } catch (error: any) {
-      console.error(
+      console.warn(
         "[ContactAdminModal Error] Failed to contact admin:",
         error.message || error
       );
@@ -150,12 +146,13 @@ export default function ContactAdminModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 pointer-events-auto">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl transition-all">
+    // 🟢 กำหนด z-index เป็น z-[9999] พร้อมจัดตำแหน่ง Center และสั่ง overflow-y-auto ให้เลื่อนดูส่วนบนได้
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto pointer-events-auto">
+      <div className="w-full max-w-lg my-auto rounded-2xl bg-white p-6 shadow-2xl transition-all relative max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 sticky top-0 bg-white z-10 pt-1">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-100 text-rose-600 shrink-0">
               <FileText size={20} />
             </div>
             <div>
@@ -168,8 +165,9 @@ export default function ContactAdminModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={handleClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -183,7 +181,7 @@ export default function ContactAdminModal({
           </div>
         )}
 
-        {/* 📌 1. แสดงสาเหตุที่ถูกระงับ */}
+        {/* สาเหตุที่ถูกระงับ */}
         <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-xs text-rose-800">
           <div className="flex items-center gap-1.5 font-bold text-rose-700">
             <AlertCircle size={15} className="shrink-0" />
@@ -194,7 +192,7 @@ export default function ContactAdminModal({
           </p>
         </div>
 
-        {/* 📌 2. ข้อความคำแนะนำเบื้องต้น */}
+        {/* คำแนะนำเบื้องต้น */}
         <div className="mt-2.5 flex items-start gap-2 rounded-xl bg-slate-50 border border-slate-200/80 p-3 text-[11px] text-slate-600 leading-relaxed">
           <Info size={16} className="shrink-0 text-slate-500 mt-0.5" />
           <div>
@@ -227,7 +225,7 @@ export default function ContactAdminModal({
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-medium text-slate-900 outline-none focus:border-[#2F6FED] focus:ring-1 focus:ring-[#2F6FED]"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-medium text-slate-900 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
                 required
               />
             </div>
@@ -243,11 +241,11 @@ export default function ContactAdminModal({
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="ระบุรายละเอียดเพิ่มเติมเพื่อขอยื่นเรื่องปลดระงับ..."
-                className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-900 outline-none focus:border-[#2F6FED] focus:ring-1 focus:ring-[#2F6FED]"
+                className="w-full rounded-xl border border-slate-200 p-3 text-xs text-slate-900 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
               />
             </div>
 
-            {/* 📌 3. ช่องแนบไฟล์หลักฐาน (รองรับหลายไฟล์) */}
+            {/* แนบไฟล์หลักฐาน */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-semibold text-slate-700">
@@ -259,7 +257,7 @@ export default function ContactAdminModal({
               </div>
 
               {files.length < MAX_FILES && (
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/50 py-3 hover:border-[#2F6FED] hover:bg-blue-50/30 transition mb-2">
+                <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/50 py-3 hover:border-rose-500 hover:bg-rose-50/30 transition mb-2">
                   <Upload size={18} className="text-slate-400 mb-1" />
                   <span className="text-xs font-medium text-slate-600">
                     คลิกเพื่อเลือกไฟล์หลักฐาน
@@ -277,7 +275,7 @@ export default function ContactAdminModal({
                 </label>
               )}
 
-              {/* แสดงรายการไฟล์ที่เลือกแล้ว */}
+              {/* แสดงรายการไฟล์ที่เลือก */}
               {files.length > 0 && (
                 <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                   {files.map((f, idx) => (
@@ -293,7 +291,7 @@ export default function ContactAdminModal({
                             className="h-8 w-8 rounded-lg object-cover border"
                           />
                         ) : (
-                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-[#2F6FED]">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
                             <ImageIcon size={16} />
                           </div>
                         )}
@@ -309,7 +307,7 @@ export default function ContactAdminModal({
                       <button
                         type="button"
                         onClick={() => removeFile(idx)}
-                        className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
+                        className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -325,14 +323,14 @@ export default function ContactAdminModal({
                 type="button"
                 onClick={handleClose}
                 disabled={loading}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition disabled:opacity-50 cursor-pointer"
               >
                 ยกเลิก
               </button>
               <button
                 type="submit"
                 disabled={loading || !message.trim()}
-                className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-5 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50 transition shadow-xs"
+                className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-5 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50 transition shadow-xs cursor-pointer"
               >
                 {loading && <Loader2 size={14} className="animate-spin" />}
                 {loading ? "กำลังส่งเรื่อง..." : "ส่งเรื่องถึงผู้ดูแลระบบ"}

@@ -13,15 +13,15 @@ type RegisFormProps = {
 const MapPicker = dynamic(() => import("./map"), { ssr: false });
 
 function isValidThaiIDCard(id: string): boolean {
-  return /^\d{13}\$/.test(id);
+  return /^\d{13}$/.test(id);
 }
 
 function isValidThaiPhone(phone: string): boolean {
-  return /^0[689]\d{8}\$/.test(phone);
+  return /^0[689]\d{8}$/.test(phone);
 }
 
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+\$/.test(email);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export default function RegisFormShop({ setRegis }: RegisFormProps) {
