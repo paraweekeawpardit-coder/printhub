@@ -106,9 +106,9 @@ export default function CustomerOrderCard({
   const isReceived = state === "รับงานแล้ว" || state === "รายการเสร็จสิ้น";
   const isCanceled = state === "ยกเลิกการพิมพ์";
 
-  // 🌟 แยกประเภทกล่องข้อความยกเลิก
-  const isOverdueCancelled = isCanceled && isOverdue && hasPaidSlip;
-  const isTimeoutCancelled = isCanceled && (isPaymentExpired || !hasPaidSlip) && !isOverdue;
+  // 🌟 แยกประเภทกล่องข้อความยกเลิก (แก้ไขให้ถูกต้อง ไม่แสดงสลับกัน)
+  const isOverdueCancelled = isCanceled && isOverdue;
+  const isTimeoutCancelled = isCanceled && isPaymentExpired && !hasPaidSlip && !isOverdue;
   const isUserCancelled = isCanceled && !isOverdueCancelled && !isTimeoutCancelled;
 
   const stateBadgeStyle =
@@ -251,7 +251,7 @@ export default function CustomerOrderCard({
           </div>
         </div>
 
-        {/* กล่องสถานะยกเลิก (ถ้ามี) */}
+        {/* 🌟 กล่องที่ 1: ยกเลิกเพราะเลยเวลานัดรับงาน */}
         {isOverdueCancelled && (
           <div className="bg-amber-50 border border-amber-200/90 text-amber-900 px-3.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2 mt-1">
             <div className="flex items-center gap-2 min-w-0">
@@ -266,6 +266,7 @@ export default function CustomerOrderCard({
           </div>
         )}
 
+        {/* 🌟 กล่องที่ 2: ลูกค้ากดยกเลิกเองตามสิทธิ์ FR-2.10 */}
         {isUserCancelled && (
           <div className="bg-slate-50 border border-slate-200 text-slate-600 px-3.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2 mt-1">
             <div className="flex items-center gap-2 min-w-0">
@@ -278,6 +279,7 @@ export default function CustomerOrderCard({
           </div>
         )}
 
+        {/* 🌟 กล่องที่ 3: ยกเลิกเพราะหมดเวลาชำระเงิน 10 นาที (ไม่จ่ายเงิน) */}
         {isTimeoutCancelled && (
           <div className="bg-slate-50 border border-slate-200 text-slate-600 px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 mt-1">
             <AlertTriangle className="w-4 h-4 text-slate-400 shrink-0" />
@@ -418,7 +420,7 @@ export default function CustomerOrderCard({
             })}
           </div>
 
-          {/* 🌟 แสดงหมายเหตุใน Dropdown: ใช้ Lucide Icon <FileText /> + พื้นหลังสีขาวขอบเทาเรียบเนียน */}
+          {/* 🌟 แสดงหมายเหตุใน Dropdown */}
           {order?.description && (
             <div className="bg-white border border-slate-200/80 rounded-xl p-3 text-xs flex items-start gap-2 shadow-2xs">
               <FileText className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
