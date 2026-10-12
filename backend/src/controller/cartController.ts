@@ -168,7 +168,7 @@ export const addToCart = async (req: Request, res: Response) => {
       });
     }
 
-    // 1. ตรวจสอบตะกร้าของร้านนี้
+    // 1. ตรวจสอบตะกร้าของร้านนี้โดยเฉพาะ (ต้องตรงทั้ง customer_id และ shop_id)
     let { data: cart, error: cartErr } = await supabase
       .from("cart")
       .select("id, shop_id")
@@ -176,37 +176,28 @@ export const addToCart = async (req: Request, res: Response) => {
       .eq("shop_id", shop_id)
       .maybeSingle();
 
-    if (cartErr) {
-      console.error("Cart query error:", cartErr);
-    }
-
-    // 2. ถ้ายังไม่มีตะกร้าของร้านนี้ ให้สร้างใหม่
+    // 2. ถ้ายังไม่มีตะกร้าของร้านนี้ ให้สร้างตะกร้าใบใหม่ของร้านนี้ขึ้นมา
     if (!cart) {
       const { data: newCart, error: createCartErr } = await supabase
         .from("cart")
         .insert([{ customer_id: actualCustomerId, shop_id: shop_id }])
         .select("id, shop_id")
-        .single();
+        .maybeSingle();
 
       if (createCartErr) {
-        console.error("Create cart error:", createCartErr);
-        // Fallback: ดึง cart ที่เพิ่งสร้างเผื่อ query จังหวะแรกหลุด
-        const { data: fallbackCart } = await supabase
-          .from("cart")
-          .select("id, shop_id")
-          .eq("customer_id", actualCustomerId)
-          .eq("shop_id", shop_id)
-          .maybeSingle();
-        cart = fallbackCart;
-      } else {
-        cart = newCart;
+        console.error("❌ สร้างตะกร้าใหม่ไม่สำเร็จ:", createCartErr.message);
+        return res.status(500).json({
+          success: false,
+          message: "ไม่สามารถสร้างตะกร้าแยกตามร้านค้าได้ กรุณาตรวจสอบฐานข้อมูล cart",
+        });
       }
+      cart = newCart;
     }
 
     if (!cart?.id) {
       return res.status(500).json({
         success: false,
-        message: "ไม่สามารถสร้างหรือดึง Cart ID สำหรับร้านค้านี้ได้",
+        message: "ไม่พบ Cart ID ของร้านค้านี้",
       });
     }
 

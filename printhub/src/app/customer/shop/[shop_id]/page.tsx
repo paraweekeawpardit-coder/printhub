@@ -115,7 +115,7 @@ export default function ShopMainPage() {
           setCartItems(currentShopItems);
         } else {
           setCartItems([]);
-          setTotalCartCount(0);
+          setIsCartOpen(false);
         }
       }
     } catch (err) {
@@ -294,10 +294,14 @@ export default function ShopMainPage() {
         formattedItems.reduce((a, b) => a + b.totalPrice, 0);
       const expiresAt = result.data?.expires_at || "";
 
+      // เคลียร์เฉพาะรายการของร้านปัจจุบันในหน้าจอ
       setCartItems([]);
       setIsCartOpen(false);
-      setTotalCartCount(0);
 
+      // 🌟 โหลดข้อมูลตะกร้าใหม่ เพื่อให้ Navbar อัปเดตยอดของร้านอื่นที่ยังเหลืออยู่จริง
+      if (customerId) {
+        await loadData(customerId);
+      }
       pendingOrderPayload.id = realOrderId;
       sessionStorage.setItem("pending_order_data", JSON.stringify(pendingOrderPayload));
 
