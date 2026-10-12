@@ -39,7 +39,7 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
     }
 
     try {
-      const res = await axios.post(`${API_URL}/api/auth/register`, {
+      const res = await axios.post(`${API_URL}/auth/register`, {
         ...Regisdata,
         contact: Regisdata.contact.trim(),
       });
