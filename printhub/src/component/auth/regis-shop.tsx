@@ -13,15 +13,15 @@ type RegisFormProps = {
 const MapPicker = dynamic(() => import("./map"), { ssr: false });
 
 function isValidThaiIDCard(id: string): boolean {
-  return /^\d{13}\$/.test(id);
+  return /^\d{13}$/.test(id);
 }
 
 function isValidThaiPhone(phone: string): boolean {
-  return /^0[689]\d{8}\$/.test(phone);
+  return /^0[689]\d{8}$/.test(phone);
 }
 
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+\$/.test(email);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export default function RegisFormShop({ setRegis }: RegisFormProps) {
@@ -132,7 +132,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
     }
 
     if (!isValidThaiPhone(shopData.contact)) {
-      setMessage("เบอร์โทรศัพท์ไม่ถูกต้อง (ต้องเป็นเบอร์มือถือ 10 หลัก ขึ้นต้นด้วย 06, 08, 09)");
+      setMessage("เบอร์โทรศัพท์ไม่ถูกต้อง ");
       return;
     }
 
@@ -146,7 +146,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
       return;
     }
 
-    if (!/^\d{10,12}\$/.test(shopData.bank_number)) {
+    if (!/^\d{10,12}$/.test(shopData.bank_number)) {
       setMessage("เลขบัญชีธนาคารต้องเป็นตัวเลข 10-12 หลัก");
       return;
     }
@@ -188,7 +188,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/auth/registerShop",
+        "http://localhost:5000/api/auth/registerShop",
         formData
       );
 

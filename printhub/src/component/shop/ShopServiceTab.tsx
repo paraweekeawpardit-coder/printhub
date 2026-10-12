@@ -28,7 +28,7 @@ export type ServiceDetailRow = {
   group_type: string;
   price: string;
   is_required?: boolean; // ลูกค้าต้องเลือกกลุ่มนี้หรือไม่ (ค่าเริ่มต้น false)
-  price_type?: PriceType; // per_page = คิดต่อหน้า (ค่าเริ่มต้น), per_set = คิดรวมทั้งไฟล์ บวกครั้งเดียว
+  price_type?: PriceType; // วิธีคิดราคา กำหนดเป็นระดับกลุ่ม (ร้านต้องเลือก ไม่มีค่าเริ่มต้น)
 };
 
 export type ServiceTypeGroup = {
@@ -143,18 +143,26 @@ const groupItems = (
   return groups;
 };
 
+// วิธีคิดราคาของกลุ่ม: ทุกแถวต้องมีค่าเดียวกันและเป็นค่าที่ถูกต้อง ไม่เช่นนั้นถือว่ายังไม่ได้เลือก
+const getGroupPriceType = (rows: { row: ServiceDetailRow }[]): PriceType => {
+  const first = rows[0]?.row.price_type;
+  if (first !== "per_page" && first !== "per_set") return "";
+  return rows.every((r) => r.row.price_type === first) ? first : "";
+};
+
 type ServiceErrors = {
   type?: string;
   noItems?: string;
   groupName: Record<number, string>;
-  row: Record<number, { detail?: string; price?: string; price_type?: string }>;
+  groupPriceType: Record<number, string>;
+  row: Record<number, { detail?: string; price?: string }>;
   count: number;
 };
 
-const emptyErrors: ServiceErrors = { groupName: {}, row: {}, count: 0 };
+const emptyErrors: ServiceErrors = { groupName: {}, groupPriceType: {}, row: {}, count: 0 };
 
 const validateService = (group: ServiceTypeGroup): ServiceErrors => {
-  const errors: ServiceErrors = { groupName: {}, row: {}, count: 0 };
+  const errors: ServiceErrors = { groupName: {}, groupPriceType: {}, row: {}, count: 0 };
 
   if (!group.type.trim()) {
     errors.type = "กรุณาเลือกหรือกรอกประเภทบริการ";
@@ -172,9 +180,14 @@ const validateService = (group: ServiceTypeGroup): ServiceErrors => {
       errors.count++;
     }
 
+    if (!getGroupPriceType(grp.rows)) {
+      errors.groupPriceType[grp.rows[0].idx] = "กรุณาเลือกวิธีคิดราคาของกลุ่มนี้ (ต่อหน้า / รวมทั้งไฟล์)";
+      errors.count++;
+    }
+
     const seen = new Set<string>();
     for (const { row, idx } of grp.rows) {
-      const rowErr: { detail?: string; price?: string; price_type?: string } = {};
+      const rowErr: { detail?: string; price?: string } = {};
 
       const detail = row.detail.trim();
       if (!detail) rowErr.detail = "กรุณากรอกรายละเอียด เช่น A4 ขาวดำ";
@@ -186,10 +199,9 @@ const validateService = (group: ServiceTypeGroup): ServiceErrors => {
       else if (!Number.isFinite(Number(priceStr)) || Number(priceStr) < 0)
         rowErr.price = "ราคาต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป";
 
-      if (rowErr.detail || rowErr.price || rowErr.price_type) {
+      if (rowErr.detail || rowErr.price) {
         errors.row[idx] = rowErr;
-        errors.count +=
-          (rowErr.detail ? 1 : 0) + (rowErr.price ? 1 : 0) + (rowErr.price_type ? 1 : 0);
+        errors.count += (rowErr.detail ? 1 : 0) + (rowErr.price ? 1 : 0);
       }
     }
   }
@@ -216,6 +228,7 @@ const validateAll = (services: ServiceTypeGroup[]): ServiceErrors[] => {
 const hasFieldErrors = (e: ServiceErrors) =>
   !!e.type ||
   Object.keys(e.groupName).length > 0 ||
+  Object.keys(e.groupPriceType).length > 0 ||
   Object.keys(e.row).length > 0;
 
 const shiftIndexMap = (prev: Record<number, boolean>, removed: number) => {
@@ -277,7 +290,7 @@ export default function ShopServicesTab({
   const addServiceType = () => {
     setServices((prev) => [
       ...prev,
-      { type: "", items: [{ detail: "", group_type: "", price: "", is_required: false, price_type: "per_page" }] },
+      { type: "", items: [{ detail: "", group_type: "", price: "", is_required: false, price_type: "" }] },
     ]);
   };
 
@@ -299,7 +312,7 @@ export default function ShopServicesTab({
             ? {
                 ...g,
                 type: "",
-                items: [{ detail: "", group_type: "", price: "", is_required: false, price_type: "per_page" }],
+                items: [{ detail: "", group_type: "", price: "", is_required: false, price_type: "" }],
               }
             : g
         )
@@ -311,7 +324,7 @@ export default function ShopServicesTab({
         group_type: item.group_type,
         price: item.price,
         is_required: false,
-        price_type: "per_page" as PriceType, // ค่าเริ่มต้น = คิดต่อหน้า (ติ๊กเพื่อเปลี่ยนเป็นรวมทั้งไฟล์)
+        price_type: "" as PriceType, // ร้านต้องเลือกวิธีคิดราคาเอง (ระดับกลุ่ม)
       }));
       setServices((prev) =>
         prev.map((g, i) =>
@@ -366,10 +379,33 @@ export default function ShopServicesTab({
     );
   };
 
+  // ตั้งวิธีคิดราคาให้ทุกแถวในกลุ่มเดียวกัน (ค่าเก็บต่อแถวใน service_detail แต่กำหนดเป็นระดับกลุ่ม)
+  const setGroupPriceType = (
+    groupIndex: number,
+    grpRows: { row: ServiceDetailRow; idx: number }[],
+    value: PriceType
+  ) => {
+    const targetIndices = new Set(grpRows.map((item) => item.idx));
+
+    setServices((prev) =>
+      prev.map((g, i) => {
+        if (i !== groupIndex) return g;
+        return {
+          ...g,
+          items: g.items.map((r, rIdx) =>
+            targetIndices.has(rIdx) ? { ...r, price_type: value } : r
+          ),
+        };
+      })
+    );
+  };
+
   const addRowToGroup = (groupIndex: number, grp: GroupedRows) => {
     const err = allErrors[groupIndex] ?? emptyErrors;
     const groupHasError =
-      !!err.groupName[grp.rows[0].idx] || grp.rows.some((r) => !!err.row[r.idx]);
+      !!err.groupName[grp.rows[0].idx] ||
+      !!err.groupPriceType[grp.rows[0].idx] ||
+      grp.rows.some((r) => !!err.row[r.idx]);
 
     if (groupHasError) {
       setErrorScope((prev) => ({ ...prev, [groupIndex]: true }));
@@ -390,7 +426,8 @@ export default function ShopServicesTab({
                   price: "",
                   // แถวใหม่ในกลุ่มเดิมใช้ค่าเดียวกับกลุ่ม
                   is_required: grp.rows.some((r) => !!r.row.is_required),
-                  price_type: "per_page" as PriceType,
+                  // แถวใหม่ในกลุ่มเดิมใช้วิธีคิดราคาเดียวกับกลุ่ม
+                  price_type: getGroupPriceType(grp.rows),
                 },
               ],
             }
@@ -411,7 +448,7 @@ export default function ShopServicesTab({
     setServices((prev) =>
       prev.map((g, i) =>
         i === groupIndex
-          ? { ...g, items: [...g.items, { detail: "", group_type: "", price: "", is_required: false, price_type: "per_page" as PriceType }] }
+          ? { ...g, items: [...g.items, { detail: "", group_type: "", price: "", is_required: false, price_type: "" as PriceType }] }
           : g
       )
     );
@@ -570,6 +607,15 @@ export default function ShopServicesTab({
                                     ไม่บังคับ
                                   </span>
                                 )}
+                                {getGroupPriceType(grp.rows) ? (
+                                  <span className="rounded-md border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
+                                    คิด{PRICE_TYPE_LABEL[getGroupPriceType(grp.rows)]}
+                                  </span>
+                                ) : (
+                                  <span className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                    ยังไม่ระบุวิธีคิดราคา
+                                  </span>
+                                )}
                               </div>
                             ) : null}
 
@@ -582,15 +628,6 @@ export default function ShopServicesTab({
                                   <span className="text-slate-700">{row.detail || "-"}</span>
                                   <span className="text-right font-semibold text-[#0F2942]">
                                     {row.price ? `${row.price} บาท` : "0 บาท"}
-                                    {row.price_type && PRICE_TYPE_LABEL[row.price_type] ? (
-                                      <span className="ml-1 text-[11px] font-normal text-slate-400">
-                                        / {PRICE_TYPE_LABEL[row.price_type]}
-                                      </span>
-                                    ) : (
-                                      <span className="ml-1 text-[11px] font-medium text-amber-600">
-                                        ยังไม่ระบุวิธีคิด
-                                      </span>
-                                    )}
                                   </span>
                                 </div>
                               ))}
@@ -684,28 +721,52 @@ export default function ShopServicesTab({
                   <div className="p-4 space-y-3">
                     {groupedRows.map((grp, grpIdx) => {
                       const nameErr = showErr ? err.groupName[grp.rows[0].idx] : undefined;
+                      const priceTypeErr = showErr
+                        ? err.groupPriceType[grp.rows[0].idx]
+                        : undefined;
 
                       return (
                         <div
                           key={`edit-group-${grpIdx}`}
                           className={`rounded-lg border bg-slate-50/40 overflow-hidden ${
-                            nameErr ? "border-rose-300" : "border-slate-200"
+                            nameErr || priceTypeErr ? "border-rose-300" : "border-slate-200"
                           }`}
                         >
                           <div className="bg-white px-3 py-2 border-b border-slate-100">
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <Tag size={13} className="text-slate-300 shrink-0" />
                               <input
                                 value={grp.name}
                                 onChange={(e) => renameGroup(gIdx, grp.rows, e.target.value)}
                                 placeholder="ชื่อกลุ่ม เช่น ขนาดกระดาษ"
                                 aria-invalid={!!nameErr}
-                                className={`flex-1 bg-transparent text-xs font-semibold outline-none ${
+                                className={`min-w-[120px] flex-1 bg-transparent text-xs font-semibold outline-none ${
                                   nameErr
                                     ? "text-rose-600 placeholder:text-rose-300"
                                     : "text-slate-700 placeholder:text-slate-300"
                                 }`}
                               />
+                              <select
+                                value={getGroupPriceType(grp.rows)}
+                                onChange={(ev) =>
+                                  setGroupPriceType(gIdx, grp.rows, ev.target.value as PriceType)
+                                }
+                                aria-label="วิธีคิดราคาของกลุ่มนี้"
+                                aria-invalid={!!priceTypeErr}
+                                className={`shrink-0 rounded-md border bg-white px-2 py-1 text-[11px] font-medium outline-none ${
+                                  priceTypeErr
+                                    ? "border-rose-400 text-rose-600"
+                                    : getGroupPriceType(grp.rows)
+                                    ? "border-slate-200 text-slate-700 focus:border-[#2F6FED]"
+                                    : "border-slate-200 text-slate-400 focus:border-[#2F6FED]"
+                                }`}
+                              >
+                                <option value="" disabled>
+                                  เลือกวิธีคิดราคา
+                                </option>
+                                <option value="per_page">ต่อหน้า</option>
+                                <option value="per_set">ต่อชุด</option>
+                              </select>
                               <label className="flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-[11px] font-medium text-slate-500">
                                 <input
                                   type="checkbox"
@@ -726,6 +787,7 @@ export default function ShopServicesTab({
                               </button>
                             </div>
                             <FieldError message={nameErr} />
+                            <FieldError message={priceTypeErr} />
                           </div>
 
                           <div className="divide-y divide-slate-100">
@@ -761,25 +823,6 @@ export default function ShopServicesTab({
                                       />
                                       <span className="text-xs text-slate-400">บาท</span>
                                     </div>
-                                    <label
-                                      title="ติ๊ก = คิดรวมทั้งไฟล์ (บวกเพิ่มครั้งเดียว) / ไม่ติ๊ก = คิดต่อหน้า"
-                                      className="flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-xs text-slate-600"
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={row.price_type === "per_set"}
-                                        onChange={(ev) =>
-                                          updateRow(
-                                            gIdx,
-                                            idx,
-                                            "price_type",
-                                            ev.target.checked ? "per_set" : "per_page"
-                                          )
-                                        }
-                                        className="h-3.5 w-3.5 accent-[#2F6FED]"
-                                      />
-                                      คิดรวมทั้งไฟล์
-                                    </label>
                                     <button
                                       type="button"
                                       onClick={() => removeRow(gIdx, idx)}
@@ -790,11 +833,6 @@ export default function ShopServicesTab({
                                   </div>
                                   <FieldError message={rowErr?.detail} />
                                   <FieldError message={rowErr?.price} />
-                                  <p className="mt-1 text-[11px] text-slate-400">
-                                    {row.price_type === "per_set"
-                                      ? "ราคานี้บวกเพิ่มครั้งเดียวต่อทั้งไฟล์"
-                                      : "ราคานี้คิดคูณตามจำนวนหน้า"}
-                                  </p>
                                 </div>
                               );
                             })}

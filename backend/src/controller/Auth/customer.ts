@@ -5,7 +5,8 @@ import jwt from "jsonwebtoken";
 
 export const Regis = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { Fname, Lname, contact, password } = req.body;
+    const { Fname, Lname, password } = req.body;
+    const contact = typeof req.body.contact === "string" ? req.body.contact.trim() : "";
     if (!Fname || !Lname || !contact || !password) {
       return res.status(400).json({ error: "กรุณากรอกข้อมูลให้ครบถ้วน" });
     }
@@ -71,9 +72,10 @@ export const Regis = async (req: Request, res: Response): Promise<Response> => {
 
 export const Login = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { contact, password } = req.body;
+    const { password } = req.body;
+    const contact = typeof req.body.contact === "string" ? req.body.contact.trim() : "";
 
-    if (!contact || !password) {
+    if (!contact || typeof password !== "string" || !password) {
       return res.status(400).json({
         error: "กรุณากรอกอีเมลและรหัสผ่าน",
       });
@@ -118,7 +120,7 @@ export const Login = async (req: Request, res: Response): Promise<Response> => {
         });
       }
 
-      const isShopPasswordValid = await bcrypt.compare(password, shop.password);
+      const isShopPasswordValid = !!shop.password && (await bcrypt.compare(password, shop.password));
 
       if (!isShopPasswordValid) {
         return res.status(400).json({
@@ -146,7 +148,7 @@ export const Login = async (req: Request, res: Response): Promise<Response> => {
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = !!user.password && (await bcrypt.compare(password, user.password));
 
     if (!isPasswordValid) {
       return res.status(400).json({

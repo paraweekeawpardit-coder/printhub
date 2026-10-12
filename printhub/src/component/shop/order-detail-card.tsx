@@ -34,6 +34,7 @@ export type OrderDetail = {
   customer_avatar?: string;
   status: OrderStatus | string;
   amount: number;
+  description?: string | null; // หมายเหตุจากลูกค้า
   items: OrderItemDetail[];
   payment?: {
     id: string;
@@ -266,6 +267,21 @@ export default function OrderDetailCard({
               ) : (
                 <span className="text-slate-400 font-medium">ไม่มีสลิป</span>
               )}
+            </div>
+          )}
+
+          {/* หมายเหตุจากลูกค้า */}
+          {order.description?.trim() && (
+            <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50/60 px-3 py-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">
+                หมายเหตุ
+              </span>
+              <p
+                title={order.description}
+                className="mt-0.5 line-clamp-3 whitespace-pre-line break-words text-xs leading-relaxed text-slate-700"
+              >
+                {order.description.trim()}
+              </p>
             </div>
           )}
 
