@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { Regis, Login,} from "../controller/Auth/customer.js";
 import {registerShop, LoginShop } from "../controller/Auth/shop.js";
+import {forgotPassword } from "../controller/Auth/testMail.js";
 const router = Router();
 
 const upload = multer({ dest: "uploads/" });
@@ -18,5 +19,7 @@ router.post(
   registerShop
 );
 router.post("/loginShop", LoginShop);
+
+router.post("/forgot-password", forgotPassword);
 
 export default router;

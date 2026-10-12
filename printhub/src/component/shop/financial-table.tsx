@@ -138,7 +138,7 @@ export default function FinancialTable({
                 timeframe === "daily" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              รายวัน
+              วัน
             </button>
             <button
               onClick={() => setTimeframe("weekly")}
@@ -146,7 +146,7 @@ export default function FinancialTable({
                 timeframe === "weekly" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              รายสัปดาห์
+              สัปดาห์
             </button>
             <button
               onClick={() => setTimeframe("monthly")}
@@ -154,7 +154,7 @@ export default function FinancialTable({
                 timeframe === "monthly" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              รายเดือน
+              เดือน
             </button>
           </div>
         </div>
@@ -300,14 +300,6 @@ export default function FinancialTable({
                 className="mx-auto max-h-[78vh] w-auto max-w-full object-contain"
               />
             </div>
-            <a
-              href={slip.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 self-center text-xs font-medium text-[#2f6fed] hover:underline"
-            >
-              เปิดรูปเต็มในแท็บใหม่
-            </a>
           </div>
         </div>
       )}

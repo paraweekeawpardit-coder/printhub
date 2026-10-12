@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Star, AlertTriangle, Printer, User, FileText, Calendar, Layers } from "lucide-react";
+import { Star, AlertTriangle, Printer, User, FileText, Calendar, Layers, X } from "lucide-react";
 
 export type PrintOrderItem = {
   id?: string;
@@ -15,6 +15,7 @@ export type ReviewItem = {
   rating?: number;
   score?: number;
   comment: string;
+  image_url?: string | null;
   created_at: string;
   customer?: {
     first_name: string;
@@ -37,7 +38,9 @@ export type ComplaintItem = {
   is_verified?: boolean;
   status?: string | null;
   admin_note?: string | null;
+  image_url?: string | null;
   created_at: string;
+  updated_at?: string | null; // วันที่แอดมินรับเรื่อง (ใช้คำนวณกำหนดแจ้งผล)
   customer?: {
     first_name: string;
     last_name: string;
@@ -60,6 +63,7 @@ type ReportStatusConfig = {
   label: string;
   className: string;
   showDisputeNote?: boolean;
+  showDeadline?: boolean;
 };
 
 const REPORT_STATUS_MAP: Record<string, ReportStatusConfig> = {
@@ -72,6 +76,7 @@ const REPORT_STATUS_MAP: Record<string, ReportStatusConfig> = {
     label: "กำลังตรวจสอบ",
     className: "bg-amber-100 text-amber-700 border-amber-200",
     showDisputeNote: true,
+    showDeadline: true,
   },
   resolved_refund: {
     label: "คำร้องเรียนสำเร็จ",
@@ -95,6 +100,68 @@ const getReportStatus = (status?: string | null): ReportStatusConfig | null => {
   return REPORT_STATUS_MAP[key] ?? null;
 };
 
+// แอดมินรับเรื่องแล้ว (investigating) -> แจ้งผลภายใน 2 วันนับจาก updated_at
+const REVIEW_DEADLINE_DAYS = 2;
+const getReviewDeadline = (updatedAt?: string | null): string | null => {
+  if (!updatedAt) return null;
+  const t = new Date(updatedAt).getTime();
+  if (isNaN(t)) return null;
+  return new Date(t + REVIEW_DEADLINE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+};
+
+// image_url อาจเป็น URL เดียว, หลาย URL คั่นด้วย comma/ขึ้นบรรทัดใหม่ หรือ JSON array
+const parseImageUrls = (raw?: string | null): string[] => {
+  const text = (raw ?? "").trim();
+  if (!text) return [];
+  let list: unknown[] = [];
+  if (text.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) list = parsed;
+    } catch {
+      list = [];
+    }
+  } else {
+    list = text.split(/[,\n]/);
+  }
+  return list
+    .map((u) => String(u).trim().replace(/^"|"$/g, ""))
+    .filter((u) => u.length > 0);
+};
+
+function ImageThumbs({
+  raw,
+  onPreview,
+}: {
+  raw?: string | null;
+  onPreview: (url: string) => void;
+}) {
+  const [failed, setFailed] = useState<Set<string>>(new Set());
+  const urls = parseImageUrls(raw).filter((u) => !failed.has(u));
+  if (urls.length === 0) return null;
+
+  return (
+    <div className="mt-2.5 flex flex-wrap gap-2">
+      {urls.map((url) => (
+        <button
+          key={url}
+          type="button"
+          onClick={() => onPreview(url)}
+          className="h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 transition hover:border-slate-400"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt="รูปที่แนบ"
+            onError={() => setFailed((prev) => new Set(prev).add(url))}
+            className="h-full w-full object-cover"
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 type Props = {
   reviews: ReviewItem[];
   complaints: ComplaintItem[];
@@ -112,6 +179,7 @@ export default function ReviewComplaintModal({
 }: Props) {
   const [tab, setTab] = useState<"reviews" | "complaints">("reviews");
   const [selectedStar, setSelectedStar] = useState<number | "all">("all");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const visibleComplaints = complaints.filter((c) => getReportStatus(c.status));
 
@@ -348,6 +416,8 @@ export default function ReviewComplaintModal({
                       {r.comment || "ไม่ได้ระบุความคิดเห็นเพิ่มเติม"}
                     </p>
 
+                    <ImageThumbs raw={r.image_url} onPreview={setPreviewUrl} />
+
                     {r.print_order && (
                       <div
                         onClick={() => onOrderClick?.(r.print_order!.id)}
@@ -424,6 +494,7 @@ export default function ReviewComplaintModal({
                       <p className="bg-white p-2.5 rounded-lg border border-rose-100 text-slate-700 whitespace-pre-line leading-relaxed text-[11px]">
                         {c.description || "ไม่มีรายละเอียดเพิ่มเติม"}
                       </p>
+                      <ImageThumbs raw={c.image_url} onPreview={setPreviewUrl} />
                     </div>
 
                     {c.print_order && (
@@ -437,7 +508,8 @@ export default function ReviewComplaintModal({
 
                     {getReportStatus(c.status)?.showDisputeNote && (
                       <p className="text-[11px] font-medium text-amber-700">
-                        * หากท่านมีข้อโต้แย้งกรุณาติดต่อแอดมิน
+                        * หากท่านมีข้อโต้แย้งกรุณาติดต่อแอดมินภายในวันที่{" "}
+                         {formatDate(getReviewDeadline(c.updated_at)!)}
                       </p>
                     )}
                   </div>
@@ -447,6 +519,27 @@ export default function ReviewComplaintModal({
           ) : (
             <div className="py-12 text-center text-slate-400 text-xs">ไม่มีรายการร้องเรียน</div>
           )}
+        </div>
+      )}
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewUrl(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-700 hover:bg-white"
+          >
+            <X size={18} />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewUrl}
+            alt="รูปที่แนบ"
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[90vh] max-w-full rounded-xl object-contain"
+          />
         </div>
       )}
     </div>
