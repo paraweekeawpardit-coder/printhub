@@ -14,7 +14,8 @@ import {
   Star, 
   AlertTriangle,
   CheckCircle2,
-  CalendarDays
+  CalendarDays,
+  FileText
 } from "lucide-react";
 
 interface CustomerOrderCardProps {
@@ -105,7 +106,7 @@ export default function CustomerOrderCard({
   const isReceived = state === "รับงานแล้ว" || state === "รายการเสร็จสิ้น";
   const isCanceled = state === "ยกเลิกการพิมพ์";
 
-  // 🌟 แยกประเภทกล่องข้อความยกเลิกให้ถูกต้อง 100% ตามข้อกำหนด
+  // 🌟 แยกประเภทกล่องข้อความยกเลิก
   const isOverdueCancelled = isCanceled && isOverdue && hasPaidSlip;
   const isTimeoutCancelled = isCanceled && (isPaymentExpired || !hasPaidSlip) && !isOverdue;
   const isUserCancelled = isCanceled && !isOverdueCancelled && !isTimeoutCancelled;
@@ -123,7 +124,7 @@ export default function CustomerOrderCard({
       ? "bg-blue-50 text-blue-700 border-blue-200/80"
       : "bg-slate-50 text-slate-600 border-slate-200";
 
-  // ฟังก์ชันจัดรูปแบบเวลาเป็นเวลาประเทศไทย (GMT+7)
+  // ฟังก์ชันจัดรูปแบบเวลา
   const formatThaiDateTime = (dateStr?: string | null) => {
     if (!dateStr) return { date: "-", time: "" };
     const ts = parseSafeTime(dateStr);
@@ -250,7 +251,7 @@ export default function CustomerOrderCard({
           </div>
         </div>
 
-        {/* 🌟 กล่องที่ 1: ยกเลิกเพราะเลยเวลานัดรับงาน (S2G7: รอคืนเงิน 48 ชม.) */}
+        {/* กล่องสถานะยกเลิก (ถ้ามี) */}
         {isOverdueCancelled && (
           <div className="bg-amber-50 border border-amber-200/90 text-amber-900 px-3.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2 mt-1">
             <div className="flex items-center gap-2 min-w-0">
@@ -265,7 +266,6 @@ export default function CustomerOrderCard({
           </div>
         )}
 
-        {/* 🌟 กล่องที่ 2: ลูกค้ากดยกเลิกเองตามสิทธิ์ FR-2.10 */}
         {isUserCancelled && (
           <div className="bg-slate-50 border border-slate-200 text-slate-600 px-3.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2 mt-1">
             <div className="flex items-center gap-2 min-w-0">
@@ -278,7 +278,6 @@ export default function CustomerOrderCard({
           </div>
         )}
 
-        {/* 🌟 กล่องที่ 3: ยกเลิกเพราะหมดเวลาชำระเงิน */}
         {isTimeoutCancelled && (
           <div className="bg-slate-50 border border-slate-200 text-slate-600 px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 mt-1">
             <AlertTriangle className="w-4 h-4 text-slate-400 shrink-0" />
@@ -309,7 +308,6 @@ export default function CustomerOrderCard({
           <div className="flex items-center justify-between md:justify-end gap-3.5">
             <div className="flex items-center gap-2 flex-wrap">
               
-              {/* ป้ายแจ้งเตือนเมื่อสลิปไม่ถูกต้อง */}
               {isSlipRejected && !isCanceled && (
                 <span className="text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 px-2 py-1 rounded-xl flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 text-rose-500" />
@@ -317,12 +315,10 @@ export default function CustomerOrderCard({
                 </span>
               )}
 
-              {/* 🌟 ปุ่มชำระเงิน: จะแสดงเฉพาะตอนที่ยังไม่ถูกยกเลิก */}
               {!isCanceled && (isPendingPayment || isSlipRejected) && (
                 <PaymentActionButton order={order} />
               )}
 
-              {/* 🌟 ปุ่มยกเลิก: จะแสดงเฉพาะตอนที่รอดำเนินงาน/รอชำระเงิน และต้อง "ไม่ถูกยกเลิก" เท่านั้น */}
               {!isCanceled && (isPending || isPendingPayment) && (
                 <button
                   type="button"
@@ -334,7 +330,6 @@ export default function CustomerOrderCard({
                 </button>
               )}
 
-              {/* ปุ่มยืนยันรับของ */}
               {!isCanceled && isReady && (
                 <button
                   type="button"
@@ -346,7 +341,6 @@ export default function CustomerOrderCard({
                 </button>
               )}
 
-              {/* ปุ่มรีวิว & ขอคืนเงิน */}
               {!isCanceled && isReceived && (
                 <div className="flex items-center gap-1.5">
                   <button
@@ -423,6 +417,17 @@ export default function CustomerOrderCard({
               );
             })}
           </div>
+
+          {/* 🌟 แสดงหมายเหตุใน Dropdown: ใช้ Lucide Icon <FileText /> + พื้นหลังสีขาวขอบเทาเรียบเนียน */}
+          {order?.description && (
+            <div className="bg-white border border-slate-200/80 rounded-xl p-3 text-xs flex items-start gap-2 shadow-2xs">
+              <FileText className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5 leading-relaxed">
+                <span className="font-bold text-slate-700 block">หมายเหตุถึงร้าน:</span>
+                <p className="text-slate-600 break-words">{order.description}</p>
+              </div>
+            </div>
+          )}
 
           <div className="bg-white p-3 rounded-xl border border-slate-200/70 space-y-1 text-slate-600 text-[11px]">
             <div className="flex justify-between">

@@ -74,20 +74,26 @@ const timeToMinutes = (timeStr: string) => {
 export const createOrder = async (req: Request, res: Response) => {
   try {
     const customerId = (req as any).user?.id || req.body.customer_id;
-    const { description, receive_date, appointment_time } = req.body;
+    const { description, receive_date, appointment_time, shop_id } = req.body; // 👈 รับ shop_id เข้ามาด้วย
 
-    const { data: cart, error: cartError } = await supabase
+    // 1. ดึง cart โดยระบุทั้ง customer_id และ shop_id เพื่อให้ได้แถวเดียวแน่นอน
+    let cartQuery = supabase
       .from("cart")
       .select("id, shop_id, cart_item (*)")
-      .eq("customer_id", customerId)
-      .maybeSingle();
+      .eq("customer_id", customerId);
+
+    if (shop_id) {
+      cartQuery = cartQuery.eq("shop_id", shop_id);
+    }
+
+    const { data: cart, error: cartError } = await cartQuery.maybeSingle();
 
     if (cartError) throw cartError;
     if (!cart || !cart.shop_id || !cart.cart_item || cart.cart_item.length === 0) {
-      return res.status(400).json({ success: false, message: "ไม่มีสินค้าในตะกร้า" });
+      return res.status(400).json({ success: false, message: "ไม่มีสินค้าในตะกร้าของร้านนี้" });
     }
 
-    const targetShopId = cart?.shop_id || req.body.shop_id;
+    const targetShopId = cart.shop_id || shop_id;
     const { data: shop, error: shopError } = await supabase
       .from("print_shop")
       .select("open_time, close_time")
