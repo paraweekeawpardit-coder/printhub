@@ -188,7 +188,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/api/auth/registerShop",
+        "http://localhost:5000/auth/registerShop",
         formData
       );
 

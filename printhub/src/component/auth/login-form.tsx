@@ -30,7 +30,7 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
 
     try {
       const contact = logindata.contact.trim();
-      const res = await axios.post(`${API_URL}/api/auth/login`, {
+      const res = await axios.post(`${API_URL}/auth/login`, {
         ...logindata,
         contact,
       });
