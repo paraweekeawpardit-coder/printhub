@@ -29,9 +29,21 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
     setLoading(true);
 
     try {
-      const res = await axios.post(`${API_URL}/auth/login`, logindata);
+      const contact = logindata.contact.trim();
+      const res = await axios.post(`${API_URL}/api/auth/login`, {
+        ...logindata,
+        contact,
+      });
 
-      if (!res.data.token) return;
+      if (!res.data.token) {
+        setMessage(res.data.error || "ไม่สามารถเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง");
+        return;
+      }
+
+      // ล้างข้อมูลของบัญชีก่อนหน้า ไม่งั้น shop_id / customer_id เก่าจะค้างและทำให้หน้าอื่นอ่านผิดบัญชี
+      ["token", "id", "customer_id", "shop_id", "shop_name", "user_email", "username"].forEach(
+        (k) => localStorage.removeItem(k)
+      );
 
       localStorage.setItem("token", res.data.token);
 
@@ -55,7 +67,7 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
           // 🟢 แก้ไขจุดนี้: บันทึกทั้ง id, customer_id และ user_email เพื่อให้ระบบแชตรู้ว่าใครล็อกอิน
           localStorage.setItem("id", res.data.id);
           localStorage.setItem("customer_id", res.data.id);
-          localStorage.setItem("user_email", logindata.contact);
+          localStorage.setItem("user_email", contact);
           localStorage.setItem("username", res.data.name || "");
           router.push("/customer");
       }

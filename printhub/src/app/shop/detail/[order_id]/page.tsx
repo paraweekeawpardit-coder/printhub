@@ -22,7 +22,7 @@ import {
   FileText,
   AlertTriangle,
 } from "lucide-react";
-import { SlipModal, ActionConfirmModal, WarnModal } from "@/component/shop/OrderModals";
+import { SlipModal, ActionConfirmModal } from "@/component/shop/OrderModals";
 
 // 🟢 ปรับ API_BASE ให้มี /api นำหน้าเสมอ
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -421,6 +421,20 @@ export default function OrderDetailPage() {
               </h2>
               <p className="text-sm font-medium text-gray-800">{order.customer?.first_name} {order.customer?.last_name}</p>
               <p className="text-xs text-gray-500 mt-1">{order.customer?.contact || "-"}</p>
+            </div>
+
+            {/* หมายเหตุจากลูกค้า */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <FileText size={17} className="text-blue-600" /> หมายเหตุ
+              </h2>
+              {order.description?.trim() ? (
+                <p className="text-sm text-gray-700 whitespace-pre-line break-words bg-amber-50 border border-amber-100 rounded-xl p-3">
+                  {order.description}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400">ไม่มีหมายเหตุ</p>
+              )}
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">

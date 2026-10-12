@@ -8,6 +8,8 @@ type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+
 export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -37,10 +39,10 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
     }
 
     try {
-      const res = await axios.post(
-        "http://localhost:5000/auth/register",
-        Regisdata
-      );
+      const res = await axios.post(`${API_URL}/api/auth/register`, {
+        ...Regisdata,
+        contact: Regisdata.contact.trim(),
+      });
 
       if (res.data.message) {
         setRegis(false);
