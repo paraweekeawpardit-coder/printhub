@@ -70,7 +70,7 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 // Authentication
-app.use("/api/auth", Authroute);
+app.use("/auth", Authroute);
 
 // Shop
 app.use("/api/shop", ShopRoute);
