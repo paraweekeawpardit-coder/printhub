@@ -2,13 +2,14 @@
 
 import { OrderStatus } from "./order-action";
 
-export type OrderStatusFilter = "ทั้งหมด" | OrderStatus;
+export type OrderStatusFilter = "ทั้งหมด" | OrderStatus | "รายการเสร็จสิ้น";
 
 const TABS: OrderStatusFilter[] = [
   "ทั้งหมด",
   "รอการดำเนินงาน",
   "กำลังพิมพ์",
   "พิมพ์เสร็จสิ้น",
+  "รายการเสร็จสิ้น",
   "ยกเลิกการพิมพ์",
 ];
 
