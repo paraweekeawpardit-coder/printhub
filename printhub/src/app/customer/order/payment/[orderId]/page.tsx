@@ -296,13 +296,13 @@ export default function PaymentPage() {
           localStorage.removeItem(`payment_expiry_${orderId}`);
         }
 
-        if (customerId) {
-          fetch('http://localhost:5000/api/customer/cart', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customer_id: customerId }),
-          }).catch(console.error);
-        }
+        // if (customerId) {
+        //   fetch('http://localhost:5000/api/customer/cart', {
+        //     method: 'DELETE',
+        //     headers: { 'Content-Type': 'application/json' },
+        //     body: JSON.stringify({ customer_id: customerId }),
+        //   }).catch(console.error);
+        // }
 
         setShowSuccessModal(true);
       } else {
@@ -319,8 +319,7 @@ export default function PaymentPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <NavBar 
-        cartCount={orderData?.items?.length || 0} 
-        onOpenCart={() => router.push('/customer/cart')} 
+        onOpenCart={() => router.push('/customer/cart')}
       />
 
       <div className="p-6 flex-1 flex justify-center items-start">

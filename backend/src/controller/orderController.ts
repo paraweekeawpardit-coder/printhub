@@ -74,26 +74,35 @@ const timeToMinutes = (timeStr: string) => {
 export const createOrder = async (req: Request, res: Response) => {
   try {
     const customerId = (req as any).user?.id || req.body.customer_id;
-    const { description, receive_date, appointment_time, shop_id } = req.body; // 👈 รับ shop_id เข้ามาด้วย
+    const { description, receive_date, appointment_time } = req.body;
+    
+    // 🌟 รับ shop_id และป้องกันค่าว่าง
+    const targetShopId = req.body.shop_id || req.query.shop_id;
 
-    // 1. ดึง cart โดยระบุทั้ง customer_id และ shop_id เพื่อให้ได้แถวเดียวแน่นอน
-    let cartQuery = supabase
+    if (!customerId || !targetShopId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "กรุณาระบุ customer_id และ shop_id ให้ครบถ้วน" 
+      });
+    }
+
+    // 1. ดึง Cart โดยล็อกทั้ง customer_id และ shop_id แน่นอน 100%
+    const { data: cart, error: cartError } = await supabase
       .from("cart")
       .select("id, shop_id, cart_item (*)")
-      .eq("customer_id", customerId);
-
-    if (shop_id) {
-      cartQuery = cartQuery.eq("shop_id", shop_id);
-    }
-
-    const { data: cart, error: cartError } = await cartQuery.maybeSingle();
+      .eq("customer_id", customerId)
+      .eq("shop_id", targetShopId) // 👈 ล็อกตรงนี้เลย ห้ามใช้ if ครอบ
+      .maybeSingle();
 
     if (cartError) throw cartError;
-    if (!cart || !cart.shop_id || !cart.cart_item || cart.cart_item.length === 0) {
-      return res.status(400).json({ success: false, message: "ไม่มีสินค้าในตะกร้าของร้านนี้" });
+    if (!cart || !cart.cart_item || cart.cart_item.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "ไม่มีสินค้าในตะกร้าของร้านค้านี้" 
+      });
     }
 
-    const targetShopId = cart.shop_id || shop_id;
+    // 2. ดึงข้อมูลร้านค้า
     const { data: shop, error: shopError } = await supabase
       .from("print_shop")
       .select("open_time, close_time")
@@ -239,8 +248,9 @@ export const createOrder = async (req: Request, res: Response) => {
       await supabase.from("print_file").insert(filesToInsert);
     }
 
+    // 🌟 ลบเฉพาะไอเทมและตะกร้าของร้านที่เพิ่งสั่งซื้อเท่านั้น
     await supabase.from("cart_item").delete().eq("cart_id", cart.id);
-    await supabase.from("cart").delete().eq("id", cart.id);
+    await supabase.from("cart").delete().eq("id", cart.id).eq("shop_id", targetShopId);
 
     const displayNo = formatOrderNo(newOrder.order_no, newOrder.id);
     await supabase.from("notifications").insert([
