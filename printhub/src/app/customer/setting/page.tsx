@@ -2,16 +2,18 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  User, 
-  Mail, 
-  Lock, 
-  Save, 
+import {
+  User,
+  Mail,
+  Lock,
+  Save,
   Camera,
   AlertCircle,
   CheckCircle2,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import supabase from "@/config/supabase";
 import NavBar from "@/component/customer/NavBar";
@@ -25,6 +27,10 @@ export default function CustomerSettingPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false);
   const [cartCount, setCartCount] = useState<number>(0);
   const [toastMsg, setToastMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // State สำหรับเปิด/ปิดการแสดงรหัสผ่าน (true = เปิดตา/เห็นรหัส, false = ปิดตา/ซ่อนรหัส)
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
 
   // ข้อมูลโปรไฟล์
   const [profile, setProfile] = useState({
@@ -55,8 +61,8 @@ export default function CustomerSettingPage() {
         const localId =
           typeof window !== "undefined"
             ? localStorage.getItem("customer_id") ||
-              localStorage.getItem("id") ||
-              localStorage.getItem("user_id")
+            localStorage.getItem("id") ||
+            localStorage.getItem("user_id")
             : null;
 
         const { data: { user } } = await supabase.auth.getUser();
@@ -199,9 +205,9 @@ export default function CustomerSettingPage() {
       try {
         await supabase.auth.updateUser({
           email: inputEmail,
-          data: { 
-            first_name: profile.firstName.trim(), 
-            last_name: profile.lastName.trim() 
+          data: {
+            first_name: profile.firstName.trim(),
+            last_name: profile.lastName.trim()
           }
         });
       } catch (authErr) {
@@ -256,12 +262,11 @@ export default function CustomerSettingPage() {
       <NavBar cartCount={cartCount} />
 
       {toastMsg && (
-        <div 
-          className={`fixed top-20 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg border text-sm font-medium animate-in slide-in-from-top-2 ${
-            toastMsg.type === "success" 
-              ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
+        <div
+          className={`fixed top-20 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg border text-sm font-medium animate-in slide-in-from-top-2 ${toastMsg.type === "success"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
               : "bg-rose-50 text-rose-800 border-rose-200"
-          }`}
+            }`}
         >
           {toastMsg.type === "success" ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -294,10 +299,10 @@ export default function CustomerSettingPage() {
                   {uploadingAvatar ? (
                     <Loader2 className="w-8 h-8 animate-spin text-white" />
                   ) : profile.avatar_url ? (
-                    <img 
-                      src={profile.avatar_url} 
-                      alt={fullNameDisplay} 
-                      className="w-full h-full object-cover" 
+                    <img
+                      src={profile.avatar_url}
+                      alt={fullNameDisplay}
+                      className="w-full h-full object-cover"
                     />
                   ) : (
                     profile.firstName ? profile.firstName.charAt(0).toUpperCase() : <User size={40} />
@@ -315,12 +320,12 @@ export default function CustomerSettingPage() {
                   <Camera size={16} />
                 </button>
 
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleAvatarChange} 
-                  accept="image/png, image/jpeg, image/webp" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleAvatarChange}
+                  accept="image/png, image/jpeg, image/webp"
+                  className="hidden"
                 />
               </div>
 
@@ -414,6 +419,7 @@ export default function CustomerSettingPage() {
 
                 <form onSubmit={handleChangePassword} className="mt-4 space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* ช่องรหัสผ่านใหม่ */}
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                         รหัสผ่านใหม่
@@ -421,15 +427,23 @@ export default function CustomerSettingPage() {
                       <div className="relative">
                         <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input
-                          type="password"
+                          type={showNewPassword ? "text" : "password"}
                           value={passwords.newPassword}
                           onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })}
                           placeholder="อย่างน้อย 6 ตัวอักษร"
-                          className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition"
+                          className="w-full pl-10 pr-10 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                        >
+                          {showNewPassword ? <Eye size={16} /> : <EyeOff size={16} />}
+                        </button>
                       </div>
                     </div>
 
+                    {/* ช่องยืนยันรหัสผ่านใหม่ */}
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                         ยืนยันรหัสผ่านใหม่
@@ -437,12 +451,19 @@ export default function CustomerSettingPage() {
                       <div className="relative">
                         <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input
-                          type="password"
+                          type={showConfirmPassword ? "text" : "password"}
                           value={passwords.confirmPassword}
                           onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })}
                           placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
-                          className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition"
+                          className="w-full pl-10 pr-10 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                        >
+                          {showConfirmPassword ? <Eye size={16} /> : <EyeOff size={16} />}
+                        </button>
                       </div>
                     </div>
                   </div>
