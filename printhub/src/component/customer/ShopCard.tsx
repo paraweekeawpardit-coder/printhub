@@ -33,19 +33,16 @@ interface ShopCardProps {
 export const checkIsShopOpen = (shop: any): boolean => {
   if (!shop) return false;
 
-  // 1. ถ้ามีการสั่งปิดโดยตรง
   if (shop.is_open === false || shop.is_open === 0 || shop.is_open === "false") {
     return false;
   }
 
-  // 2. ดึงเวลาเปิด-ปิด
   const open = shop.open_time || shop.openTime || shop.opening_time || "";
   const close = shop.close_time || shop.closeTime || shop.closing_time || "";
 
   const openTime = open ? String(open).slice(0, 5) : "";
   const closeTime = close ? String(close).slice(0, 5) : "";
 
-  // 3. ร้านเปิด 24 ชม.
   if (
     (openTime === "00:00" && (closeTime === "23:59" || closeTime === "24:00" || closeTime === "00:00")) ||
     shop.is_24_hours === true
@@ -53,12 +50,10 @@ export const checkIsShopOpen = (shop: any): boolean => {
     return true;
   }
 
-  // 4. ถ้าไม่มีข้อมูลเวลา ให้ถือว่าเปิดไว้ก่อน (เพื่อไม่ให้ร้านหายไปจากหน้าจอ)
   if (!openTime || !closeTime) {
     return true;
   }
 
-  // 5. เทียบเวลาปัจจุบัน
   try {
     const now = new Date();
     const currentHours = String(now.getHours()).padStart(2, "0");
@@ -83,7 +78,6 @@ export default function ShopCard({ shop }: ShopCardProps) {
 
   const isOpen = checkIsShopOpen(shop);
 
-  // คำนวณข้อความเวลาทำการ
   const open = shopData.open_time || shopData.opening_time || "";
   const close = shopData.close_time || shopData.closing_time || "";
   const openTime = open ? String(open).slice(0, 5) : "";
@@ -96,7 +90,7 @@ export default function ShopCard({ shop }: ShopCardProps) {
   ) {
     businessHours = "เปิด 24 ชั่วโมง";
   } else if (openTime && closeTime) {
-    businessHours = `${openTime} - ${closeTime} น.`;
+    businessHours = `${openTime} - ${closeTime} น.`; // 🌟 แก้ไขเครื่องหมายขัดแย้งออกแล้ว
   }
 
   const formattedDistance =
@@ -111,7 +105,33 @@ export default function ShopCard({ shop }: ShopCardProps) {
       : `http://localhost:5000${rawImage.startsWith("/") ? "" : "/"}${rawImage}`
     : null;
 
-  // 🌟 ดึงข้อมูลแท็กบริการแบบครอบคลุมและ Safe ทุกชนิดข้อมูล
+  // 🌟 ดึงข้อมูลคะแนนรีวิวจากทุกชื่อฟิลด์ที่เป็นไปได้
+  const rawRating =
+    shopData.rating !== undefined && shopData.rating !== null
+      ? shopData.rating
+      : shopData.average_rating !== undefined && shopData.average_rating !== null
+        ? shopData.average_rating
+        : shopData.score !== undefined && shopData.score !== null
+          ? shopData.score
+          : shopData.avg_rating !== undefined && shopData.avg_rating !== null
+            ? shopData.avg_rating
+            : 0;
+
+  const displayRating = Number(rawRating);
+
+  // 🌟 ดึงข้อมูลจำนวนรีวิวจากทุกชื่อฟิลด์ที่เป็นไปได้
+  const rawReviewCount =
+    shopData.review_count !== undefined && shopData.review_count !== null
+      ? shopData.review_count
+      : shopData.total_reviews !== undefined && shopData.total_reviews !== null
+        ? shopData.total_reviews
+        : shopData.reviews_count !== undefined && shopData.reviews_count !== null
+          ? shopData.reviews_count
+          : 0;
+
+  const displayReviewCount = Number(rawReviewCount);
+
+  // ดึงข้อมูลแท็กบริการ
   const rawServiceList =
     shopData.service_types ||
     shopData.services ||
@@ -121,12 +141,12 @@ export default function ShopCard({ shop }: ShopCardProps) {
 
   const serviceTags: string[] = Array.isArray(rawServiceList)
     ? rawServiceList
-        .map((s: any) => {
-          if (!s) return "";
-          if (typeof s === "string") return s;
-          return s.type_name || s.name || s.service_type || "";
-        })
-        .filter(Boolean)
+      .map((s: any) => {
+        if (!s) return "";
+        if (typeof s === "string") return s;
+        return s.type_name || s.name || s.service_type || "";
+      })
+      .filter(Boolean)
     : [];
 
   const displayedTags = serviceTags.slice(0, 10);
@@ -153,16 +173,14 @@ export default function ShopCard({ shop }: ShopCardProps) {
 
         <div className="absolute top-2.5 left-2.5 z-10">
           <span
-            className={`text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-md ${
-              isOpen
+            className={`text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-md ${isOpen
                 ? "bg-emerald-500/90 text-white"
                 : "bg-slate-700/80 text-white"
-            }`}
+              }`}
           >
             <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isOpen ? "bg-white animate-pulse" : "bg-slate-400"
-              }`}
+              className={`w-1.5 h-1.5 rounded-full ${isOpen ? "bg-white animate-pulse" : "bg-slate-400"
+                }`}
             />
             {isOpen ? "เปิดอยู่" : "ปิดทำการ"}
           </span>
@@ -178,16 +196,13 @@ export default function ShopCard({ shop }: ShopCardProps) {
           <div className="flex items-center gap-1.5 text-xs text-slate-600">
             <div className="flex items-center gap-0.5 text-amber-500 font-bold">
               <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-500" />
-              <span>{shopData.rating ? Number(shopData.rating).toFixed(1) : "0.0"}</span>
+              <span>{displayRating.toFixed(1)}</span>
             </div>
-            {shopData.review_count !== undefined && (
-              <span className="text-[11px] text-slate-400">
-                ({shopData.review_count})
-              </span>
-            )}
+            <span className="text-[11px] text-slate-400">
+              ({displayReviewCount})
+            </span>
           </div>
 
-          {/* แท็กบริการหลัก */}
           {displayedTags.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
               {displayedTags.map((tag, idx) => (
