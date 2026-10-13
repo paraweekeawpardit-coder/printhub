@@ -90,7 +90,7 @@ export default function ShopCard({ shop }: ShopCardProps) {
   ) {
     businessHours = "เปิด 24 ชั่วโมง";
   } else if (openTime && closeTime) {
-    businessHours = `${openTime} - ${closeTime} น.`; // 🌟 แก้ไขเครื่องหมายขัดแย้งออกแล้ว
+    businessHours = `${openTime} - ${closeTime} น.`;
   }
 
   const formattedDistance =
@@ -127,7 +127,9 @@ export default function ShopCard({ shop }: ShopCardProps) {
         ? shopData.total_reviews
         : shopData.reviews_count !== undefined && shopData.reviews_count !== null
           ? shopData.reviews_count
-          : 0;
+          : shopData.num_reviews !== undefined && shopData.num_reviews !== null
+            ? shopData.num_reviews
+            : 0;
 
   const displayReviewCount = Number(rawReviewCount);
 
@@ -153,11 +155,8 @@ export default function ShopCard({ shop }: ShopCardProps) {
   const remainingCount = serviceTags.length - displayedTags.length;
 
   return (
-    <Link
-      href={`/customer/shop/${targetId}`}
-      className="group bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-blue-400 transition-all flex flex-col cursor-pointer"
-    >
-      <div className="relative w-full h-44 bg-blue-50/60 border-b border-blue-100 flex items-center justify-center overflow-hidden shrink-0">
+    <div className="group bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-blue-400 transition-all flex flex-col">
+      <Link href={`/customer/shop/${targetId}`} className="relative w-full h-44 bg-blue-50/60 border-b border-blue-100 flex items-center justify-center overflow-hidden shrink-0 cursor-pointer">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -173,9 +172,7 @@ export default function ShopCard({ shop }: ShopCardProps) {
 
         <div className="absolute top-2.5 left-2.5 z-10">
           <span
-            className={`text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-md ${isOpen
-                ? "bg-emerald-500/90 text-white"
-                : "bg-slate-700/80 text-white"
+            className={`text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-md ${isOpen ? "bg-emerald-500/90 text-white" : "bg-slate-700/80 text-white"
               }`}
           >
             <span
@@ -185,13 +182,15 @@ export default function ShopCard({ shop }: ShopCardProps) {
             {isOpen ? "เปิดอยู่" : "ปิดทำการ"}
           </span>
         </div>
-      </div>
+      </Link>
 
       <div className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
         <div className="space-y-1.5">
-          <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition truncate">
-            {shopData.shop_name || shopData.name || "ร้านพิมพ์เอกสาร"}
-          </h3>
+          <Link href={`/customer/shop/${targetId}`} className="cursor-pointer block">
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition truncate">
+              {shopData.shop_name || shopData.name || "ร้านพิมพ์เอกสาร"}
+            </h3>
+          </Link>
 
           <div className="flex items-center gap-1.5 text-xs text-slate-600">
             <div className="flex items-center gap-0.5 text-amber-500 font-bold">
@@ -234,6 +233,6 @@ export default function ShopCard({ shop }: ShopCardProps) {
           </div>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }

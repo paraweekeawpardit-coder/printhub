@@ -1,56 +1,51 @@
-/**
- * Page: Customer Settings (/customer/setting)
- * รองรับ Schema: customer (first_name, last_name, contact, avatar)
- */
-
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  User, 
-  Mail, 
-  Lock, 
-  Save, 
+import {
+  User,
+  Mail,
+  Lock,
+  Save,
+  Camera,
   AlertCircle,
   CheckCircle2,
   Loader2,
   ShieldCheck,
   Eye,
-  EyeOff,
-  Camera
+  EyeOff
 } from "lucide-react";
 import supabase from "@/config/supabase";
 import NavBar from "@/component/customer/NavBar";
 
 export default function CustomerSettingPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false);
   const [cartCount, setCartCount] = useState<number>(0);
   const [toastMsg, setToastMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // State สำหรับเปิด/ปิดการแสดงรหัสผ่าน (true = เปิดตา/เห็นรหัส, false = ปิดตา/ซ่อนรหัส)
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
 
   // ข้อมูลโปรไฟล์
   const [profile, setProfile] = useState({
     id: "",
-    name: "",
+    firstName: "",
+    lastName: "",
     email: "",
-    avatar: "",
+    avatar_url: "",
   });
 
-  // สถานะไฟล์รูปภาพใหม่ และการพรีวิว
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
-
-  // สถานะรหัสผ่าน
+  // รหัสผ่าน
   const [passwords, setPasswords] = useState({
     newPassword: "",
     confirmPassword: "",
   });
-  
-  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [changingPassword, setChangingPassword] = useState<boolean>(false);
 
   const showToast = (type: "success" | "error", text: string) => {
@@ -66,8 +61,8 @@ export default function CustomerSettingPage() {
         const localId =
           typeof window !== "undefined"
             ? localStorage.getItem("customer_id") ||
-              localStorage.getItem("id") ||
-              localStorage.getItem("user_id")
+            localStorage.getItem("id") ||
+            localStorage.getItem("user_id")
             : null;
 
         const { data: { user } } = await supabase.auth.getUser();
@@ -78,75 +73,25 @@ export default function CustomerSettingPage() {
           return;
         }
 
-        let loadedName = "";
-        let loadedEmail = user?.email || "";
-        let loadedAvatar = "";
+        // ดึงข้อมูลตรงจากตาราง customer
+        const { data: customerData, error } = await supabase
+          .from("customer")
+          .select("id, first_name, last_name, contact, profile_image")
+          .eq("id", effectiveId)
+          .maybeSingle();
 
-        // 1. เรียกผ่าน Backend Controller
-        try {
-          const res = await fetch(`http://localhost:5000/api/customer/profile?customer_id=${effectiveId}`);
-          if (res.ok) {
-            const json = await res.json();
-            if (json.success && json.data) {
-              loadedName = json.data.name || "";
-              loadedEmail = json.data.email || loadedEmail;
-              loadedAvatar = json.data.avatar || json.data.profile_url || "";
-            }
-          }
-        } catch (backendErr) {
-          console.warn("Backend profile unreachable:", backendErr);
-        }
-
-        // 2. Fallback: ดึงตรงจากตาราง customer
-        if (!loadedName || !loadedAvatar) {
-          const { data: customerRow } = await supabase
-            .from("customer")
-            .select("id, first_name, last_name, contact, avatar")
-            .eq("id", effectiveId)
-            .maybeSingle();
-
-          if (customerRow) {
-            if (!loadedName) {
-              loadedName = [customerRow.first_name, customerRow.last_name].filter(Boolean).join(" ").trim();
-            }
-            loadedEmail = customerRow.contact || loadedEmail;
-            loadedAvatar = customerRow.avatar || loadedAvatar;
-          }
-        }
-
-        // Fallback จาก localStorage
-        if (!loadedName && typeof window !== "undefined") {
-          loadedName = localStorage.getItem("user_name") || localStorage.getItem("name") || "";
-        }
-        if (!loadedEmail && typeof window !== "undefined") {
-          loadedEmail = localStorage.getItem("user_email") || "";
-        }
-        if (!loadedAvatar && typeof window !== "undefined") {
-          loadedAvatar = localStorage.getItem("user_avatar") || "";
+        if (error) {
+          console.error("Fetch profile error:", error.message);
         }
 
         setProfile({
           id: effectiveId,
-          name: loadedName,
-          email: loadedEmail,
-          avatar: loadedAvatar,
+          firstName: customerData?.first_name || "",
+          lastName: customerData?.last_name || "",
+          email: customerData?.contact || user?.email || "",
+          avatar_url: customerData?.profile_image || "",
         });
 
-        if (loadedAvatar) {
-          setPreviewUrl(loadedAvatar);
-        }
-
-        // 3. ดึงจำนวนของในตะกร้า
-        try {
-          const cartRes = await fetch(`http://localhost:5000/api/customer/cart?customer_id=${effectiveId}`);
-          const cartJson = await cartRes.json();
-          if (cartJson?.success && cartJson?.data) {
-            const rawItems = Array.isArray(cartJson.data) ? cartJson.data : (cartJson.data.items || []);
-            setCartCount(rawItems.length);
-          }
-        } catch {
-          setCartCount(0);
-        }
       } catch (err: any) {
         console.error("Load user error:", err);
       } finally {
@@ -157,30 +102,68 @@ export default function CustomerSettingPage() {
     fetchUserData();
   }, [router]);
 
-  // เลือกรูปภาพโปรไฟล์ใหม่
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 🌟 ฟังก์ชันอัปโหลดและเปลี่ยนรูปโปรไฟล์
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        showToast("error", "ขนาดไฟล์รูปภาพต้องไม่เกิน 5MB");
-        return;
-      }
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
+    if (!file || !profile.id) return;
+
+    // เช็คขนาดไฟล์ (ไม่เกิน 3MB)
+    if (file.size > 3 * 1024 * 1024) {
+      showToast("error", "ขนาดไฟล์รูปภาพต้องไม่เกิน 3MB");
+      return;
+    }
+
+    try {
+      setUploadingAvatar(true);
+
+      const fileExt = file.name.split(".").pop();
+      const fileName = `avatar_${profile.id}_${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      // อัปโหลดเข้า Storage bucket 'print_files'
+      const { error: uploadError } = await supabase.storage
+        .from("print_files")
+        .upload(filePath, file, {
+          upsert: true,
+          contentType: file.type,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // ขอ Public URL
+      const { data: urlData } = supabase.storage
+        .from("print_files")
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+
+      // บันทึก URL ลงตาราง customer
+      const { error: updateError } = await supabase
+        .from("customer")
+        .update({ profile_image: publicUrl })
+        .eq("id", profile.id);
+
+      if (updateError) throw updateError;
+
+      setProfile((prev) => ({ ...prev, avatar_url: publicUrl }));
+      showToast("success", "เปลี่ยนรูปโปรไฟล์สำเร็จ");
+    } catch (err: any) {
+      console.error("Upload avatar error:", err);
+      showToast("error", err.message || "อัปโหลดรูปภาพไม่สำเร็จ");
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
-  // ฟังก์ชันบันทึกข้อมูลส่วนตัวและอัปโหลดรูปภาพ
+  // 🌟 ฟังก์ชันบันทึกข้อมูลส่วนตัว (พร้อมตรวจสอบ Email ซ้ำ)
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newName = profile.name.trim();
-    const newEmail = profile.email.trim().toLowerCase();
 
-    if (!newName) {
-      showToast("error", "กรุณาระบุชื่อ - นามสกุล");
+    if (!profile.firstName.trim()) {
+      showToast("error", "กรุณาระบุชื่อ");
       return;
     }
-    if (!newEmail) {
+    if (!profile.email.trim()) {
       showToast("error", "กรุณาระบุอีเมล");
       return;
     }
@@ -188,132 +171,49 @@ export default function CustomerSettingPage() {
     try {
       setSaving(true);
 
-      // 🔍 1. ตรวจสอบว่าอีเมลซ้ำในระบบ (customer, print_shop, admin)
-      const { data: dupCustomer } = await supabase
+      const inputEmail = profile.email.trim().toLowerCase();
+
+      // 1. ตรวจสอบว่า Email ซ้ำกับลูกค้ารายอื่นในระบบหรือไม่
+      const { data: existingUser, error: checkError } = await supabase
         .from("customer")
         .select("id")
-        .ilike("contact", newEmail)
+        .eq("contact", inputEmail)
         .neq("id", profile.id)
         .maybeSingle();
 
-      if (dupCustomer) {
-        showToast("error", "อีเมลนี้ถูกใช้งานแล้วในระบบ");
+      if (checkError) throw checkError;
+
+      if (existingUser) {
+        showToast("error", "อีเมลนี้มีผู้ใช้งานในระบบแล้ว กรุณาใช้อีเมลอื่น");
         setSaving(false);
         return;
       }
 
-      const { data: dupShop } = await supabase
-        .from("print_shop")
-        .select("id")
-        .ilike("email", newEmail)
-        .maybeSingle();
-
-      if (dupShop) {
-        showToast("error", "อีเมลนี้ถูกใช้งานแล้วในระบบ");
-        setSaving(false);
-        return;
-      }
-
-      const { data: dupAdmin } = await supabase
-        .from("admin")
-        .select("id")
-        .ilike("contact", newEmail)
-        .maybeSingle();
-
-      if (dupAdmin) {
-        showToast("error", "อีเมลนี้ถูกใช้งานแล้วในระบบ");
-        setSaving(false);
-        return;
-      }
-
-      let uploadedImageUrl = profile.avatar;
-
-      // 📸 2. อัปโหลดรูปภาพเข้า Bucket "customer_profiles"
-      if (selectedFile) {
-        const fileExt = selectedFile.name.split(".").pop();
-        const fileName = `${profile.id}-${Date.now()}.${fileExt}`;
-        const filePath = `avatars/${fileName}`;
-
-        const { error: uploadErr } = await supabase.storage
-          .from("customer_profiles")
-          .upload(filePath, selectedFile, { upsert: true });
-
-        if (uploadErr) {
-          console.error("Storage upload error:", uploadErr);
-          showToast("error", `อัปโหลดรูปไม่สำเร็จ: ${uploadErr.message}`);
-          setSaving(false);
-          return;
-        }
-
-        const { data: publicUrlData } = supabase.storage
-          .from("customer_profiles")
-          .getPublicUrl(filePath);
-
-        uploadedImageUrl = publicUrlData.publicUrl;
-      }
-
-      const parts = newName.split(/\s+/);
-      const firstName = parts[0] || "";
-      const lastName = parts.slice(1).join(" ") || "";
-
-      // 3. อัปเดตตาราง customer ใน Supabase
-      const { error: cusErr } = await supabase
+      // 2. อัปเดตข้อมูลลงฐานข้อมูล
+      const { error: updateError } = await supabase
         .from("customer")
         .update({
-          first_name: firstName,
-          last_name: lastName,
-          contact: newEmail,
-          avatar: uploadedImageUrl,
+          first_name: profile.firstName.trim(),
+          last_name: profile.lastName.trim(),
+          contact: inputEmail,
         })
         .eq("id", profile.id);
 
-      if (cusErr) throw cusErr;
+      if (updateError) throw updateError;
 
-      // 4. ซิงค์ Backend API
-      try {
-        await fetch(`http://localhost:5000/api/customer/profile`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customer_id: profile.id,
-            name: newName,
-            first_name: firstName,
-            last_name: lastName,
-            email: newEmail,
-            avatar: uploadedImageUrl,
-          }),
-        });
-      } catch (e) {
-        console.warn("Backend update skipped:", e);
-      }
-
-      // 5. ซิงค์กับ Supabase Auth
+      // ซิงค์ชื่อและอีเมลไปยัง Supabase Auth (ถ้ามี session)
       try {
         await supabase.auth.updateUser({
-          email: newEmail,
-          data: { 
-            first_name: firstName, 
-            last_name: lastName, 
-            full_name: newName,
-            avatar_url: uploadedImageUrl 
+          email: inputEmail,
+          data: {
+            first_name: profile.firstName.trim(),
+            last_name: profile.lastName.trim()
           }
         });
       } catch (authErr) {
-        console.warn("Auth sync notice:", authErr);
+        console.warn("Auth sync warning:", authErr);
       }
 
-      // 6. บันทึกลง localStorage และส่งสัญญาณอัปเดต Navbar
-      if (typeof window !== "undefined") {
-        localStorage.setItem("user_name", newName);
-        localStorage.setItem("user_email", newEmail);
-        if (uploadedImageUrl) {
-          localStorage.setItem("user_avatar", uploadedImageUrl);
-        }
-        window.dispatchEvent(new Event("profileUpdated"));
-      }
-
-      setProfile((prev) => ({ ...prev, name: newName, email: newEmail, avatar: uploadedImageUrl }));
-      setSelectedFile(null);
       showToast("success", "บันทึกข้อมูลส่วนตัวเรียบร้อยแล้ว");
     } catch (err: any) {
       console.error("Update profile error:", err);
@@ -355,17 +255,18 @@ export default function CustomerSettingPage() {
     }
   };
 
+  const fullNameDisplay = [profile.firstName, profile.lastName].filter(Boolean).join(" ") || "ผู้ใช้งาน PrintHub";
+
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col font-sans text-slate-800 antialiased pb-12">
       <NavBar cartCount={cartCount} />
 
       {toastMsg && (
-        <div 
-          className={`fixed top-20 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg border text-sm font-medium animate-in slide-in-from-top-2 ${
-            toastMsg.type === "success" 
-              ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
+        <div
+          className={`fixed top-20 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg border text-sm font-medium animate-in slide-in-from-top-2 ${toastMsg.type === "success"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
               : "bg-rose-50 text-rose-800 border-rose-200"
-          }`}
+            }`}
         >
           {toastMsg.type === "success" ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -386,7 +287,7 @@ export default function CustomerSettingPage() {
           <div className="border-b border-slate-200/80 pb-4">
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">ตั้งค่าบัญชี</h1>
             <p className="text-sm text-slate-500 mt-1">
-              จัดการชื่อผู้ใช้งาน อีเมล รูปโปรไฟล์ และเปลี่ยนรหัสผ่านความปลอดภัยของคุณ
+              จัดการชื่อผู้ใช้งาน อีเมล และเปลี่ยนรหัสผ่านความปลอดภัยของคุณ
             </p>
           </div>
 
@@ -394,34 +295,43 @@ export default function CustomerSettingPage() {
             {/* การ์ดโปรไฟล์ฝั่งซ้าย */}
             <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-xs flex flex-col items-center text-center space-y-4 h-fit">
               <div className="relative group">
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold text-3xl shadow-md overflow-hidden border-2 border-white">
-                  {previewUrl ? (
-                    <img 
-                      src={previewUrl} 
-                      alt="Profile Avatar" 
-                      className="w-full h-full object-cover" 
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold text-3xl shadow-md overflow-hidden">
+                  {uploadingAvatar ? (
+                    <Loader2 className="w-8 h-8 animate-spin text-white" />
+                  ) : profile.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={fullNameDisplay}
+                      className="w-full h-full object-cover"
                     />
-                  ) : profile.name ? (
-                    profile.name.charAt(0).toUpperCase()
                   ) : (
-                    <User size={40} />
+                    profile.firstName ? profile.firstName.charAt(0).toUpperCase() : <User size={40} />
                   )}
                 </div>
 
-                <label className="absolute bottom-0 right-0 p-2 bg-[#0F2942] hover:bg-[#1a3d5e] text-white rounded-full shadow-md cursor-pointer transition active:scale-95">
+                {/* ปุ่มกดอัปโหลดรูป */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  title="เปลี่ยนรูปโปรไฟล์"
+                  className="absolute bottom-0 right-0 p-2 bg-white rounded-full text-slate-600 shadow-md border border-slate-200 hover:text-blue-600 hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+                >
                   <Camera size={16} />
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleFileChange} 
-                    className="hidden" 
-                  />
-                </label>
+                </button>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleAvatarChange}
+                  accept="image/png, image/jpeg, image/webp"
+                  className="hidden"
+                />
               </div>
 
               <div className="w-full px-2">
                 <h2 className="text-base font-bold text-slate-900 truncate">
-                  {profile.name || "ผู้ใช้งาน PrintHub"}
+                  {fullNameDisplay}
                 </h2>
                 <p className="text-sm text-slate-500 mt-0.5 truncate">
                   {profile.email || "ไม่มีข้อมูลอีเมล"}
@@ -431,6 +341,7 @@ export default function CustomerSettingPage() {
 
             {/* ฟอร์มแก้ไขข้อมูลฝั่งขวา */}
             <div className="md:col-span-2 space-y-6">
+              {/* การ์ดที่ 1: ข้อมูลส่วนตัว */}
               <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-xs">
                 <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
                   <User className="w-4 h-4 text-blue-600" />
@@ -438,25 +349,37 @@ export default function CustomerSettingPage() {
                 </h3>
 
                 <form onSubmit={handleUpdateProfile} className="mt-4 space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                      ชื่อ - นามสกุล
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                        ชื่อ
+                      </label>
                       <input
                         type="text"
-                        value={profile.name}
-                        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                        placeholder="กรอกชื่อ - นามสกุล"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition"
+                        value={profile.firstName}
+                        onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
+                        placeholder="กรอกชื่อ"
+                        className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                        นามสกุล
+                      </label>
+                      <input
+                        type="text"
+                        value={profile.lastName}
+                        onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
+                        placeholder="กรอกนามสกุล"
+                        className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition"
                       />
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                      อีเมล (Contact)
+                      อีเมล (ตรวจสอบการซ้ำในระบบ)
                     </label>
                     <div className="relative">
                       <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -487,7 +410,7 @@ export default function CustomerSettingPage() {
                 </form>
               </div>
 
-              {/* การ์ดเปลี่ยนรหัสผ่าน */}
+              {/* การ์ดที่ 2: เปลี่ยนรหัสผ่าน */}
               <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-xs">
                 <h3 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
                   <Lock className="w-4 h-4 text-amber-600" />
@@ -496,11 +419,12 @@ export default function CustomerSettingPage() {
 
                 <form onSubmit={handleChangePassword} className="mt-4 space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* ช่องรหัสผ่านใหม่ */}
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                         รหัสผ่านใหม่
                       </label>
-                      <div className="relative flex items-center">
+                      <div className="relative">
                         <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input
                           type={showNewPassword ? "text" : "password"}
@@ -512,19 +436,19 @@ export default function CustomerSettingPage() {
                         <button
                           type="button"
                           onClick={() => setShowNewPassword(!showNewPassword)}
-                          className="absolute right-3.5 text-slate-400 hover:text-slate-600 transition cursor-pointer"
-                          title={showNewPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer"
                         >
-                          {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          {showNewPassword ? <Eye size={16} /> : <EyeOff size={16} />}
                         </button>
                       </div>
                     </div>
 
+                    {/* ช่องยืนยันรหัสผ่านใหม่ */}
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                         ยืนยันรหัสผ่านใหม่
                       </label>
-                      <div className="relative flex items-center">
+                      <div className="relative">
                         <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         <input
                           type={showConfirmPassword ? "text" : "password"}
@@ -536,10 +460,9 @@ export default function CustomerSettingPage() {
                         <button
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-3.5 text-slate-400 hover:text-slate-600 transition cursor-pointer"
-                          title={showConfirmPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer"
                         >
-                          {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          {showConfirmPassword ? <Eye size={16} /> : <EyeOff size={16} />}
                         </button>
                       </div>
                     </div>
