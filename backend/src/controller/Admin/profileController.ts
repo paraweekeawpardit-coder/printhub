@@ -1,12 +1,11 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
-// GET: ดึงข้อมูลโปรไฟล์ตาม admin_id หรือ email เท่านั้น (ห้ามสุ่มดึงตัวแรก)
+// GET: ดึงข้อมูลโปรไฟล์ตาม admin_id หรือ email เท่านั้น
 export const getAdminProfile = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { id, email } = req.query;
 
-    // ถ้าไม่มีทั้ง id และ email ส่งมา ให้ปฏิเสธการเข้าถึงทันที
     if (!id && !email) {
       return res.status(401).json({ error: "Unauthorized: ไม่ระบุตัวตนผู้ใช้งาน" });
     }
@@ -38,7 +37,7 @@ export const getAdminProfile = async (req: Request, res: Response): Promise<Resp
   }
 };
 
-// PUT: อัปเดตข้อมูลโปรไฟล์โดยระบุ ID ของแอดมินคนนั้นๆ
+// PUT: อัปเดตข้อมูลโปรไฟล์โดยระบุ ID ของแอดมิน
 export const updateAdminProfile = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { id, name, email, avatar } = req.body;
@@ -57,13 +56,14 @@ export const updateAdminProfile = async (req: Request, res: Response): Promise<R
       return res.status(400).json({ error: "ระบุ ID หรือ Email ของแอดมินที่ต้องการอัปเดต" });
     }
 
+    // 🟢 สร้าง Payload เฉพาะฟิลด์ที่อนุญาตให้อัปเดต (เพื่อความปลอดภัย ไม่เขียนทับ contact โดยไม่จำเป็น)
+    const updatePayload: Record<string, any> = {};
+    if (name !== undefined) updatePayload.name = name;
+    if (avatar !== undefined) updatePayload.avatar = avatar;
+
     const { data, error } = await supabase
       .from("admin")
-      .update({
-        name: name,
-        contact: email,
-        avatar: avatar,
-      })
+      .update(updatePayload)
       .eq("id", targetId)
       .select("id, name, contact, avatar")
       .single();

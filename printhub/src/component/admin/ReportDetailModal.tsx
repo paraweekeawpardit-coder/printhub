@@ -1,14 +1,44 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
+import { FileText, ExternalLink, Upload, X, Image as ImageIcon, AlertCircle } from "lucide-react";
+import supabase from "@/config/supabase";
+
+const ISSUE_TYPE_MAP: Record<string, string> = {
+  damaged: "งานพิมพ์ชำรุด / ยับ / เป็นรอย",
+  color_mismatch: "สีเพี้ยน / ไม่ตรงตามไฟล์งาน",
+  wrong_size: "ชนิดกระดาษ / ขนาด ไม่ตรงตามที่สั่ง",
+  incomplete: "ได้รับสินค้าไม่ครบตามจำนวน",
+  delay: "จัดส่งล่าช้า",
+  other: "อื่นๆ",
+  "สีเพี้ยน / ไม่ตรงตามไฟล์งาน": "สีเพี้ยน / ไม่ตรงตามไฟล์งาน",
+  "ชนิดกระดาษ / ขนาด ไม่ตรงตามที่สั่ง": "ชนิดกระดาษ / ขนาด ไม่ตรงตามที่สั่ง",
+  "งานพิมพ์ชำรุด / ยับ / เป็นรอย": "งานพิมพ์ชำรุด / ยับ / เป็นรอย",
+  "ได้รับสินค้าไม่ครบตามจำนวน": "ได้รับสินค้าไม่ครบตามจำนวน",
+  "จัดส่งล่าช้า": "จัดส่งล่าช้า",
+  "อื่นๆ": "อื่นๆ",
+};
+
+const MAX_FILE_SIZE_MB = 5;
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export interface OrderItemDetail {
   id?: string;
   item_name?: string;
-  paper_type?: string;
   quantity?: number;
   price?: number;
+  unit_price?: number;
   details?: string;
+  page_count?: number;
+  file_url?: string | null;
+}
+
+export interface OrderFileDetail {
+  id?: string;
+  filename?: string;
+  file_url?: string;
+  file_size_mb?: number;
+  page_count?: number;
 }
 
 export interface ReportDetailItem {
@@ -16,6 +46,7 @@ export interface ReportDetailItem {
   order_id?: string;
   order_no?: string;
   order_id_display?: string;
+  order_description?: string | null;
   customer_name?: string;
   customer_phone?: string;
   shop_name?: string;
@@ -28,7 +59,9 @@ export interface ReportDetailItem {
   created_at?: string;
   total_price?: number;
   admin_note?: string;
+  admin_image_url?: string | null;
   order_items?: OrderItemDetail[];
+  order_files?: OrderFileDetail[];
 }
 
 interface ReportDetailModalProps {
@@ -39,7 +72,8 @@ interface ReportDetailModalProps {
     reportId: string,
     decision: "approved" | "rejected",
     adminNote: string,
-    refundAmount: number
+    refundAmount: number,
+    adminImageUrl?: string | null
   ) => Promise<void>;
 }
 
@@ -51,17 +85,22 @@ export default function ReportDetailModal({
 }: ReportDetailModalProps) {
   const [decision, setDecision] = useState<"approved" | "rejected">("approved");
   const [adminNote, setAdminNote] = useState("");
+  const [adminImageUrl, setAdminImageUrl] = useState<string>("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (report) {
       setAdminNote(report.admin_note || "");
+      setAdminImageUrl(report.admin_image_url || "");
+      setSelectedFile(null);
+      setFileError(null);
     }
   }, [report]);
 
   if (!report) return null;
 
-  // 🟢 แปลงเวลาให้แสดงผลตาม Local Time (เวลาไทย UTC+7)
   const formatDate = (dateString?: string) => {
     if (!dateString) return "-";
     let formattedStr = dateString;
@@ -85,13 +124,77 @@ export default function ReportDetailModal({
   const isPending = !report.status || report.status === "pending";
   const isResolved = report.status === "resolved_refund" || report.status === "rejected";
 
-  const issueCategoryDisplay = report.issue_type || report.category || "ไม่ระบุประเภทปัญหา";
+  const rawIssueKey = report.issue_type || report.category || "";
+  const issueCategoryDisplay = ISSUE_TYPE_MAP[rawIssueKey] || rawIssueKey || "ไม่ระบุประเภทปัญหา";
+
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setFileError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setFileError("อนุญาตเฉพาะไฟล์รูปภาพ JPG, PNG, WEBP เท่านั้น");
+      return;
+    }
+
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > MAX_FILE_SIZE_MB) {
+      setFileError(`ขนาดไฟล์ต้องไม่เกิน ${MAX_FILE_SIZE_MB} MB (ไฟล์ของคุณ: ${fileSizeMB.toFixed(2)} MB)`);
+      return;
+    }
+
+    setSelectedFile(file);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setAdminImageUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async () => {
-    if (!isNoteValid || isPending) return;
+    if (!isNoteValid || isPending || fileError) return;
     try {
       setIsSubmitting(true);
-      await onResolve(report.id, decision, adminNote, totalPrice);
+      let finalAdminImageUrl: string | null = report.admin_image_url || null;
+
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split(".").pop();
+        const fileName = `admin_evidence_${report.id}_${Date.now()}.${fileExt}`;
+        const filePath = `admin-evidence/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("reports")
+          .upload(filePath, selectedFile, {
+            cacheControl: "3600",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error("Upload error:", uploadError.message);
+          setFileError("เกิดข้อผิดพลาดในการอัปโหลดรูปภาพหลักฐาน");
+          setIsSubmitting(false);
+          return;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("reports")
+          .getPublicUrl(filePath);
+
+        finalAdminImageUrl = publicUrlData.publicUrl;
+      } else if (!adminImageUrl) {
+        finalAdminImageUrl = null;
+      }
+
+      await onResolve(
+        report.id,
+        decision,
+        adminNote,
+        totalPrice,
+        finalAdminImageUrl
+      );
       onClose();
     } catch (err) {
       console.error("Resolve Report Error:", err);
@@ -134,7 +237,7 @@ export default function ReportDetailModal({
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg hover:bg-slate-800 transition-colors"
+            className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
           >
             ✕
           </button>
@@ -142,8 +245,9 @@ export default function ReportDetailModal({
 
         {/* Modal Content */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
-          {/* Section 1: ข้อมูลคำสั่งซื้อ & หลักฐาน */}
+          {/* บล็อกส่วนที่ 1: ข้อมูลคำสั่งซื้อ (ซ้าย) & หลักฐานจากผู้แจ้ง (ขวา) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* ข้อมูลคำสั่งซื้อ */}
             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-3">
               <h3 className="font-bold text-slate-800 text-sm border-b border-slate-200 pb-2 flex justify-between items-center">
                 <span>ข้อมูลคำสั่งซื้อ</span>
@@ -190,10 +294,10 @@ export default function ReportDetailModal({
               </div>
             </div>
 
-            {/* หลักฐานรูปภาพ */}
+            {/* หลักฐานรูปภาพจากผู้แจ้ง */}
             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-2 flex flex-col justify-between">
               <h3 className="font-bold text-slate-800 text-sm border-b border-slate-200 pb-2">
-                หลักฐานรูปภาพจากผู้แจ้ง
+                หลักฐานรูปภาพจากผู้แจ้งปัญหา
               </h3>
 
               {report.image_url ? (
@@ -223,56 +327,112 @@ export default function ReportDetailModal({
             </div>
           </div>
 
-          {/* Section 2: ประเภทปัญหา & รายละเอียดปัญหา */}
-          <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200 text-xs space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-amber-900">ประเภทปัญหา:</span>
-              <span className="px-2.5 py-1 rounded-md bg-amber-200/70 font-semibold text-amber-950 border border-amber-300/50">
-                {issueCategoryDisplay}
-              </span>
-            </div>
-            <div>
-              <p className="font-bold text-amber-900 mb-1">รายละเอียดปัญหาที่แจ้งเข้ามา:</p>
-              <p className="text-amber-900 leading-relaxed font-medium bg-white/70 p-2.5 rounded-lg border border-amber-200/60">
-                {report.description || "ไม่ได้ระบุรายละเอียด"}
-              </p>
-            </div>
-          </div>
+          {/* 🟢 บล็อกส่วนที่ 2 (จัดกลุ่มใหญ่): รวมรายละเอียดการรายงาน + หมายเหตุสั่งซื้อ + สินค้า + ไฟล์งานต้นฉบับ */}
+          <div className="bg-slate-50/80 p-5 rounded-xl border border-slate-200 space-y-4">
+            <h3 className="font-bold text-slate-800 text-sm border-b border-slate-200 pb-2">
+              รายละเอียดรายงานปัญหาและข้อมูลออเดอร์
+            </h3>
 
-          {/* Section 3: รายละเอียดงานพิมพ์ในออเดอร์ */}
-          {report.order_items && report.order_items.length > 0 && (
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
-              <p className="font-bold text-slate-800 text-xs border-b border-slate-200 pb-2">
-                รายละเอียดสินค้า/งานพิมพ์ในคำสั่งซื้อ:
-              </p>
-              <div className="space-y-2">
-                {report.order_items.map((item, idx) => (
-                  <div key={item.id || idx} className="bg-white p-3 rounded-lg border border-slate-200 flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-slate-900">{item.item_name || `รายการที่ ${idx + 1}`}</p>
-                      <p className="text-slate-500 text-[11px] mt-0.5">
-                        {item.paper_type && `กระดาษ: ${item.paper_type} | `}
-                        {item.details || "-"}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-slate-700">จำนวน: {item.quantity || 1} ชุด</p>
-                      {item.price && <p className="font-bold text-slate-900">฿{item.price}</p>}
-                    </div>
-                  </div>
-                ))}
+            {/* 1. ประเภทและรายละเอียดปัญหาที่แจ้งเข้ามา */}
+            <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200 text-xs space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-amber-900">ประเภทปัญหา:</span>
+                <span className="px-2.5 py-1 rounded-md bg-amber-200/70 font-semibold text-amber-950 border border-amber-300/50">
+                  {issueCategoryDisplay}
+                </span>
+              </div>
+              <div>
+                <p className="font-bold text-amber-900 mb-1">รายละเอียดปัญหาที่แจ้งเข้ามา:</p>
+                <p className="text-amber-900 leading-relaxed font-medium bg-white/70 p-2.5 rounded-lg border border-amber-200/60">
+                  {report.description || "ไม่ได้ระบุรายละเอียด"}
+                </p>
               </div>
             </div>
-          )}
 
-          {/* Decision Section / Lock for Pending */}
+            {/* 🟢 2. หมายเหตุสั่งซื้อเพิ่มเติมจากลูกค้า (ดึงมาจาก print_order.description) */}
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs space-y-1">
+              <p className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-slate-600" />
+                <span>หมายเหตุเพิ่มเติมจากการสั่งซื้อ (Order Note):</span>
+              </p>
+              <p className={`pl-5 font-medium leading-relaxed ${report.order_description ? "text-slate-900" : "text-slate-400 italic"}`}>
+                {report.order_description ? report.order_description : "ลูกค้าไม่ได้ใส่รายละเอียดส่วนนี้"}
+              </p>
+            </div>
+
+            {/* 3. รายละเอียดสินค้า/งานพิมพ์ในคำสั่งซื้อ */}
+            {report.order_items && report.order_items.length > 0 && (
+              <div className="space-y-2 text-xs">
+                <p className="font-bold text-slate-800 text-xs">
+                  รายละเอียดสินค้า/งานพิมพ์ในคำสั่งซื้อ:
+                </p>
+                <div className="space-y-2">
+                  {report.order_items.map((item, idx) => (
+                    <div key={item.id || idx} className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                      <div className="space-y-1">
+                        <p className="font-bold text-slate-900">{item.item_name || `รายการที่ ${idx + 1}`}</p>
+                        <p className="text-slate-600 text-[11px]">
+                          {item.details ? `รายละเอียดสเปก: ${item.details}` : "ไม่มีรายละเอียดเพิ่มเติม"}
+                          {item.page_count && item.page_count > 1 ? ` (${item.page_count} หน้า)` : ""}
+                        </p>
+                      </div>
+                      <div className="text-right flex sm:flex-col items-center sm:items-end justify-between gap-2">
+                        <span className="font-semibold text-slate-700">จำนวน: {item.quantity || 1} ชุด</span>
+                        <span className="font-bold text-slate-900">
+                          {item.price && item.price > 0 
+                            ? `฿${item.price.toLocaleString()}` 
+                            : item.unit_price 
+                            ? `฿${(item.unit_price * (item.quantity || 1)).toLocaleString()}` 
+                            : "฿0"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. ไฟล์งานต้นฉบับจากลูกค้า */}
+            {report.order_files && report.order_files.length > 0 && (
+              <div className="bg-blue-50/50 p-3.5 rounded-xl border border-blue-200 text-xs space-y-2">
+                <p className="font-bold text-blue-900 text-xs flex items-center gap-1.5 border-b border-blue-200/60 pb-1.5">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  <span>ไฟล์งานต้นฉบับจากลูกค้า (สำหรับแอดมินตรวจสอบ):</span>
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {report.order_files.map((file, idx) => (
+                    <div key={file.id || idx} className="bg-white p-2.5 rounded-lg border border-blue-100 flex items-center justify-between">
+                      <div className="truncate pr-2">
+                        <p className="font-semibold text-slate-800 truncate text-[11px]">{file.filename}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {file.file_size_mb ? `${file.file_size_mb} MB` : ""}
+                          {file.page_count ? ` • ${file.page_count} หน้า` : ""}
+                        </p>
+                      </div>
+                      {file.file_url && (
+                        <a
+                          href={file.file_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-md transition-colors shrink-0"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          เปิดไฟล์
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* บล็อกส่วนที่ 3: คำตัดสินของแอดมิน */}
           {isPending ? (
             <div className="bg-amber-50 p-5 rounded-xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <h4 className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
                   ยังไม่ได้กดรับเรื่องพิจารณา
                 </h4>
                 <p className="text-xs text-amber-700">
@@ -332,6 +492,7 @@ export default function ReportDetailModal({
                     </div>
                   )}
 
+                  {/* หมายเหตุการตัดสิน */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       หมายเหตุการตัดสิน <span className="text-rose-500">* (จำเป็นต้องระบุทุกครั้ง)</span>
@@ -351,15 +512,84 @@ export default function ReportDetailModal({
                       </p>
                     )}
                   </div>
+
+                  {/* แนบรูปภาพหลักฐานการตัดสิน (Optional) พร้อม Validation */}
+                  <div className="space-y-1.5 pt-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      รูปภาพหลักฐานการตัดสิน (ไม่จำเป็นต้องใส่)
+                      <span className="text-slate-400 font-normal ml-1">
+                        (รองรับ JPG, PNG, WEBP ไม่เกิน 5MB / สูงสุด 1 รูป)
+                      </span>
+                    </label>
+
+                    {adminImageUrl ? (
+                      <div className="relative inline-block border border-slate-300 rounded-lg overflow-hidden bg-slate-100 max-w-xs">
+                        <img
+                          src={adminImageUrl}
+                          alt="Admin Evidence Preview"
+                          className="max-h-36 object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdminImageUrl("");
+                            setSelectedFile(null);
+                            setFileError(null);
+                          }}
+                          className="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-1 hover:bg-rose-700 shadow-md transition-colors"
+                          title="ลบรูปภาพ"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm">
+                          <Upload className="w-3.5 h-3.5 text-slate-500" />
+                          <span>เลือกไฟล์รูปภาพหลักฐาน...</span>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            onChange={handleImageChange}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {fileError && (
+                      <p className="text-[11px] text-rose-500 font-medium mt-1">
+                        * {fileError}
+                      </p>
+                    )}
+                  </div>
                 </>
               ) : (
-                <div className="text-xs space-y-2 text-slate-700">
-                  <p className="font-semibold text-slate-900">
-                    หมายเหตุการตัดสินที่บันทึกไว้:
-                  </p>
-                  <p className="p-3 bg-white rounded-lg border border-slate-200 text-slate-800">
-                    {report.admin_note || "ไม่ได้ระบุหมายเหตุ"}
-                  </p>
+                <div className="text-xs space-y-3 text-slate-700">
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">
+                      หมายเหตุการตัดสินที่บันทึกไว้:
+                    </p>
+                    <p className="p-3 bg-white rounded-lg border border-slate-200 text-slate-800">
+                      {report.admin_note || "ไม่ได้ระบุหมายเหตุ"}
+                    </p>
+                  </div>
+
+                  {report.admin_image_url && (
+                    <div>
+                      <p className="font-semibold text-slate-900 mb-1 flex items-center gap-1">
+                        <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
+                        รูปภาพหลักฐานการตัดสิน:
+                      </p>
+                      <div className="border border-slate-200 rounded-lg overflow-hidden max-w-xs bg-slate-100 p-1">
+                        <img
+                          src={report.admin_image_url}
+                          alt="Admin Evidence"
+                          className="max-h-40 object-contain rounded"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -377,7 +607,7 @@ export default function ReportDetailModal({
           {!isPending && !isResolved && (
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting || !isNoteValid}
+              disabled={isSubmitting || !isNoteValid || !!fileError}
               className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all cursor-pointer ${
                 decision === "approved"
                   ? "bg-emerald-600 hover:bg-emerald-700"

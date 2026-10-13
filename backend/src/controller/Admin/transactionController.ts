@@ -3,17 +3,31 @@ import supabase from "../../config/supabase.js";
 
 /**
  * GET /api/admin/transactions
- * ดึงรายการธุรกรรมการชำระเงินทั้งหมด พร้อม Pagination
+ * ดึงรายการธุรกรรมการชำระเงิน พร้อม Server-side Pagination และ Summary Counts
  */
 export const getAllTransactions = async (req: Request, res: Response): Promise<Response> => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
+    const statusFilter = (req.query.status as string || "all").toLowerCase();
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    const { data: transactions, error, count } = await supabase
+    // 🟢 1. ดึงยอดนับรวมทั้งหมดของแต่ละสถานะจาก Database โดยตรง
+    const { count: totalCount } = await supabase
+      .from("payment")
+      .select("*", { count: "exact", head: true });
+
+    const { count: refundedCount } = await supabase
+      .from("payment")
+      .select("*", { count: "exact", head: true })
+      .ilike("status", "REFUNDED");
+
+    const paidCount = Math.max(0, (totalCount || 0) - (refundedCount || 0));
+
+    // 🟢 2. สร้าง Query ดึงรายการชำระเงินตาม Filter
+    let query = supabase
       .from("payment")
       .select(`
         *,
@@ -45,13 +59,22 @@ export const getAllTransactions = async (req: Request, res: Response): Promise<R
           phone
         )
       `, { count: "exact" })
-      .order("payment_date", { ascending: false })
-      .range(from, to);
+      .order("payment_date", { ascending: false });
+
+    // กรองสถานะแบบ Case-insensitive
+    if (statusFilter === "refunded") {
+      query = query.ilike("status", "REFUNDED");
+    } else if (statusFilter === "paid") {
+      query = query.not("status", "ilike", "REFUNDED");
+    }
+
+    const { data: transactions, error, count: filteredCount } = await query.range(from, to);
 
     if (error) {
       console.error("Supabase transaction error:", error.message);
       return res.status(200).json({
         data: [],
+        counts: { total: 0, paid: 0, refunded: 0 },
         currentPage: page,
         totalPages: 0,
         totalCount: 0,
@@ -88,14 +111,20 @@ export const getAllTransactions = async (req: Request, res: Response): Promise<R
 
     return res.status(200).json({
       data: formattedTransactions,
+      counts: {
+        total: totalCount || 0,
+        paid: paidCount || 0,
+        refunded: refundedCount || 0,
+      },
       currentPage: page,
-      totalPages: count ? Math.ceil(count / limit) : 0,
-      totalCount: count || 0,
+      totalPages: Math.ceil((filteredCount || 0) / limit),
+      totalCount: filteredCount || 0,
     });
   } catch (err: any) {
     console.error("GetAllTransactions Exception:", err.message || err);
     return res.status(200).json({
       data: [],
+      counts: { total: 0, paid: 0, refunded: 0 },
       currentPage: 1,
       totalPages: 0,
       totalCount: 0,
