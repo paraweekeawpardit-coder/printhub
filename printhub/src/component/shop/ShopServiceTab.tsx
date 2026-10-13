@@ -13,7 +13,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-// per_page = คิดต่อหน้า, per_set = คิดรวมทั้งไฟล์/ชุด (บวกครั้งเดียว), "" = ยังไม่ได้เลือก
 export type PriceType = "per_page" | "per_set" | "";
 
 const PRICE_TYPE_LABEL: Record<string, string> = {
@@ -27,8 +26,8 @@ export type ServiceDetailRow = {
   detail: string;
   group_type: string;
   price: string;
-  is_required?: boolean; // ลูกค้าต้องเลือกกลุ่มนี้หรือไม่ (ค่าเริ่มต้น false)
-  price_type?: PriceType; // วิธีคิดราคา กำหนดเป็นระดับกลุ่ม (ร้านต้องเลือก ไม่มีค่าเริ่มต้น)
+  is_required?: boolean;
+  price_type?: PriceType;
 };
 
 export type ServiceTypeGroup = {
@@ -115,9 +114,7 @@ const SERVICE_TEMPLATES: Record<
   ],
 };
 
-// 🌟 สร้าง Array รายชื่อประเภทบริการสำเร็จรูป
 const SERVICE_TYPE_TEMPLATES = Object.keys(SERVICE_TEMPLATES);
-
 const OTHER_OPTION = "__other__";
 
 const groupItems = (
@@ -125,12 +122,10 @@ const groupItems = (
   includeEmpty = false
 ): GroupedRows[] => {
   if (!items || items.length === 0) return [];
-
   const groups: GroupedRows[] = [];
 
   items.forEach((row, idx) => {
     if (!includeEmpty && !row.detail && !row.price && !row.group_type) return;
-
     const name = row.group_type || "";
     let group = groups.find((g) => g.name === name);
     if (!group) {
@@ -143,7 +138,6 @@ const groupItems = (
   return groups;
 };
 
-// วิธีคิดราคาของกลุ่ม: ทุกแถวต้องมีค่าเดียวกันและเป็นค่าที่ถูกต้อง ไม่เช่นนั้นถือว่ายังไม่ได้เลือก
 const getGroupPriceType = (rows: { row: ServiceDetailRow }[]): PriceType => {
   const first = rows[0]?.row.price_type;
   if (first !== "per_page" && first !== "per_set") return "";
@@ -181,7 +175,7 @@ const validateService = (group: ServiceTypeGroup): ServiceErrors => {
     }
 
     if (!getGroupPriceType(grp.rows)) {
-      errors.groupPriceType[grp.rows[0].idx] = "กรุณาเลือกวิธีคิดราคาของกลุ่มนี้ (ต่อหน้า / รวมทั้งไฟล์)";
+      errors.groupPriceType[grp.rows[0].idx] = "กรุณาเลือกวิธีคิดราคาของกลุ่มนี้ (ต่อหน้า / ต่อชุด)";
       errors.count++;
     }
 
@@ -195,9 +189,12 @@ const validateService = (group: ServiceTypeGroup): ServiceErrors => {
       else seen.add(detail);
 
       const priceStr = String(row.price ?? "").trim();
+      const numPrice = Number(priceStr);
       if (!priceStr) rowErr.price = "กรุณากรอกราคา";
-      else if (!Number.isFinite(Number(priceStr)) || Number(priceStr) < 0)
+      else if (!Number.isFinite(numPrice) || numPrice < 0)
         rowErr.price = "ราคาต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป";
+      else if (numPrice > 100000)
+        rowErr.price = "ราคาสูงสุดต้องไม่เกิน 100,000 บาท";
 
       if (rowErr.detail || rowErr.price) {
         errors.row[idx] = rowErr;
@@ -261,13 +258,9 @@ export default function ShopServicesTab({
 }: Props) {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [customTypeIndexes, setCustomTypeIndexes] = useState<Record<number, boolean>>({});
-
   const [attemptedSave, setAttemptedSave] = useState<boolean>(false);
   const [errorScope, setErrorScope] = useState<Record<number, boolean>>({});
   const editRef = useRef<HTMLDivElement>(null);
-
-  // สำเนาของ services ตอนเริ่มแก้ไข ใช้ย้อนค่ากลับเมื่อกด "ยกเลิก"
-  // (services เก็บอยู่ที่ parent และถูกแก้ตรง ๆ ระหว่างแก้ไข จึงต้องเก็บของเดิมไว้เอง)
   const snapshotRef = useRef<ServiceTypeGroup[] | null>(null);
 
   const allErrors = useMemo(() => validateAll(services), [services]);
@@ -275,10 +268,7 @@ export default function ShopServicesTab({
 
   const focusFirstInvalid = (serviceIndex?: number) => {
     setTimeout(() => {
-      const scope =
-        serviceIndex !== undefined
-          ? `[data-service="${serviceIndex}"] `
-          : "";
+      const scope = serviceIndex !== undefined ? `[data-service="${serviceIndex}"] ` : "";
       const el =
         editRef.current?.querySelector<HTMLElement>(`${scope}[aria-invalid="true"]`) ??
         editRef.current?.querySelector<HTMLElement>(`${scope}[data-field-error]`);
@@ -301,7 +291,6 @@ export default function ShopServicesTab({
   };
 
   const updateServiceType = (index: number, selectedValue: string) => {
-    // เปลี่ยนประเภทบริการ = เริ่มรายละเอียดใหม่ ไม่เก็บค่าของประเภทเดิมไว้
     setErrorScope((prev) => ({ ...prev, [index]: false }));
 
     if (selectedValue === OTHER_OPTION) {
@@ -324,7 +313,7 @@ export default function ShopServicesTab({
         group_type: item.group_type,
         price: item.price,
         is_required: false,
-        price_type: "" as PriceType, // ร้านต้องเลือกวิธีคิดราคาเอง (ระดับกลุ่ม)
+        price_type: "" as PriceType,
       }));
       setServices((prev) =>
         prev.map((g, i) =>
@@ -344,7 +333,6 @@ export default function ShopServicesTab({
     newName: string
   ) => {
     const targetIndices = new Set(grpRows.map((item) => item.idx));
-
     setServices((prev) =>
       prev.map((g, i) => {
         if (i !== groupIndex) return g;
@@ -358,14 +346,12 @@ export default function ShopServicesTab({
     );
   };
 
-  // ตั้งค่า "จำเป็น" ให้ทุกแถวในกลุ่มเดียวกัน (ค่าเก็บต่อแถวใน service_detail แต่กำหนดเป็นระดับกลุ่ม)
   const setGroupRequired = (
     groupIndex: number,
     grpRows: { row: ServiceDetailRow; idx: number }[],
     value: boolean
   ) => {
     const targetIndices = new Set(grpRows.map((item) => item.idx));
-
     setServices((prev) =>
       prev.map((g, i) => {
         if (i !== groupIndex) return g;
@@ -379,14 +365,12 @@ export default function ShopServicesTab({
     );
   };
 
-  // ตั้งวิธีคิดราคาให้ทุกแถวในกลุ่มเดียวกัน (ค่าเก็บต่อแถวใน service_detail แต่กำหนดเป็นระดับกลุ่ม)
   const setGroupPriceType = (
     groupIndex: number,
     grpRows: { row: ServiceDetailRow; idx: number }[],
     value: PriceType
   ) => {
     const targetIndices = new Set(grpRows.map((item) => item.idx));
-
     setServices((prev) =>
       prev.map((g, i) => {
         if (i !== groupIndex) return g;
@@ -424,9 +408,7 @@ export default function ShopServicesTab({
                   detail: "",
                   group_type: grp.name,
                   price: "",
-                  // แถวใหม่ในกลุ่มเดิมใช้ค่าเดียวกับกลุ่ม
                   is_required: grp.rows.some((r) => !!r.row.is_required),
-                  // แถวใหม่ในกลุ่มเดิมใช้วิธีคิดราคาเดียวกับกลุ่ม
                   price_type: getGroupPriceType(grp.rows),
                 },
               ],
@@ -438,7 +420,6 @@ export default function ShopServicesTab({
 
   const addNewGroup = (groupIndex: number) => {
     const err = allErrors[groupIndex] ?? emptyErrors;
-
     if (hasFieldErrors(err)) {
       setErrorScope((prev) => ({ ...prev, [groupIndex]: true }));
       focusFirstInvalid(groupIndex);
@@ -459,7 +440,6 @@ export default function ShopServicesTab({
     grpRows: { row: ServiceDetailRow; idx: number }[]
   ) => {
     const targetIndices = new Set(grpRows.map((item) => item.idx));
-
     setServices((prev) =>
       prev.map((g, i) => {
         if (i !== groupIndex) return g;
@@ -485,6 +465,26 @@ export default function ShopServicesTab({
     field: "detail" | "price" | "price_type",
     value: string
   ) => {
+    // จำกัดให้กรอกได้เฉพาะตัวเลขและจุดทศนิยม ในช่องราคา
+    if (field === "price") {
+      const sanitized = value.replace(/[^0-9.]/g, "");
+      // ป้องกันจุดทศนิยมซ้ำซ้อน
+      const parts = sanitized.split(".");
+      const validPrice = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : sanitized;
+      
+      setServices((prev) =>
+        prev.map((g, i) =>
+          i === groupIndex
+            ? {
+                ...g,
+                items: g.items.map((r, rI) => (rI === rowIdx ? { ...r, [field]: validPrice } : r)),
+              }
+            : g
+        )
+      );
+      return;
+    }
+
     setServices((prev) =>
       prev.map((g, i) =>
         i === groupIndex
@@ -510,7 +510,7 @@ export default function ShopServicesTab({
     }
     const ok = await onSave();
     if (ok) {
-      snapshotRef.current = null; // บันทึกสำเร็จ ไม่ต้องย้อนค่าแล้ว
+      snapshotRef.current = null;
       setIsEditing(false);
       resetValidation();
     }
@@ -524,7 +524,6 @@ export default function ShopServicesTab({
   };
 
   const handleCancel = () => {
-    // ย้อน services กลับเป็นค่าก่อนเริ่มแก้ไข (ทิ้งสิ่งที่เพิ่ม/แก้ระหว่างนั้นทั้งหมด)
     if (snapshotRef.current) {
       setServices(snapshotRef.current);
       snapshotRef.current = null;
@@ -541,7 +540,6 @@ export default function ShopServicesTab({
           !isVerified ? "pointer-events-none blur-[2px] select-none" : ""
         }`}
       >
-        {/* Header Section */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
             <h2 className="text-base font-bold text-[#0F2942]">บริการพิมพ์และราคา</h2>
@@ -561,7 +559,6 @@ export default function ShopServicesTab({
           )}
         </div>
 
-        {/* View Mode */}
         {!isEditing ? (
           <div className="space-y-6">
             {services.length === 0 ? (
@@ -642,14 +639,12 @@ export default function ShopServicesTab({
             )}
           </div>
         ) : (
-          /* Edit Mode */
           <div ref={editRef} className="space-y-6">
             {services.map((group, gIdx) => {
               const groupedRows = groupItems(group.items, true);
               const isPreset = SERVICE_TYPE_TEMPLATES.includes(group.type);
               const isCustomMode = customTypeIndexes[gIdx] || (!isPreset && group.type !== "");
-              const selectValue =
-                group.type === "" ? "" : isPreset ? group.type : OTHER_OPTION;
+              const selectValue = group.type === "" ? "" : isPreset ? group.type : OTHER_OPTION;
 
               const err = allErrors[gIdx] ?? emptyErrors;
               const showErr = attemptedSave || !!errorScope[gIdx];
@@ -689,13 +684,14 @@ export default function ShopServicesTab({
 
                         {isCustomMode && (
                           <input
+                            maxLength={50}
                             value={group.type}
                             onChange={(e) =>
                               setServices((prev) =>
                                 prev.map((g, i) => (i === gIdx ? { ...g, type: e.target.value } : g))
                               )
                             }
-                            placeholder="พิมพ์ระบุประเภทบริการเอง..."
+                            placeholder="พิมพ์ระบุประเภทบริการเอง (สูงสุด 50 ตัวอักษร)"
                             autoFocus
                             aria-invalid={!!typeErr}
                             className={`flex-1 rounded-lg border bg-white px-2.5 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none ${
@@ -721,9 +717,7 @@ export default function ShopServicesTab({
                   <div className="p-4 space-y-3">
                     {groupedRows.map((grp, grpIdx) => {
                       const nameErr = showErr ? err.groupName[grp.rows[0].idx] : undefined;
-                      const priceTypeErr = showErr
-                        ? err.groupPriceType[grp.rows[0].idx]
-                        : undefined;
+                      const priceTypeErr = showErr ? err.groupPriceType[grp.rows[0].idx] : undefined;
 
                       return (
                         <div
@@ -736,9 +730,10 @@ export default function ShopServicesTab({
                             <div className="flex flex-wrap items-center gap-2">
                               <Tag size={13} className="text-slate-300 shrink-0" />
                               <input
+                                maxLength={50}
                                 value={grp.name}
                                 onChange={(e) => renameGroup(gIdx, grp.rows, e.target.value)}
-                                placeholder="ชื่อกลุ่ม เช่น ขนาดกระดาษ"
+                                placeholder="ชื่อกลุ่ม เช่น ขนาดกระดาษ (สูงสุด 50 ตัวอักษร)"
                                 aria-invalid={!!nameErr}
                                 className={`min-w-[120px] flex-1 bg-transparent text-xs font-semibold outline-none ${
                                   nameErr
@@ -798,9 +793,10 @@ export default function ShopServicesTab({
                                 <div key={row.id || `item-${idx}`} className="px-3 py-2">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <input
+                                      maxLength={100}
                                       value={row.detail}
                                       onChange={(e) => updateRow(gIdx, idx, "detail", e.target.value)}
-                                      placeholder="เช่น A4 ขาวดำ"
+                                      placeholder="เช่น A4 ขาวดำ (สูงสุด 100 ตัวอักษร)"
                                       aria-invalid={!!rowErr?.detail}
                                       className={`min-w-[120px] flex-1 rounded-md border bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none ${
                                         rowErr?.detail
@@ -809,11 +805,12 @@ export default function ShopServicesTab({
                                       }`}
                                     />
                                     <div
-                                      className={`flex w-28 shrink-0 items-center gap-1 rounded-md border bg-white px-2.5 py-1.5 ${
+                                      className={`flex w-32 shrink-0 items-center gap-1 rounded-md border bg-white px-2.5 py-1.5 ${
                                         rowErr?.price ? "border-rose-400" : "border-slate-200"
                                       }`}
                                     >
                                       <input
+                                        maxLength={10}
                                         value={row.price}
                                         onChange={(e) => updateRow(gIdx, idx, "price", e.target.value)}
                                         placeholder="0"
@@ -878,12 +875,11 @@ export default function ShopServicesTab({
               >
                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
                 <span>
-                  กรุณากรอกข้อมูลให้ครบถ้วนก่อนบันทึก (เหลือ {totalErrors} จุดที่ต้องแก้ไข)
+                  กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง (เหลือ {totalErrors} จุดที่ต้องแก้ไข)
                 </span>
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
               <button
                 type="button"
@@ -906,7 +902,6 @@ export default function ShopServicesTab({
         )}
       </div>
 
-      {/* Lock Overlay */}
       {!isVerified && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/70 backdrop-blur-xs">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">

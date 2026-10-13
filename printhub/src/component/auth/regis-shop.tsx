@@ -15,11 +15,11 @@ type RegisFormProps = {
 const MapPicker = dynamic(() => import("./map"), { ssr: false });
 
 function isValidThaiIDCard(id: string): boolean {
-  return /^\d{13}$/.test(id);
+  return /^\d{13}\$/.test(id);
 }
 
 function isValidThaiPhone(phone: string): boolean {
-  return /^0[689]\d{8}$/.test(phone);
+  return /^0[689]\d{8}\$/.test(phone);
 }
 
 export default function RegisFormShop({ setRegis }: RegisFormProps) {
@@ -97,8 +97,16 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
 
   // ข้อความ error ของแต่ละช่อง ("" = ผ่าน)
   const errors: Record<string, string> = {
-    shop_name: shopData.shop_name.trim() ? "" : "กรุณากรอกชื่อร้านค้า",
-    id_name: shopData.id_name.trim() ? "" : "กรุณากรอกชื่อในบัตรประชาชน",
+    shop_name: !shopData.shop_name.trim()
+      ? "กรุณากรอกชื่อร้านค้า"
+      : shopData.shop_name.length > 100
+      ? "ชื่อร้านค้าต้องไม่เกิน 100 ตัวอักษร"
+      : "",
+    id_name: !shopData.id_name.trim()
+      ? "กรุณากรอกชื่อในบัตรประชาชน"
+      : shopData.id_name.length > 100
+      ? "ชื่อในบัตรต้องไม่เกิน 100 ตัวอักษร"
+      : "",
     id_card: !shopData.id_card
       ? "กรุณากรอกเลขบัตรประชาชน"
       : !isValidThaiIDCard(shopData.id_card)
@@ -111,6 +119,8 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
       : "",
     email: !shopData.email.trim()
       ? "กรุณากรอกอีเมล"
+      : shopData.email.length > 100
+      ? "อีเมลต้องไม่เกิน 100 ตัวอักษร"
       : !isValidEmail(shopData.email)
       ? EMAIL_FORMAT_ERROR
       : "",
@@ -122,11 +132,13 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
     location:
       shopData.latitude === 0 || shopData.longitude === 0
         ? "กรุณาเลือกตำแหน่งร้านบนแผนที่"
+        : shopData.location.length > 250
+        ? "รายละเอียดที่อยู่ต้องไม่เกิน 250 ตัวอักษร"
         : "",
     bank: shopData.bank ? "" : "กรุณาเลือกธนาคาร",
     bank_number: !shopData.bank_number
       ? "กรุณากรอกเลขบัญชีธนาคาร"
-      : !/^\d{10,12}$/.test(shopData.bank_number)
+      : !/^\d{10,12}\$/.test(shopData.bank_number)
       ? `เลขบัญชีธนาคารต้องเป็นตัวเลข 10-12 หลัก (กรอกแล้ว ${shopData.bank_number.length} หลัก)`
       : "",
     password: isPasswordValid(shopData.password) ? "" : "invalid",
@@ -219,7 +231,8 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
           <div>
             <input
               type="text"
-              placeholder="ชื่อร้านค้า"
+              maxLength={100}
+              placeholder="ชื่อร้านค้า (สูงสุด 100 ตัวอักษร)"
               value={shopData.shop_name}
               onChange={(e) =>
                 setShopData({ ...shopData, shop_name: e.target.value })
@@ -233,7 +246,8 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
           <div>
             <input
               type="text"
-              placeholder="ชื่อในบัตรประชาชน"
+              maxLength={100}
+              placeholder="ชื่อในบัตรประชาชน (สูงสุด 100 ตัวอักษร)"
               value={shopData.id_name}
               onChange={(e) =>
                 setShopData({
@@ -304,7 +318,8 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
           <div>
             <input
               type="email"
-              placeholder="Email"
+              maxLength={100}
+              placeholder="Email (สูงสุด 100 ตัวอักษร)"
               value={shopData.email}
               onChange={(e) =>
                 setShopData({ ...shopData, email: e.target.value })
@@ -355,15 +370,20 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             <FieldError message={show("location")} />
           </div>
 
-          <input
-            type="text"
-            placeholder="รายละเอียดที่อยู่ (เช่น ชื่อซอย/ถนน/จุดสังเกต)"
-            value={shopData.location}
-            onChange={(e) =>
-              setShopData({ ...shopData, location: e.target.value })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-          />
+          <div>
+            <input
+              type="text"
+              maxLength={250}
+              placeholder="รายละเอียดที่อยู่ (เช่น ชื่อซอย/ถนน/จุดสังเกต) (สูงสุด 250 ตัวอักษร)"
+              value={shopData.location}
+              onChange={(e) =>
+                setShopData({ ...shopData, location: e.target.value })
+              }
+              onBlur={() => touch("location")}
+              className={inputCls(!!show("location"))}
+            />
+            <FieldError message={show("location")} />
+          </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -454,6 +474,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
+                maxLength={50}
                 placeholder="รหัสผ่าน"
                 value={shopData.password}
                 onChange={(e) =>
@@ -481,6 +502,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             <div className="relative">
               <input
                 type={showConfirmPassword ? "text" : "password"}
+                maxLength={50}
                 placeholder="ยืนยันรหัสผ่าน"
                 value={shopData.confirmPassword}
                 onChange={(e) =>
@@ -613,9 +635,9 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
                   <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
                   1. เงื่อนไขสำหรับร้านค้าพาร์ทเนอร์
                 </h4>
-                <p className="pl-3">• ร้านค้าต้องระบุข้อมูลสถานที่ พิกัด และเอกสารยืนยันตัวตน (รูปคู่บัตรประชาชน) ที่ถูกต้องตรงตามจริง</p>
-                <p className="pl-3">• หากมีการแก้ไขข้อมูลบัญชีธนาคาร จะต้องผ่านการตรวจสอบและอนุมัติจากผู้ดูแลระบบ (Admin) ใหม่</p>
-                <p className="pl-3">• ร้านค้าต้องให้บริการงานพิมพ์ด้วยความซื่อสัตย์และรักษามาตรฐานตามที่แพลตฟอร์มกำหนด</p>
+                <p className="pl-3">• ร้านค้าต้องระบุข้อมูลสถานที่ พิกัด และเอกสารยืนยันตัวตน (รูปคู่บัตรประชาชน) ที่ถูกต้องตรงตามจริง[cite: 8]</p>
+                <p className="pl-3">• หากมีการแก้ไขข้อมูลบัญชีธนาคาร จะต้องผ่านการตรวจสอบและอนุมัติจากผู้ดูแลระบบ (Admin) ใหม่[cite: 8]</p>
+                <p className="pl-3">• ร้านค้าต้องให้บริการงานพิมพ์ด้วยความซื่อสัตย์และรักษามาตรฐานตามที่แพลตฟอร์มกำหนด[cite: 8]</p>
               </div>
 
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
@@ -623,8 +645,8 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
                   <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
                   2. นโยบายความเป็นส่วนตัว (PDPA)
                 </h4>
-                <p className="pl-3">• <strong>การจัดเก็บข้อมูล:</strong> จัดเก็บข้อมูลผู้ประกอบการ บัตรประชาชน และบัญชีธนาคารเพื่อยืนยันตัวตนและโอนเงินรายได้</p>
-                <p className="pl-3">• <strong>ความปลอดภัย:</strong> ข้อมูลบัตรประชาชนจะถูกเก็บเป็นความลับสูงสุด ใช้สำหรับตรวจสอบความถูกต้องโดยแอดมินเท่านั้น</p>
+                <p className="pl-3">• <strong>การจัดเก็บข้อมูล:</strong> จัดเก็บข้อมูลผู้ประกอบการ บัตรประชาชน และบัญชีธนาคารเพื่อยืนยันตัวตนและโอนเงินรายได้[cite: 8]</p>
+                <p className="pl-3">• <strong>ความปลอดภัย:</strong> ข้อมูลบัตรประชาชนจะถูกเก็บเป็นความลับสูงสุด ใช้สำหรับตรวจสอบความถูกต้องโดยแอดมินเท่านั้น[cite: 8]</p>
               </div>
             </div>
 

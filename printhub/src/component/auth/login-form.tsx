@@ -12,9 +12,8 @@ type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-// 🟢 ปรับ Fallback หรือลบ Slash ท้าย URL ป้องกัน URL ซ้ำซ้อน
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const API_URL = rawApiUrl.replace(/\/+$/, "");
+const API_URL = rawApiUrl.replace(/\/+\$/, "");
 
 export default function LoginForm({ setRegis }: RegisFormProps) {
   const router = useRouter();
@@ -28,8 +27,6 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
   const [touched, setTouched] = useState({ contact: false, password: false });
   const [submitted, setSubmitted] = useState(false);
 
-  // หน้า login ตรวจแค่รูปแบบอีเมล + ห้ามเว้นว่าง
-  // (ไม่ตรวจความซับซ้อนรหัสผ่าน เพราะบัญชีเก่าอาจตั้งรหัสไว้ก่อนมีกฎนี้)
   const contactTrim = logindata.contact.trim();
   const errors = {
     contact: !contactTrim
@@ -58,7 +55,6 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
         return;
       }
 
-      // ล้างข้อมูลของบัญชีก่อนหน้า ไม่งั้น shop_id / customer_id เก่าจะค้างและทำให้หน้าอื่นอ่านผิดบัญชี
       ["token", "id", "customer_id", "shop_id", "shop_name", "user_email", "username"].forEach(
         (k) => localStorage.removeItem(k)
       );
@@ -82,7 +78,6 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
           router.push("/shop");
           break;
         default:
-          // 🟢 แก้ไขจุดนี้: บันทึกทั้ง id, customer_id และ user_email เพื่อให้ระบบแชตรู้ว่าใครล็อกอิน
           localStorage.setItem("id", res.data.id);
           localStorage.setItem("customer_id", res.data.id);
           localStorage.setItem("user_email", contact);
@@ -147,7 +142,8 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
           <div>
             <input
               type="email"
-              placeholder="อีเมล (Email)"
+              maxLength={100}
+              placeholder="อีเมล (Email) (สูงสุด 100 ตัวอักษร)"
               value={logindata.contact}
               className={`w-full rounded-xl border px-4 py-3 text-sm text-slate-800 placeholder:text-gray-400 outline-none transition focus:border-[#001B3A] focus:ring-1 focus:ring-[#001B3A] ${
                 showContact ? "border-red-400" : "border-gray-200"
@@ -164,7 +160,8 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
-                placeholder="รหัสผ่าน"
+                maxLength={50}
+                placeholder="รหัสผ่าน (สูงสุด 50 ตัวอักษร)"
                 value={logindata.password}
                 className={`w-full rounded-xl border px-4 py-3 pr-10 text-sm text-slate-800 placeholder:text-gray-400 outline-none transition focus:border-[#001B3A] focus:ring-1 focus:ring-[#001B3A] ${
                   showPasswordErr ? "border-red-400" : "border-gray-200"
