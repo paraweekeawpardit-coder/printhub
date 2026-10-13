@@ -3,6 +3,7 @@
 import {
   useEffect,
   useState,
+  useRef,
   ChangeEvent,
   FormEvent,
 } from "react";
@@ -18,12 +19,13 @@ interface OrderItem {
 
 interface OrderData {
   id: string;
+  order_no?: string | number;
   order_date?: string;
   customer_id?: string;
   shop_id?: string;
   description?: string;
   total_price?: number | string;
-  has_reported?: boolean; // เพิ่มฟิลด์เช็กว่าเคยรายงานหรือยัง
+  has_reported?: boolean;
 
   print_shop?: {
     shop_name?: string;
@@ -106,7 +108,7 @@ function PreviewFile({
         type="button"
         onClick={() => onRemove(index)}
         aria-label={`ลบไฟล์ ${file.name}`}
-        className="absolute top-3 right-3 z-10 bg-red-500/90 hover:bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm shadow-md transition-all active:scale-95"
+        className="absolute top-3 right-3 z-10 bg-red-500/90 hover:bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm shadow-md transition-all active:scale-95 cursor-pointer"
       >
         ✕
       </button>
@@ -118,21 +120,14 @@ export default function RefundRequestPage() {
   const params = useParams();
   const router = useRouter();
 
-  const rawOrderId =
-    params?.order_id || params?.orderId;
+  const rawOrderId = params?.order_id || params?.orderId;
+  const orderId = Array.isArray(rawOrderId) ? rawOrderId[0] : (rawOrderId as string);
 
-  const orderId = Array.isArray(rawOrderId)
-    ? rawOrderId[0]
-    : (rawOrderId as string);
+  const [orderData, setOrderData] = useState<OrderData | null>(null);
+  const [loadingOrder, setLoadingOrder] = useState(true);
+  const [orderError, setOrderError] = useState("");
 
-  const [orderData, setOrderData] =
-    useState<OrderData | null>(null);
-
-  const [loadingOrder, setLoadingOrder] =
-    useState(true);
-
-  const [orderError, setOrderError] =
-    useState("");
+  const [exactOrderNo, setExactOrderNo] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     issueType: "",
@@ -143,23 +138,41 @@ export default function RefundRequestPage() {
     accountName: "",
   });
 
-  const [existingReport, setExistingReport] = useState<any | null>(null);
-
+  const [existingReport, setExistingReport] = useState<boolean>(false);
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
 
   const fetchOrderDetail = async (id: string) => {
     setLoadingOrder(true);
     setOrderError("");
 
     try {
-      // ใช้ API เดิมตัวนี้ตัวเดียวจบ เพราะเราพ่วง has_reported มาด้วยแล้ว
       const url = `http://localhost:5000/api/customer/order/${id}/review`;
       const res = await fetch(url);
       const result = await res.json();
 
       if (res.ok && result.success) {
-        setOrderData(result.data);
+        const currentOrder = result.data;
+        setOrderData(currentOrder);
+
+        if (currentOrder.customer_id) {
+          try {
+            const dashRes = await fetch(`http://localhost:5000/api/customer/dashboard?customer_id=${currentOrder.customer_id}`);
+            const dashJson = await dashRes.json();
+
+            if (dashRes.ok && dashJson.success && Array.isArray(dashJson.data?.orders)) {
+              const matchedOrder = dashJson.data.orders.find((o: any) => o.id === id);
+              if (matchedOrder) {
+                const calculatedNo = matchedOrder.order_no || matchedOrder.id?.slice(0, 6);
+                setExactOrderNo(calculatedNo);
+              }
+            }
+          } catch (dashErr) {
+            console.error("Could not fetch dashboard order details:", dashErr);
+          }
+        }
       } else {
         setOrderError(result.message || "ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้");
       }
@@ -172,48 +185,39 @@ export default function RefundRequestPage() {
   };
 
   useEffect(() => {
-    if (
-      orderId &&
-      orderId !== "undefined"
-    ) {
+    if (orderId && orderId !== "undefined") {
       fetchOrderDetail(orderId);
     } else {
       setLoadingOrder(false);
-      setOrderError(
-        "ไม่พบรหัสคำสั่งซื้อ"
-      );
+      setOrderError("ไม่พบรหัสคำสั่งซื้อ");
     }
   }, [orderId]);
 
-  const handleInputChange = (
-    e: ChangeEvent<
-      HTMLInputElement |
-      HTMLSelectElement |
-      HTMLTextAreaElement
-    >
-  ) => {
-    const {
-      name,
-      value,
-    } = e.target;
+  // 🌟 อัปเดต HTML Validation message ให้ Dummy input ทันทีเมื่อไฟล์เปลี่ยนแปลง
+  useEffect(() => {
+    if (hiddenInputRef.current) {
+      if (files.length === 0) {
+        hiddenInputRef.current.setCustomValidity("กรุณาแนบรูปภาพหรือไฟล์หลักฐานอย่างน้อย 1 ไฟล์เพื่อดำเนินการต่อ");
+      } else {
+        hiddenInputRef.current.setCustomValidity("");
+      }
+    }
+  }, [files]);
 
+  const handleInputChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
 
-  const handleFileUpload = (
-    e: ChangeEvent<HTMLInputElement>
-  ) => {
-    if (e.target.files) {
+  const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
-
-      setFiles((prev) => [
-        ...prev,
-        ...newFiles,
-      ]);
-
+      setFiles((prev) => [...prev, ...newFiles]);
       e.target.value = "";
     }
   };
@@ -225,20 +229,8 @@ export default function RefundRequestPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!orderId) {
-      alert("ไม่พบรหัสคำสั่งซื้อ");
-      return;
-    }
-
-    if (!orderData) {
-      alert("ไม่พบข้อมูลคำสั่งซื้อ");
-      return;
-    }
-
-    if (!formData.issueType) {
-      alert("กรุณาเลือกประเภทปัญหา");
-      return;
-    }
+    if (!orderId || !orderData) return;
+    if (files.length === 0) return;
 
     setSubmitting(true);
 
@@ -258,22 +250,19 @@ export default function RefundRequestPage() {
         data.append("image", files[0]);
       }
 
-      const res = await fetch(
-        "http://localhost:5000/api/customer/report",
-        {
-          method: "POST",
-          body: data,
-        }
-      );
+      const res = await fetch("http://localhost:5000/api/customer/report", {
+        method: "POST",
+        body: data,
+      });
 
       const result = await res.json();
 
       if (res.ok && result.success) {
-        alert(result.message || "ส่งคำร้องขอคืนเงิน/แจ้งปัญหาเรียบร้อยแล้ว");
+        // 🌟 นำ alert ออกแล้ว นำทางไปยังหน้าคำสั่งซื้อของฉันทันที
         router.push("/customer/orders");
       } else {
         alert(result.message || result.error || "ไม่สามารถส่งคำร้องได้");
-        setExistingReport(true); // ปิดฟอร์มทันทีหากซ้ำ
+        setExistingReport(true);
       }
     } catch (err) {
       console.error("❌ Submit Report Error:", err);
@@ -282,6 +271,9 @@ export default function RefundRequestPage() {
       setSubmitting(false);
     }
   };
+
+  const displayOrderNo = exactOrderNo || orderData?.order_no || orderId?.slice(0, 6) || "------";
+  const orderNumberStr = `#ORD-${displayOrderNo}`;
 
   const Navbar = () => (
     <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30">
@@ -295,18 +287,14 @@ export default function RefundRequestPage() {
           </Link>
 
           <h1 className="font-bold text-lg text-slate-900 truncate">
-            รายงานปัญหา / ขอคืนเงิน
+            ขอคืนเงิน
           </h1>
         </div>
 
         {orderId && orderId !== "undefined" && (
-          <Link
-            href={`/customer/orders/${orderId}/review`}
-            className="shrink-0 text-xs sm:text-sm text-slate-400 hover:text-slate-700 font-mono transition"
-            title="เปิดรายละเอียดคำสั่งซื้อ"
-          >
-            Order #{orderId.slice(0, 8)}
-          </Link>
+          <span className="font-extrabold text-slate-900 text-sm sm:text-base tracking-tight shrink-0">
+            {orderNumberStr}
+          </span>
         )}
       </div>
     </header>
@@ -341,9 +329,7 @@ export default function RefundRequestPage() {
               <h2 className="mt-4 text-lg font-bold text-gray-900">
                 ไม่สามารถโหลดข้อมูลคำสั่งซื้อ
               </h2>
-              <p className="mt-2 text-sm text-gray-500">
-                {orderError}
-              </p>
+              <p className="mt-2 text-sm text-gray-500">{orderError}</p>
               <button
                 type="button"
                 onClick={() => router.back()}
@@ -403,7 +389,6 @@ export default function RefundRequestPage() {
           </div>
         </div>
 
-        {/* 🛑 เช็กเงื่อนไขจากทั้ง existingReport และ orderData.has_reported */}
         {existingReport || orderData?.has_reported ? (
           <div className="bg-white rounded-2xl shadow-sm border border-amber-200 p-8 text-center space-y-4">
             <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">
@@ -413,7 +398,8 @@ export default function RefundRequestPage() {
               คุณได้ส่งคำร้องขอคืนเงินสำหรับคำสั่งซื้อนี้ไปแล้ว
             </h2>
             <p className="text-sm text-gray-500 max-w-md mx-auto">
-              ระบบได้รับคำร้องของคุณเรียบร้อยแล้ว อยู่ระหว่างการตรวจสอบ คุณสามารถติดตามสถานะคำสั่งซื้อได้จากเมนูคำสั่งซื้อของฉัน
+              ระบบได้รับคำร้องของคุณเรียบร้อยแล้ว อยู่ระหว่างการตรวจสอบ
+              คุณสามารถติดตามสถานะคำสั่งซื้อได้จากเมนูคำสั่งซื้อของฉัน
             </p>
             <div className="pt-4">
               <Link
@@ -426,10 +412,7 @@ export default function RefundRequestPage() {
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <form
-              onSubmit={handleSubmit}
-              className="space-y-6"
-            >
+            <form onSubmit={handleSubmit} className="space-y-6">
               {/* 1. รายละเอียดปัญหา */}
               <section className="space-y-3">
                 <h2 className="text-base font-semibold text-gray-900 border-b pb-2">
@@ -438,8 +421,7 @@ export default function RefundRequestPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    เลือกประเภทปัญหา{" "}
-                    <span className="text-red-500">*</span>
+                    เลือกประเภทปัญหา <span className="text-red-500">*</span>
                   </label>
 
                   <select
@@ -453,7 +435,9 @@ export default function RefundRequestPage() {
                       เลือกประเภทปัญหา
                     </option>
                     <option value="color">สีเพี้ยน / ไม่ตรงตามไฟล์งาน</option>
-                    <option value="paper">ชนิดกระดาษ / ขนาด ไม่ตรงตามที่สั่ง</option>
+                    <option value="paper">
+                      ชนิดกระดาษ / ขนาด ไม่ตรงตามที่สั่ง
+                    </option>
                     <option value="damaged">งานพิมพ์ชำรุด / ยับ / เป็นรอย</option>
                     <option value="quantity">ได้สินค้าไม่ครบตามจำนวน</option>
                     <option value="delay">จัดส่งล่าช้า</option>
@@ -477,17 +461,22 @@ export default function RefundRequestPage() {
                 </div>
               </section>
 
-              {/* 2. หลักฐาน */}
+              {/* 2. หลักฐานการขอคืนเงิน */}
               <section className="space-y-3">
-                <h2 className="text-base font-semibold text-gray-900 border-b pb-2">
-                  หลักฐาน
+                <h2 className="text-base font-semibold text-gray-900 border-b pb-2 flex items-center justify-between">
+                  <span>
+                    หลักฐานการขอคืนเงิน <span className="text-red-500">*</span>
+                  </span>
+                  <span className="text-xs font-normal text-slate-400">
+                    บังคับแนบไฟล์อย่างน้อย 1 ไฟล์
+                  </span>
                 </h2>
 
                 <p className="text-xs text-gray-500">
                   แนบรูปถ่าย หรือ ไฟล์ที่มีปัญหา (JPG, PNG, PDF)
                 </p>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3 relative">
                   {files.map((file, idx) => (
                     <PreviewFile
                       key={`${file.name}-${file.lastModified}-${idx}`}
@@ -497,24 +486,35 @@ export default function RefundRequestPage() {
                     />
                   ))}
 
-                  <label className="w-28 h-24 rounded-xl border-2 border-dashed border-blue-200 hover:border-blue-500 bg-blue-50/50 hover:bg-blue-50 flex flex-col items-center justify-center cursor-pointer transition-all text-blue-600 text-xs font-medium gap-1">
-                    <span className="text-2xl leading-none">+</span>
-                    <span>แนบไฟล์เพิ่ม</span>
+                  <div className="relative">
+                    <label className="w-28 h-24 rounded-xl border-2 border-dashed border-blue-200 hover:border-blue-500 bg-blue-50/50 hover:bg-blue-50 flex flex-col items-center justify-center cursor-pointer transition-all text-blue-600 text-xs font-medium gap-1">
+                      <span className="text-2xl leading-none">+</span>
+                      <span>แนบไฟล์</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*,.pdf"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {/* Invisible input สำหรับ trigger Native HTML Validation Tooltip ตรงปุ่มแนบไฟล์ */}
                     <input
-                      type="file"
-                      multiple
-                      accept="image/*,.pdf"
-                      onChange={handleFileUpload}
-                      className="hidden"
+                      ref={hiddenInputRef}
+                      type="text"
+                      required
+                      value={files.length > 0 ? "VALID" : ""}
+                      onChange={() => { }}
+                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 opacity-0 pointer-events-none"
+                      tabIndex={-1}
                     />
-                  </label>
+                  </div>
                 </div>
 
                 {files.length > 0 && (
-                  <p className="text-xs text-slate-400">
-                    แนบแล้ว {files.length} ไฟล์
-                    {" · "}
-                    รูปภาพจะแสดงตัวอย่างทันที
+                  <p className="text-xs text-emerald-600 font-medium">
+                    ✓ แนบแล้ว {files.length} ไฟล์
                   </p>
                 )}
               </section>
@@ -543,43 +543,46 @@ export default function RefundRequestPage() {
                   <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
-                        ธนาคาร
+                        ธนาคาร <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         name="bankName"
+                        required
                         placeholder="เช่น กสิกรไทย"
                         value={formData.bankName}
                         onChange={handleInputChange}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-600 focus:outline-none"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-600 focus:outline-none bg-white"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
-                        เลขที่บัญชี
+                        เลขที่บัญชี <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         name="accountNumber"
+                        required
                         placeholder="xxx-x-xxxxx-x"
                         value={formData.accountNumber}
                         onChange={handleInputChange}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-600 focus:outline-none"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-600 focus:outline-none bg-white"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
-                        ชื่อบัญชี
+                        ชื่อบัญชี <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         name="accountName"
+                        required
                         placeholder="ชื่อบัญชีธนาคาร"
                         value={formData.accountName}
                         onChange={handleInputChange}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-600 focus:outline-none"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-600 focus:outline-none bg-white"
                       />
                     </div>
                   </div>
@@ -590,7 +593,7 @@ export default function RefundRequestPage() {
               <div className="pt-2 flex flex-col-reverse sm:flex-row gap-3">
                 <Link
                   href="/customer/orders"
-                  className="w-full sm:w-1/2 bg-white hover:bg-gray-50 text-gray-700 font-medium py.2.5 rounded-xl transition-all border border-gray-300 active:scale-[0.99] text-center"
+                  className="w-full sm:w-1/2 bg-white hover:bg-gray-50 text-gray-700 font-medium py-2.5 rounded-xl transition-all border border-gray-300 active:scale-[0.99] text-center"
                 >
                   ยกเลิกคำร้อง
                 </Link>
@@ -598,9 +601,9 @@ export default function RefundRequestPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full sm:w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/10 active:scale-[0.99] disabled:bg-gray-400"
+                  className="w-full sm:w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/10 active:scale-[0.99] disabled:bg-gray-400 cursor-pointer"
                 >
-                  {submitting ? "กำลังส่งคำร้อง..." : "ส่งคำร้อง"}
+                  {submitting ? "กำลังส่งคำร้อง..." : "ส่งคำร้องขอคืนเงิน"}
                 </button>
               </div>
             </form>

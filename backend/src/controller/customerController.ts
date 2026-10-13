@@ -370,3 +370,46 @@ export const checkOrderStatusReported = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };
+
+
+// ==========================================
+// ดึงรายการร้านค้าทั้งหมด พร้อมคำนวณคะแนนและจำนวนรีวิว
+// ==========================================
+export const getShops = async (req: Request, res: Response) => {
+  try {
+    // 1. ดึงข้อมูลร้านค้าพร้อมรีวิว (ปรับชื่อตาราง print_shop หรือ print_shops ตามฐานข้อมูลของคุณ)
+    const { data: shops, error } = await supabase
+      .from("print_shop")
+      .select(`
+        *,
+        reviews: review ( score )
+      `);
+
+    if (error) {
+      console.error("Fetch shops error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    // 2. คำนวณ rating และ review_count ให้กับแต่ละร้าน
+    const formattedShops = (shops || []).map((shop: any) => {
+      const shopReviews = shop.reviews || [];
+      const review_count = shopReviews.length;
+      const totalScore = shopReviews.reduce((sum: number, r: any) => sum + Number(r.score || 0), 0);
+      const rating = review_count > 0 ? Number((totalScore / review_count).toFixed(1)) : 0;
+
+      return {
+        ...shop,
+        rating,
+        review_count,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: formattedShops,
+    });
+  } catch (err: any) {
+    console.error("Get Shops Exception:", err);
+    return res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+};
