@@ -50,25 +50,19 @@ export default function CustomerOrderCard({
   // 1. ตรวจสอบข้อมูล payment
   const rawPayment = order?.payment || order?.payment_detail || order?.payments;
   const paymentData = Array.isArray(rawPayment) ? rawPayment[0] : rawPayment;
-<<<<<<< HEAD
-  const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
-  const refundSlipUrl = paymentData?.refund_slip_url || null;
-
-=======
 
   const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
   const refundSlipUrl = paymentData?.refund_slip_url || null;
 
   // ตรวจจับว่ามีการจ่ายเงิน/แนบสลิปแล้วหรือไม่
-  const hasPaidSlip = Boolean(
-    paymentData?.slip_url ||
-    paymentStatus === "paid" ||
-    paymentStatus === "refunded" ||
-    paymentStatus === "pending_payout" ||
-    order?.payment_id
-  );
+  // const hasPaidSlip = Boolean(
+  //   paymentData?.slip_url ||
+  //   paymentStatus === "paid" ||
+  //   paymentStatus === "refunded" ||
+  //   paymentStatus === "pending_payout" ||
+  //   order?.payment_id
+  // );
 
->>>>>>> f71358e11e3152dbf80c688dae1addf6d0084645
   const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
 
   // 🌟 จุดแก้สำคัญ: ถ้าสลิปโดนปฏิเสธ (isSlipRejected) ต้องถือว่า "ยังไม่มีสลิปที่ถูกต้อง" (hasPaidSlip = false)
@@ -310,14 +304,8 @@ export default function CustomerOrderCard({
 
           <div className="flex items-center justify-between md:justify-end gap-3.5">
             <div className="flex items-center gap-2 flex-wrap">
-<<<<<<< HEAD
-              
-              {/* 🌟 1. แสดงป้ายสลิปไม่ถูกต้อง "เฉพาะตอนที่ยังไม่หมดเวลา" เท่านั้น */}
-              {isSlipRejected && !isCanceled && !isPaymentExpired && (
-=======
 
               {isSlipRejected && !isCanceled && (
->>>>>>> f71358e11e3152dbf80c688dae1addf6d0084645
                 <span className="text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 px-2 py-1 rounded-xl flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 text-rose-500" />
                   สลิปไม่ถูกต้อง แนบใหม่ก่อนหมดเวลา
