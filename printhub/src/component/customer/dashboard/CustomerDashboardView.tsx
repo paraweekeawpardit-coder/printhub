@@ -95,6 +95,42 @@ export default function CustomerDashboardView({
       (typeof o.status === "string" ? o.status : null) ||
       "";
 
+<<<<<<< HEAD
+    if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก") {
+      return "ยกเลิกการพิมพ์";
+    }
+
+    const now = Date.now();
+    const rawPayment = o?.payment || o?.payment_detail || o?.payments;
+    const paymentData = Array.isArray(rawPayment) ? rawPayment[0] : rawPayment;
+    const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
+    
+    const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
+
+    // 🌟 ดักให้ถ้าโดน reject ถือว่ายังไม่จ่าย
+    const hasPaidSlip = Boolean(
+      (!isSlipRejected && paymentData?.slip_url) || 
+      paymentStatus === "paid" || 
+      paymentStatus === "refunded"
+    );
+
+    const expiresAtMs = parseSafeTime(o?.expires_at);
+    const orderDateMs = parseSafeTime(o?.order_date);
+
+    let isPaymentExpired = false;
+    if (expiresAtMs) {
+      isPaymentExpired = now >= expiresAtMs;
+    } else if (orderDateMs) {
+      isPaymentExpired = now >= (orderDateMs + 10 * 60 * 1000);
+    }
+
+    // 🌟 หมดเวลา -> ยกเลิกการพิมพ์
+    if ((dbState === "รอการชำระเงิน" || isSlipRejected) && isPaymentExpired) {
+      return "ยกเลิกการพิมพ์";
+    }
+
+    if (isSlipRejected && !isPaymentExpired) {
+=======
     // 1. ถ้าระบุชัดเจนใน DB ว่ายกเลิก ให้ยึดเป็นยกเลิกการพิมพ์ทันที
     if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก" || dbState === "cancelled") {
       return "ยกเลิกการพิมพ์";
@@ -140,6 +176,7 @@ export default function CustomerDashboardView({
     }
 
     if (isSlipRejected) {
+>>>>>>> f71358e11e3152dbf80c688dae1addf6d0084645
       return "รอการชำระเงิน";
     }
 
@@ -259,7 +296,7 @@ export default function CustomerDashboardView({
           showToast("ยกเลิกคำสั่งซื้อเรียบร้อยแล้ว");
           if (cid) fetchDashboardData(cid);
         } else {
-          showToast(data.error || "ไม่สามารถยกเลิกได้");
+          showToast(data.message || data.error || "ไม่สามารถยกเลิกได้");
         }
       } else if (type === "received") {
         const res = await fetch(`http://localhost:5000/api/customer/order/${orderId}/confirm-received`, {
@@ -270,7 +307,7 @@ export default function CustomerDashboardView({
           showToast("ยืนยันรับงานสำเร็จ คุณสามารถรีวิวร้านค้าได้แล้ว");
           if (cid) fetchDashboardData(cid);
         } else {
-          showToast(data.error || "เกิดข้อผิดพลาดในการยืนยันรับงาน");
+          showToast(data.message || data.error || "เกิดข้อผิดพลาดในการยืนยันรับงาน");
         }
       }
     } catch (err) {
@@ -308,7 +345,7 @@ export default function CustomerDashboardView({
         setReportImageUrl("");
         if (cid) fetchDashboardData(cid);
       } else {
-        showToast(data.error || "ไม่สามารถส่งคำขอได้");
+        showToast(data.message || data.error || "ไม่สามารถส่งคำขอได้");
       }
     } catch (err) {
       console.error(err);

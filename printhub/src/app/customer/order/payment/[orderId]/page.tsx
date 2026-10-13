@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import NavBar from '../../../../../component/customer/NavBar';
 import { PaymentTimer } from '../../../../../component/customer/payment/payment_timer';
@@ -22,24 +22,19 @@ export default function PaymentPage() {
   const [orderData, setOrderData] = useState<OrderDetails | null>(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState<boolean>(true);
 
-  // จัดการเวลานับถอยหลัง
-  const [targetExpiryTime, setTargetExpiryTime] = useState<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState<number>(600);
-  const [isExpired, setIsExpired] = useState<boolean>(false);
-
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // ฟังก์ชันแปลงเวลาแบบปลอดภัย ป้องกัน Timezone เพี้ยน (แปลง UTC ให้ตรงกับเวลาไทย)
+  // 🛠️ 1. ฟังก์ชันแปลงเวลาแบบปลอดภัย ป้องกัน Timezone เพี้ยน (แก้เป็น +07:00)
   const parseSafeTimestamp = (dateStr?: string | null): number | null => {
     if (!dateStr) return null;
     try {
       let cleaned = String(dateStr).trim();
       if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
-        cleaned = `${cleaned.replace(" ", "T")}Z`;
+        cleaned = `${cleaned.replace(" ", "T")}+07:00`; // 👈 รองรับเวลาไทย GMT+7
       }
       const parsed = new Date(cleaned).getTime();
       return isNaN(parsed) ? null : parsed;
@@ -48,17 +43,38 @@ export default function PaymentPage() {
     }
   };
 
+  // 🌟 2. ดึงและคำนวณ Timestamp เป้าหมายเริ่มต้นจาก URL
+  const initialTargetMs = useMemo(() => {
+    if (paramExpiresAt) {
+      return parseSafeTimestamp(paramExpiresAt);
+    }
+    return null;
+  }, [paramExpiresAt]);
+
+  const [targetExpiryTime, setTargetExpiryTime] = useState<number | null>(initialTargetMs);
+
+  // 🌟 3. ตั้งค่า timeLeft เริ่มต้น
+  const [timeLeft, setTimeLeft] = useState<number>(() => {
+    if (initialTargetMs) {
+      return Math.max(0, Math.floor((initialTargetMs - Date.now()) / 1000));
+    }
+    return 600;
+  });
+
+  const [isExpired, setIsExpired] = useState<boolean>(() => {
+    if (initialTargetMs) {
+      return initialTargetMs <= Date.now();
+    }
+    return false;
+  });
+
   // ยกเลิกคำสั่งซื้ออัตโนมัติเมื่อหมดเวลาชำระเงิน
   const handleTimeoutCancelOrder = async () => {
     if (!orderId) return;
     try {
-      await fetch(`http://localhost:5000/api/customer/orders/${orderId}/cancel`, {
+      await fetch(`http://localhost:5000/api/customer/order/${orderId}/cancel-timeout`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status_id: '9aee439b-3d24-4b4e-8d68-d9b63081b80c',
-          reason: 'หมดเวลาชำระเงิน',
-        }),
       });
       sessionStorage.removeItem('pending_order_data');
       if (orderId) {
@@ -69,7 +85,7 @@ export default function PaymentPage() {
     }
   };
 
-  // Timer Effect: คำนวณเวลานับถอยหลังต่อจาก targetExpiryTime
+  // 🌟 4. Timer Effect: วิ่งนับถอยหลังตาม targetExpiryTime จริง
   useEffect(() => {
     if (!targetExpiryTime || isLoadingOrder) return;
 
@@ -100,7 +116,7 @@ export default function PaymentPage() {
     return () => clearInterval(timer);
   }, [targetExpiryTime, isLoadingOrder, orderId]);
 
-  // โหลดข้อมูลคำสั่งซื้อและคำนวณเวลาหมดอายุที่แท้จริง
+  // 🌟 5. โหลดข้อมูลคำสั่งซื้อและดึง expires_at ล่าสุดจาก Backend
   useEffect(() => {
     let isMounted = true;
 
@@ -127,13 +143,13 @@ export default function PaymentPage() {
 
       try {
         const customerId = localStorage.getItem('customer_id') || localStorage.getItem('id') || '';
-        const res = await fetch(`http://localhost:5000/api/customer/orders?customer_id=${customerId}`, {
+        const res = await fetch(`http://localhost:5000/api/customer/dashboard?customer_id=${customerId}`, {
           cache: "no-store",
         });
 
         if (res.ok) {
           const result = await res.json();
-          const orderList = Array.isArray(result.data) ? result.data : [];
+          const orderList = Array.isArray(result.data?.orders) ? result.data.orders : [];
           const apiOrder = orderList.find((o: any) => String(o.id) === String(orderId));
 
           if (apiOrder && isMounted) {
@@ -146,22 +162,13 @@ export default function PaymentPage() {
               const now = Date.now();
               let targetMs: number | null = null;
 
-              // 1. ดึงเวลาเป้าหมายจาก URL Parameter หรือ Database
-              const rawExpiry = paramExpiresAt || apiOrder.expires_at;
+              // 🌟 ให้ความสำคัญกับ expires_at จาก Database หรือ URL ก่อนเสมอ
+              const rawExpiry = apiOrder.expires_at || paramExpiresAt;
               if (rawExpiry) {
                 targetMs = parseSafeTimestamp(rawExpiry);
               }
 
-              // 2. ถ้าใน DB และ URL ไม่มี ให้ดึงเวลาที่เคยบันทึกไว้ใน localStorage
-              const storageKey = `payment_expiry_${orderId}`;
-              if (!targetMs || isNaN(targetMs)) {
-                const savedTime = localStorage.getItem(storageKey);
-                if (savedTime) {
-                  targetMs = Number(savedTime);
-                }
-              }
-
-              // 3. ถ้าไม่มีอีก ให้คำนวณจาก order_date + 10 นาที
+              // Fallback: ถ้าไม่มี expires_at ให้นับจาก order_date + 10 นาที
               if (!targetMs || isNaN(targetMs)) {
                 const orderTime = parseSafeTimestamp(apiOrder.order_date || apiOrder.created_at);
                 if (orderTime) {
@@ -169,19 +176,15 @@ export default function PaymentPage() {
                 }
               }
 
-              // 4. กรณีเพิ่งสั่งซื้อใหม่จริง ๆ ให้ตั้งเวลา 10 นาที
-              if (!targetMs || isNaN(targetMs)) {
-                targetMs = now + 10 * 60 * 1000;
-              }
-
-              localStorage.setItem(storageKey, targetMs.toString());
-              setTargetExpiryTime(targetMs);
-
-              if (targetMs <= now) {
-                setIsExpired(true);
-                setTimeLeft(0);
-              } else {
-                setTimeLeft(Math.floor((targetMs - now) / 1000));
+              if (targetMs && !isNaN(targetMs)) {
+                setTargetExpiryTime(targetMs);
+                if (targetMs <= now) {
+                  setIsExpired(true);
+                  setTimeLeft(0);
+                  handleTimeoutCancelOrder();
+                } else {
+                  setTimeLeft(Math.floor((targetMs - now) / 1000));
+                }
               }
             }
 
@@ -215,38 +218,17 @@ export default function PaymentPage() {
         console.warn('Cannot fetch order list from backend:', err);
       }
 
-      // Fallback จาก sessionStorage
-      try {
-        const savedSessionData = sessionStorage.getItem('pending_order_data');
-        if (savedSessionData && isMounted) {
-          const parsedData = JSON.parse(savedSessionData);
-          if (parsedData && (parsedData.id === orderId || !orderId) && parsedData.items?.length > 0) {
-            setOrderData(parsedData);
-            
-            const storageKey = `payment_expiry_${orderId}`;
-            let expiryMs = Number(localStorage.getItem(storageKey));
-            if (!expiryMs || isNaN(expiryMs)) {
-              expiryMs = Date.now() + 600 * 1000;
-              localStorage.setItem(storageKey, expiryMs.toString());
-            }
-            setTargetExpiryTime(expiryMs);
-            setIsLoadingOrder(false);
-            return;
-          }
-        }
-      } catch (e) {
-        console.error('Error reading sessionStorage:', e);
-      }
-
+      // Fallback กรณีโหลด API ไม่สำเร็จ
       if (isMounted) {
         setOrderData(emptyFallbackData);
-        const storageKey = `payment_expiry_${orderId}`;
-        let expiryMs = Number(localStorage.getItem(storageKey));
-        if (!expiryMs || isNaN(expiryMs)) {
-          expiryMs = Date.now() + 600 * 1000;
-          localStorage.setItem(storageKey, expiryMs.toString());
+        let expiryMs: number | null = null;
+        if (paramExpiresAt) {
+          expiryMs = parseSafeTimestamp(paramExpiresAt);
         }
-        setTargetExpiryTime(expiryMs);
+        if (expiryMs && !isNaN(expiryMs)) {
+          setTargetExpiryTime(expiryMs);
+          setTimeLeft(Math.max(0, Math.floor((expiryMs - Date.now()) / 1000)));
+        }
         setIsLoadingOrder(false);
       }
     }
@@ -295,15 +277,6 @@ export default function PaymentPage() {
         if (orderId) {
           localStorage.removeItem(`payment_expiry_${orderId}`);
         }
-
-        // if (customerId) {
-        //   fetch('http://localhost:5000/api/customer/cart', {
-        //     method: 'DELETE',
-        //     headers: { 'Content-Type': 'application/json' },
-        //     body: JSON.stringify({ customer_id: customerId }),
-        //   }).catch(console.error);
-        // }
-
         setShowSuccessModal(true);
       } else {
         setErrorMessage(data.message || data.error || 'เกิดข้อผิดพลาดในการอัปโหลดสลิป');
@@ -318,9 +291,7 @@ export default function PaymentPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <NavBar 
-        onOpenCart={() => router.push('/customer/cart')}
-      />
+      <NavBar onOpenCart={() => router.push('/customer/cart')} />
 
       <div className="p-6 flex-1 flex justify-center items-start">
         <div className="w-full max-w-5xl">
@@ -350,7 +321,7 @@ export default function PaymentPage() {
                   <div className="p-6 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-2">
                     <p className="font-bold text-rose-700 text-base">หมดเวลาในการชำระเงิน</p>
                     <p className="text-xs text-rose-600 leading-relaxed">
-                      คำสั่งซื้อนี้ถูกเปลี่ยนสถานะเป็น <b>"ยกเลิกการพิมพ์"</b> โดยอัตโนมัติเนื่องจากเกินระยะเวลาที่กำหนด[cite: 31]
+                      คำสั่งซื้อนี้ถูกเปลี่ยนสถานะเป็น <b>"ยกเลิกการพิมพ์"</b> โดยอัตโนมัติเนื่องจากเกินระยะเวลาที่กำหนด
                     </p>
                     <button
                       type="button"
