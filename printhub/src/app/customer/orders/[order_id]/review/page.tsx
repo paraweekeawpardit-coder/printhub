@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, ChangeEvent } from "react";
+import React, { useState, useEffect, useRef, ChangeEvent } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -23,12 +23,13 @@ interface OrderItem {
 
 interface OrderData {
   id: string;
+  order_no?: string | number;
   order_date?: string;
   customer_id?: string;
   shop_id?: string;
   description?: string;
   total_price?: number | string;
-  has_reviewed?: boolean; // 👈 สถานะเช็กว่าเคยรีวิวแล้วหรือยัง
+  has_reviewed?: boolean;
   has_reported?: boolean;
   print_shop?: {
     shop_name?: string;
@@ -104,7 +105,7 @@ function PreviewFile({ file, index, onRemove }: PreviewFileProps) {
         type="button"
         onClick={() => onRemove(index)}
         aria-label={`ลบไฟล์ ${file.name}`}
-        className="absolute top-2 right-2 z-10 bg-red-500/90 hover:bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs shadow-md transition-all active:scale-95"
+        className="absolute top-2 right-2 z-10 bg-red-500/90 hover:bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs shadow-md transition-all active:scale-95 cursor-pointer"
       >
         ✕
       </button>
@@ -125,6 +126,8 @@ export default function OrderReviewPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [dbError, setDbError] = useState<string>("");
 
+  const [exactOrderNo, setExactOrderNo] = useState<string | null>(null);
+
   // Review State
   const [rating, setRating] = useState<number>(0);
   const [hoverRating, setHoverRating] = useState<number>(0);
@@ -133,6 +136,10 @@ export default function OrderReviewPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+
+  // Ref สำหรับส่วนให้คะแนนดาว
+  const ratingSectionRef = useRef<HTMLDivElement>(null);
+  const hiddenRatingInputRef = useRef<HTMLInputElement>(null);
 
   const fetchOrderDetail = async (id: string) => {
     setLoading(true);
@@ -151,7 +158,25 @@ export default function OrderReviewPage() {
       }
 
       if (res.ok && result.success) {
-        setOrderData(result.data);
+        const currentOrder = result.data;
+        setOrderData(currentOrder);
+
+        if (currentOrder.customer_id) {
+          try {
+            const dashRes = await fetch(`http://localhost:5000/api/customer/dashboard?customer_id=${currentOrder.customer_id}`);
+            const dashJson = await dashRes.json();
+
+            if (dashRes.ok && dashJson.success && Array.isArray(dashJson.data?.orders)) {
+              const matchedOrder = dashJson.data.orders.find((o: any) => o.id === id);
+              if (matchedOrder) {
+                const calculatedNo = matchedOrder.order_no || matchedOrder.id?.slice(0, 6);
+                setExactOrderNo(calculatedNo);
+              }
+            }
+          } catch (dashErr) {
+            console.error("Could not fetch dashboard order details:", dashErr);
+          }
+        }
       } else {
         setDbError(result.message || `ไม่สามารถโหลดข้อมูลคำสั่งซื้อได้ (HTTP ${res.status})`);
       }
@@ -197,21 +222,19 @@ export default function OrderReviewPage() {
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 🛑 บล็อกฝั่ง Frontend อีกชั้นหากเคยรีวิวไปแล้ว
-    if (orderData?.has_reviewed) {
-      alert("คำสั่งซื้อนี้ได้รับการรีวิวไปแล้ว ไม่สามารถส่งซ้ำได้ครับ");
-      return;
-    }
+    if (orderData?.has_reviewed) return;
 
+    // 🛑 บังคับเลือกดาว โดยไม่ใช้ alert
     if (rating === 0) {
-      alert("กรุณาให้คะแนนดาวก่อนยืนยันครับ");
+      ratingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (hiddenRatingInputRef.current) {
+        hiddenRatingInputRef.current.setCustomValidity("โปรดให้คะแนน");
+        hiddenRatingInputRef.current.reportValidity();
+      }
       return;
     }
 
-    if (!activeOrderId || !orderData?.customer_id || !orderData?.shop_id) {
-      alert("ข้อมูลคำสั่งซื้อไม่ครบถ้วน กรุณาลองใหม่อีกครั้ง");
-      return;
-    }
+    if (!activeOrderId || !orderData?.customer_id || !orderData?.shop_id) return;
 
     setSubmitting(true);
 
@@ -242,21 +265,18 @@ export default function OrderReviewPage() {
       }
 
       if (res.ok && result.success) {
-        alert("บันทึกรีวิวสำเร็จเรียบร้อย!");
+        // 🌟 ส่งสำเร็จแล้วย้ายหน้าทันที ไร้ข้อความกวนใจ
         router.push("/customer/orders");
-      } else {
-        alert("เกิดข้อผิดพลาด: " + (result.message || "ไม่สามารถบันทึกรีวิวได้"));
       }
     } catch (err) {
-      if (err instanceof Error) {
-        alert(err.message);
-      } else {
-        alert("เชื่อมต่อเซิร์ฟเวอร์เพื่อบันทึกรีวิวไม่สำเร็จ");
-      }
+      console.error("Submit review error:", err);
     } finally {
       setSubmitting(false);
     }
   };
+
+  const displayOrderNo = exactOrderNo || orderData?.order_no || activeOrderId?.slice(0, 6) || "------";
+  const orderNumberStr = `#ORD-${displayOrderNo}`;
 
   if (loading) {
     return (
@@ -313,8 +333,8 @@ export default function OrderReviewPage() {
           </div>
 
           {activeOrderId && activeOrderId !== "undefined" && (
-            <span className="text-xs text-slate-400 font-mono">
-              Order #{activeOrderId.slice(0, 8)}
+            <span className="font-extrabold text-slate-900 text-sm sm:text-base tracking-tight shrink-0">
+              {orderNumberStr}
             </span>
           )}
         </div>
@@ -363,14 +383,14 @@ export default function OrderReviewPage() {
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <span className="text-xs text-slate-400 block">หมายเลขออร์เดอร์</span>
-                <span className="text-sm font-bold text-slate-800 font-mono">
-                  #{orderData?.id ? orderData.id.slice(0, 8) : "-"}
+                <span className="text-sm font-extrabold text-slate-900 tracking-tight">
+                  {orderNumberStr}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={handleCopyUuid}
-                className="flex items-center gap-1 text-[11px] font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg transition"
+                className="flex items-center gap-1 text-[11px] font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied ? "คัดลอกแล้ว" : "คัดลอก UUID"}
@@ -423,7 +443,6 @@ export default function OrderReviewPage() {
           {/* Review Form (7 ส่วน) */}
           <div className="md:col-span-7 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
 
-            {/* 🛑 บล็อกเมื่อเคยรีวิวซ้ำ */}
             {orderData?.has_reviewed ? (
               <div className="py-8 px-4 text-center space-y-4">
                 <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
@@ -451,28 +470,51 @@ export default function OrderReviewPage() {
                 <div className="border-b border-slate-100 pb-2">
                   <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
                     <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                    เขียนรีวิวความประทับใจ
+                    เขียนรีวิวความประทับใจ <span className="text-red-500">*</span>
                   </h3>
                 </div>
 
                 <form onSubmit={handleSubmitReview} className="space-y-4">
-                  {/* ให้คะแนนดาว */}
-                  <div className="text-center space-y-2 py-1">
-                    <p className="text-xs text-slate-500 font-medium">ระดับความพึงพอใจ</p>
+                  <div ref={ratingSectionRef} className="text-center space-y-2 py-1 relative">
+                    <p className="text-xs text-slate-500 font-medium">
+                      ระดับความพึงพอใจ <span className="text-red-500">*</span>
+                    </p>
+
+                    <input
+                      ref={hiddenRatingInputRef}
+                      type="text"
+                      required={rating === 0}
+                      value={rating > 0 ? String(rating) : ""}
+                      onChange={() => { }}
+                      onInvalid={(e) => {
+                        (e.target as HTMLInputElement).setCustomValidity("โปรดให้คะแนน");
+                      }}
+                      onInput={(e) => {
+                        (e.target as HTMLInputElement).setCustomValidity("");
+                      }}
+                      className="opacity-0 absolute pointer-events-none w-1 h-1 bottom-0 left-1/2 -translate-x-1/2"
+                      tabIndex={-1}
+                    />
+
                     <div className="flex justify-center gap-2 text-3xl">
                       {[1, 2, 3, 4, 5].map((star) => (
                         <button
                           type="button"
                           key={star}
-                          onClick={() => setRating(star)}
+                          onClick={() => {
+                            setRating(star);
+                            if (hiddenRatingInputRef.current) {
+                              hiddenRatingInputRef.current.setCustomValidity("");
+                            }
+                          }}
                           onMouseEnter={() => setHoverRating(star)}
                           onMouseLeave={() => setHoverRating(0)}
-                          className="hover:scale-110 transition active:scale-125 focus:outline-none"
+                          className="hover:scale-110 transition active:scale-125 focus:outline-none cursor-pointer"
                         >
                           <Star
                             className={`w-8 h-8 ${(hoverRating || rating) >= star
-                                ? "text-amber-400 fill-amber-400"
-                                : "text-slate-200"
+                              ? "text-amber-400 fill-amber-400"
+                              : "text-slate-200"
                               }`}
                           />
                         </button>
@@ -480,7 +522,6 @@ export default function OrderReviewPage() {
                     </div>
                   </div>
 
-                  {/* ความคิดเห็นเพิ่มเติม */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-700 block">
                       ความคิดเห็นเพิ่มเติม
@@ -494,7 +535,6 @@ export default function OrderReviewPage() {
                     />
                   </div>
 
-                  {/* อัปโหลดไฟล์ (PDF/Image) พร้อมพรีวิวขนาดใหญ่ */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-700 block">
                       แนบรูปถ่าย / ไฟล์รีวิวผลงาน (ไม่บังคับ)
@@ -528,11 +568,10 @@ export default function OrderReviewPage() {
                     </div>
                   </div>
 
-                  {/* ปุ่มบันทึก */}
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition shadow-md shadow-blue-500/20 disabled:bg-slate-300"
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition shadow-md shadow-blue-500/20 disabled:bg-slate-300 cursor-pointer"
                   >
                     {submitting ? "กำลังบันทึก..." : "ยืนยันรีวิว"}
                   </button>

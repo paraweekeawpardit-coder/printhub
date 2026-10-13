@@ -120,6 +120,8 @@ export interface IMessage {
   time?: string;
   is_read?: boolean;
   isRead?: boolean;
+  is_unsent?: boolean; // 🟢 เพิ่ม type รองรับ snake_case
+  isUnsent?: boolean;  // 🟢 เพิ่ม type รองรับ camelCase
   createdAt?: Date;
 }
 
@@ -132,7 +134,7 @@ const MessageSchema = new Schema(
       default: "order",
     },
     roomId: { type: String, index: true },
-    orderId: { type: String, required: true, index: true }, // Field หลักของ DB
+    orderId: { type: String, required: true, index: true },
     orderNo: { type: String, default: null, index: true },
     customerId: { type: String, default: null },
     shopId: { type: String, default: null },
@@ -146,6 +148,9 @@ const MessageSchema = new Schema(
     images: { type: [String], default: [] },
     time: { type: String, required: true },
     isRead: { type: Boolean, default: false },
+    // 🟢 บันทึกทั้งสองฟิลด์ใน DB เพื่อไม่ให้หลุดตอนโหลดประวัติใหม่หลัง F5
+    isUnsent: { type: Boolean, default: false },
+    is_unsent: { type: Boolean, default: false },
   },
   { timestamps: true, collection: "messages" }
 );
@@ -161,7 +166,6 @@ export async function sendAdminNotification(data: {
   orderId?: string;
 }) {
   try {
-    // 1. ดึง Admin คนแรกจาก Supabase
     const { data: adminUser } = await supabase
       .from("admin")
       .select("id")
@@ -170,7 +174,6 @@ export async function sendAdminNotification(data: {
 
     const adminId = adminUser?.id || null;
 
-    // 2. Insert บันทึกลงตาราง notifications ใน Supabase
     const { data: newNoti, error } = await supabase
       .from("notifications")
       .insert({
@@ -188,7 +191,6 @@ export async function sendAdminNotification(data: {
 
     if (error) console.error("❌ Error inserting admin notification:", error);
 
-    // 3. ยิง Socket ให้กระดิ่งและ Toast ฝั่ง Admin เด้ง Realtime
     io.emit("new_admin_notification", newNoti || {
       title: data.title,
       message: data.message,
@@ -228,7 +230,6 @@ async function checkCanSendMessage(roomId: string, chatType: string): Promise<bo
 io.on("connection", (socket) => {
   console.log(`⚡ User connected: ${socket.id}`);
 
-  // 🟢 Socket Listener สำหรับเวลามีคำร้องเรียนใหม่
   socket.on("report_issue", async (issueData: { ticketId: string; title?: string; message?: string; orderId?: string }) => {
     const ticketShort = (issueData.ticketId || "").slice(0, 8);
     await sendAdminNotification({
@@ -286,13 +287,12 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Backward compatibility
   socket.on("join_order_chat", async (orderId: string) => {
     if (!orderId || orderId === "undefined" || orderId === "null") return;
     socket.emit("join_chat_room", { roomId: orderId });
   });
 
-  // 🟢 Send Message Event
+  // Send Message Event
   socket.on("send_message", async (data: IMessage) => {
     const targetRoomId = data.roomId || data.room_id || data.orderId || data.print_order_id;
     if (!targetRoomId || targetRoomId === "undefined" || targetRoomId === "null") return;
@@ -337,7 +337,6 @@ io.on("connection", (socket) => {
         }
       }
 
-      // บันทึกลง MongoDB Collection "messages"
       const newMessage = new Message({
         chatType,
         roomId: targetRoomId,
@@ -351,14 +350,14 @@ io.on("connection", (socket) => {
         images: imageList,
         time: data.time || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         isRead: false,
+        isUnsent: false,
+        is_unsent: false,
       });
 
       const savedMessage = await newMessage.save();
 
-      // บรอดแคสต์ข้อความไปยังห้องเป้าหมาย
       io.to(targetRoomId).emit("receive_message", savedMessage);
       
-      // กระจายไปยังรูปแบบ ID สลับกัน
       if (targetRoomId.includes("support_customer_")) {
         io.to(targetRoomId.replace("support_customer_", "support_cust_")).emit("receive_message", savedMessage);
       } else if (targetRoomId.includes("support_cust_")) {
@@ -370,6 +369,46 @@ io.on("connection", (socket) => {
 
     } catch (error) {
       console.error("❌ Error saving message to DB:", error);
+    }
+  });
+
+  // 🟢 Unsend Message Event (ปรับการค้นหาให้อัปเดตทั้ง id จาก Date.now() และ _id จาก MongoDB)
+  socket.on("unsend_message", async (data: { messageId: string; roomId: string }) => {
+    const { messageId, roomId } = data;
+    if (!messageId || !roomId) return;
+
+    try {
+      // 🟢 ค้นหาด้วย $or ทั้ง _id ของ MongoDB หรือ id ชั่วคราวฝั่ง Frontend
+      const queryConditions: any[] = [{ id: messageId }];
+      if (mongoose.Types.ObjectId.isValid(messageId)) {
+        queryConditions.push({ _id: messageId });
+      }
+
+      await Message.updateMany(
+        { $or: queryConditions },
+        {
+          $set: {
+            isUnsent: true,
+            is_unsent: true,
+            text: "",
+            message: "",
+            images: [],
+          },
+        }
+      );
+
+      io.to(roomId).emit("message_unsent", { messageId });
+
+      if (roomId.includes("support_customer_")) {
+        io.to(roomId.replace("support_customer_", "support_cust_")).emit("message_unsent", { messageId });
+      } else if (roomId.includes("support_cust_")) {
+        io.to(roomId.replace("support_cust_", "support_customer_")).emit("message_unsent", { messageId });
+      }
+
+      console.log(`🗑️ Message ${messageId} unsent in room: ${roomId}`);
+    } catch (error) {
+      console.error("❌ Error unsending message in DB:", error);
+      socket.emit("error_message", { message: "เกิดข้อผิดพลาดในการยกเลิกข้อความ" });
     }
   });
 
@@ -468,7 +507,7 @@ app.get("/api/admin/chat-support/rooms", async (req: Request, res: Response) => 
           ],
         },
       },
-      { $sort: { createdAt: -1 } },       {$group: {
+      { $sort: { createdAt: -1 } }, {$group: {
           _id: {
             $cond: [
               { $regexMatch: { input: {$ifNull: ["$roomId", "$orderId"] }, regex: /^support_cust_/ } },
@@ -563,7 +602,7 @@ app.get("/api/chat/shop-summary/:shopId", async (req: Request, res: Response) =>
     const { shopId } = req.params;
 
     const chatSummaries = await Message.aggregate([
-      { $sort: { createdAt: -1 } },       {$group: {
+      { $sort: { createdAt: -1 } }, {$group: {
           _id: "$orderId",
           roomId: { $first: "$roomId" },
           latest_message: { $first: "$text" },
@@ -633,7 +672,7 @@ app.get("/api/chat/shop-orders", async (req: Request, res: Response) => {
     }
 
     const chatSummaries = await Message.aggregate([
-      { $sort: { createdAt: -1 } },       {$group: {
+      { $sort: { createdAt: -1 } }, {$group: {
           _id: "$orderId",
           roomId: { $first: "$roomId" },
           latestMessage: { $first: "$text" },

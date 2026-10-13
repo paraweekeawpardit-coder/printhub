@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { 
@@ -12,7 +12,7 @@ import {
   Settings, 
   LogOut,
   LayoutDashboard,
-  Headset, // 👈 เพิ่ม Headset Icon สำหรับ Support Chat
+  Headset,
   Bell
 } from "lucide-react";
 import NotificationBell from "@/component/NotificationBell";
@@ -23,60 +23,140 @@ interface NavBarProps {
   onOpenCart?: () => void;
 }
 
-export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProps) {
+export default function CustomerNavBar({ cartCount: propCartCount, onOpenCart }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string>("");
+  const [internalCartCount, setInternalCartCount] = useState<number>(0);
 
+  // 1. ดึง customerId ของผู้ใช้ และรูป Avatar
   useEffect(() => {
-    const getUserId = async () => {
-      // 1. ลองดึงจาก localStorage ตรงๆ
+    const getUserIdAndAvatar = async () => {
+      // 1.1 ดึง ID จาก localStorage
       const directCustomerId =
         localStorage.getItem("customer_id") ||
         localStorage.getItem("user_id") ||
         localStorage.getItem("userId") ||
         localStorage.getItem("id");
 
-      if (directCustomerId) {
-        setCustomerId(directCustomerId);
-        return;
-      }
+      let effectiveId = directCustomerId;
 
-      // 2. แกะจาก object 'user' หรือ 'customer'
-      const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
-      if (userStr) {
-        try {
-          const user = JSON.parse(userStr);
-          const actualId =
-            user.customer_id ||
-            user.id ||
-            user.user_id ||
-            user.customer?.id ||
-            user.customer?.customer_id;
-
-          if (actualId) {
-            setCustomerId(String(actualId));
-            return;
+      // 1.2 แกะจาก object 'user' หรือ 'customer'
+      if (!effectiveId) {
+        const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            effectiveId =
+              user.customer_id ||
+              user.id ||
+              user.user_id ||
+              user.customer?.id ||
+              user.customer?.customer_id;
+          } catch (e) {
+            console.error("Error parsing user data:", e);
           }
-        } catch (e) {
-          console.error("Error parsing user data:", e);
         }
       }
 
-      // 3. สำรอง: ดึงตรงจาก Supabase Auth Session เผื่อไม่ได้ลง localStorage
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user?.id) {
-        setCustomerId(data.session.user.id);
+      // 1.3 สำรอง: ดึงตรงจาก Supabase Auth Session
+      if (!effectiveId) {
+        const { data } = await supabase.auth.getSession();
+        effectiveId = data?.session?.user?.id || null;
+      }
+
+      if (effectiveId) {
+        setCustomerId(String(effectiveId));
+
+        // 🟢 ดึงรูป Avatar จาก localStorage ก่อน (เพื่อความเร็ว)
+        const cachedAvatar = localStorage.getItem("user_avatar");
+        if (cachedAvatar) {
+          setUserAvatar(cachedAvatar);
+        }
+
+        // 🟢 ดึงคอลัมน์ avatar ล่าสุดจากตาราง customer ใน Supabase
+        const { data: customerRow } = await supabase
+          .from("customer")
+          .select("avatar")
+          .eq("id", effectiveId)
+          .maybeSingle();
+
+        if (customerRow?.avatar) {
+          setUserAvatar(customerRow.avatar);
+          localStorage.setItem("user_avatar", customerRow.avatar);
+        }
       }
     };
 
-    getUserId();
+    getUserIdAndAvatar();
+
+    // 🟢 ฟัง Event เมื่อมีการอัปเดตโปรไฟล์จากหน้าอื่น เพื่ออัปเดตรูปบน Navbar ทันที
+    const handleProfileUpdate = () => {
+      const updatedAvatar = localStorage.getItem("user_avatar");
+      if (updatedAvatar) {
+        setUserAvatar(updatedAvatar);
+      }
+    };
+
+    window.addEventListener("profileUpdated", handleProfileUpdate);
+    return () => {
+      window.removeEventListener("profileUpdated", handleProfileUpdate);
+    };
   }, []);
+
+  // 2. ฟังก์ชันดึงยอดสินค้าในตะกร้าจาก API โดยตรง (งานเพื่อน)
+  const fetchGlobalCartCount = useCallback(async (cid: string) => {
+    try {
+      if (!cid || cid.startsWith("customer_")) return;
+
+      const res = await fetch(`http://localhost:5000/api/customer/cart?customer_id=${cid}`, {
+        cache: "no-store",
+      });
+      const json = await res.json();
+
+      if (json.success && json.data) {
+        let totalCount = 0;
+
+        if (typeof json.data.total_items === "number") {
+          totalCount = json.data.total_items;
+        } else if (Array.isArray(json.data.shops)) {
+          totalCount = json.data.shops.reduce(
+            (sum: number, s: any) => sum + (s.items?.length || 0),
+            0
+          );
+        } else if (Array.isArray(json.data.cart_items)) {
+          totalCount = json.data.cart_items.length;
+        } else if (Array.isArray(json.data.cart_item)) {
+          totalCount = json.data.cart_item.length;
+        }
+
+        setInternalCartCount(totalCount);
+      } else {
+        setInternalCartCount(0);
+      }
+    } catch (err) {
+      console.error("NavBar fetch cart error:", err);
+    }
+  }, []);
+
+  // ยิงดึงข้อมูลใหม่ทุกครั้งที่สลับหน้า หรือเมื่อได้ customerId
+  useEffect(() => {
+    if (customerId) {
+      fetchGlobalCartCount(customerId);
+    }
+  }, [pathname, customerId, fetchGlobalCartCount]);
+
+  // กำหนดตัวเลขที่จะแสดง: ถ้าหน้าเพจส่ง prop มาและมากกว่า 0 ให้ใช้ค่านั้น ถ้าไม่ส่งมาให้ใช้ค่าที่ดึงเองจาก API
+  const displayCartCount =
+    typeof propCartCount === "number" && propCartCount > 0
+      ? propCartCount
+      : internalCartCount;
 
   // ตรวจจับ active path
   const isHomeActive = pathname === "/customer" || pathname === "/";
   const isOrdersActive = pathname.startsWith("/customer/orders") || pathname.startsWith("/customer/order");
-  const isSupportActive = pathname.startsWith("/customer/support"); // 👈 เช็ก active state ของหน้า support
+  const isSupportActive = pathname.startsWith("/customer/support");
   const isSettingActive = pathname.startsWith("/customer/setting") || pathname.startsWith("/customer/profile");
   const isDashboardActive = pathname.startsWith("/customer/dashboard");
 
@@ -88,6 +168,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
       localStorage.removeItem("user_id");
       localStorage.removeItem("userId");
       localStorage.removeItem("user");
+      localStorage.removeItem("user_avatar");
       localStorage.removeItem("token");
       sessionStorage.clear();
     }
@@ -112,9 +193,8 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
           </span>
         </Link>
 
-        {/* เมนูหลักตรงกลาง (หน้าแรก / คำสั่งซื้อของฉัน / ติดต่อแอดมิน) */}
+        {/* เมนูหลักตรงกลาง */}
         <div className="flex items-center gap-1 text-sm font-medium">
-          {/* หน้าแรก */}
           <Link
             href="/customer"
             title="หน้าแรก"
@@ -130,7 +210,6 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </span>
           </Link>
 
-          {/* คำสั่งซื้อของฉัน */}
           <Link
             href="/customer/orders"
             title="คำสั่งซื้อของฉัน"
@@ -146,7 +225,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </span>
           </Link>
 
-          {/* 🟢 ติดต่อแอดมิน (Support Chat) */}
+          {/* ติดต่อแอดมิน */}
           <Link
             href="/customer/support"
             title="ติดต่อแอดมิน"
@@ -163,10 +242,10 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
           </Link>
         </div>
 
-        {/* ฝั่งขวา: การแจ้งเตือน, ตะกร้า, แดชบอร์ด (ข้างซ้ายรูปโปรไฟล์), รูปโปรไฟล์, ออกจากระบบ */}
+        {/* ฝั่งขวา */}
         <div className="flex items-center gap-2">
           
-          {/* กระดิ่งแจ้งเตือนสำหรับลูกค้า */}
+          {/* กระดิ่งแจ้งเตือน */}
           {customerId ? (
             <NotificationBell userId={customerId} role="customer" />
           ) : (
@@ -179,7 +258,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </button>
           )}
 
-          {/* ตะกร้าสินค้า */}
+          {/* ตะกร้าสินค้า (แสดงตัวเลขตามที่ดึงได้เสมอ) */}
           <button
             type="button"
             onClick={onOpenCart || (() => router.push("/customer/cart"))}
@@ -187,14 +266,14 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             className="relative flex items-center justify-center w-9 h-9 rounded-full text-slate-500 hover:text-[#0F2942] hover:bg-slate-100 transition-colors focus:outline-none cursor-pointer"
           >
             <ShoppingBag size={18} />
-            {cartCount > 0 && (
+            {displayCartCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-[#0F2942] text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
-                {cartCount > 99 ? "99+" : cartCount}
+                {displayCartCount > 99 ? "99+" : displayCartCount}
               </span>
             )}
           </button>
 
-          {/* แดชบอร์ด (ย้ายมาอยู่ข้างซ้ายของรูปโปรไฟล์) */}
+          {/* แดชบอร์ด */}
           <Link
             href="/customer/dashboard"
             title="แดชบอร์ด"
@@ -210,17 +289,28 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </span>
           </Link>
 
-          {/* Setting / Profile Button */}
+          {/* 🟢 ปุ่มตั้งค่าบัญชี + แสดงรูปโปรไฟล์ (ไม่บังไอคอนฟันเฟือง) */}
           <Link
             href="/customer/setting"
             title="ตั้งค่าบัญชี"
             className="flex items-center gap-2.5 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none"
           >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative shrink-0">
-              <User size={16} />
-              <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-xs">
+            <div className="relative shrink-0 w-9 h-9">
+              <div className="w-full h-full rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold overflow-hidden border border-slate-200">
+                {userAvatar ? (
+                  <img 
+                    src={userAvatar} 
+                    alt="Profile Avatar" 
+                    className="w-full h-full object-cover" 
+                  />
+                ) : (
+                  <User size={16} />
+                )}
+              </div>
+
+              <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-xs border border-slate-100 z-10 flex items-center justify-center">
                 <Settings
-                  size={12}
+                  size={11}
                   className={
                     isSettingActive ? "text-[#0F2942]" : "text-slate-500"
                   }
@@ -229,10 +319,10 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </div>
           </Link>
 
-          {/* เส้นคั่นแบ่งสัดส่วน */}
+          {/* เส้นคั่น */}
           <div className="h-5 w-[1px] bg-slate-200 my-auto" />
 
-          {/* ปุ่มออกจากระบบ (Logout Button) */}
+          {/* ปุ่มออกจากระบบ */}
           <button
             type="button"
             onClick={handleLogout}

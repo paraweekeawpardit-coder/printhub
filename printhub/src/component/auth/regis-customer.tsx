@@ -3,10 +3,14 @@
 import { useState } from "react";
 import { Eye, EyeOff, FileText, X, ShieldCheck } from "lucide-react";
 import axios from "axios";
+import { isValidEmail, isPasswordValid, EMAIL_FORMAT_ERROR } from "../auth/Validators";
+import { FieldError, PasswordChecklist, scrollToFirstError } from "../../component/auth/From-feedback";
 
 type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
 };
+
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/+\$/, "");
 
 export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
   const [showPassword, setShowPassword] = useState(false);
@@ -21,26 +25,66 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
     confirmPassword: "",
   });
   const [message, setMessage] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const touch = (key: string) =>
+    setTouched((prev) => (prev[key] ? prev : { ...prev, [key]: true }));
+
+  // ข้อความ error ของแต่ละช่อง ("" = ผ่าน)
+  const errors: Record<string, string> = {
+    Fname: !Regisdata.Fname.trim()
+      ? "กรุณากรอกชื่อ"
+      : Regisdata.Fname.length > 50
+      ? "ชื่อต้องไม่เกิน 50 ตัวอักษร"
+      : "",
+    Lname: !Regisdata.Lname.trim()
+      ? "กรุณากรอกนามสกุล"
+      : Regisdata.Lname.length > 50
+      ? "นามสกุลต้องไม่เกิน 50 ตัวอักษร"
+      : "",
+    contact: !Regisdata.contact.trim()
+      ? "กรุณากรอกอีเมล"
+      : Regisdata.contact.length > 100
+      ? "อีเมลต้องไม่เกิน 100 ตัวอักษร"
+      : !isValidEmail(Regisdata.contact)
+      ? EMAIL_FORMAT_ERROR
+      : "",
+    password: isPasswordValid(Regisdata.password) ? "" : "invalid",
+    confirmPassword: !Regisdata.confirmPassword
+      ? "กรุณายืนยันรหัสผ่าน"
+      : Regisdata.password !== Regisdata.confirmPassword
+      ? "รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน"
+      : "",
+    agreed: agreed
+      ? ""
+      : "กรุณายอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว",
+  };
+
+  // แสดง error เมื่อผู้ใช้กรอกเสร็จช่องนั้น (blur) หรือกดสมัครแล้ว
+  const show = (key: string) =>
+    touched[key] || submitted ? errors[key] : "";
+
+  const baseInput =
+    "w-full rounded-xl border px-4 py-3 text-sm text-navy placeholder:text-gray-400 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary";
+  const inputCls = (hasError: boolean, extra = "") =>
+    `${baseInput} ${hasError ? "border-red-400" : "border-gray-200"} ${extra}`;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
 
-    if (Regisdata.password !== Regisdata.confirmPassword) {
-      setMessage("รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน");
-      return;
-    }
-
-    if (!agreed) {
-      setMessage("กรุณายอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว");
+    setSubmitted(true);
+    if (Object.values(errors).some(Boolean)) {
+      scrollToFirstError();
       return;
     }
 
     try {
-      const res = await axios.post(
-        "http://localhost:5000/auth/register",
-        Regisdata
-      );
+      const res = await axios.post(`${API_URL}/auth/register`, {
+        ...Regisdata,
+        contact: Regisdata.contact.trim(),
+      });
 
       if (res.data.message) {
         setRegis(false);
@@ -66,93 +110,120 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
           </p>
         )}
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <input
-            type="text"
-            placeholder="ชื่อ"
-            required
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-navy placeholder:text-gray-400 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
-            onChange={(e) =>
-              setData({ ...Regisdata, Fname: e.target.value })
-            }
-          />
-
-          <input
-            type="text"
-            placeholder="นามสกุล"
-            required
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-navy placeholder:text-gray-400 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
-            onChange={(e) =>
-              setData({ ...Regisdata, Lname: e.target.value })
-            }
-          />
-
-          <input
-            type="email"
-            placeholder="อีเมล"
-            required
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-navy placeholder:text-gray-400 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
-            onChange={(e) =>
-              setData({ ...Regisdata, contact: e.target.value })
-            }
-          />
-
-          <div className="relative">
+        <form className="space-y-4" onSubmit={handleSubmit} noValidate>
+          <div>
             <input
-              type={showPassword ? "text" : "password"}
-              placeholder="รหัสผ่าน"
-              required
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-10 text-sm text-navy placeholder:text-gray-400 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
-              onChange={(e) =>
-                setData({ ...Regisdata, password: e.target.value })
-              }
+              type="text"
+              maxLength={50}
+              placeholder="ชื่อ (สูงสุด 50 ตัวอักษร)"
+              value={Regisdata.Fname}
+              className={inputCls(!!show("Fname"))}
+              onChange={(e) => setData({ ...Regisdata, Fname: e.target.value })}
+              onBlur={() => touch("Fname")}
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-            </button>
+            <FieldError message={show("Fname")} />
           </div>
 
-          <div className="relative">
+          <div>
             <input
-              type={showConfirmPassword ? "text" : "password"}
-              placeholder="ยืนยันรหัสผ่าน"
-              required
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-10 text-sm text-navy placeholder:text-gray-400 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
-              onChange={(e) =>
-                setData({ ...Regisdata, confirmPassword: e.target.value })
-              }
+              type="text"
+              maxLength={50}
+              placeholder="นามสกุล (สูงสุด 50 ตัวอักษร)"
+              value={Regisdata.Lname}
+              className={inputCls(!!show("Lname"))}
+              onChange={(e) => setData({ ...Regisdata, Lname: e.target.value })}
+              onBlur={() => touch("Lname")}
             />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-            </button>
+            <FieldError message={show("Lname")} />
           </div>
 
-          <div className="flex items-start gap-2.5 text-xs text-gray-500 pt-1">
+          <div>
             <input
-              type="checkbox"
-              id="agree-customer"
-              checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+              type="email"
+              maxLength={100}
+              placeholder="อีเมล (สูงสุด 100 ตัวอักษร)"
+              value={Regisdata.contact}
+              className={inputCls(!!show("contact"))}
+              onChange={(e) => setData({ ...Regisdata, contact: e.target.value })}
+              onBlur={() => touch("contact")}
             />
-            <label htmlFor="agree-customer" className="leading-relaxed cursor-pointer">
-              ฉันยอมรับ{" "}
+            <FieldError message={show("contact")} />
+          </div>
+
+          <div>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                maxLength={50}
+                placeholder="รหัสผ่าน"
+                value={Regisdata.password}
+                className={inputCls(!!show("password"), "pr-10")}
+                onChange={(e) => setData({ ...Regisdata, password: e.target.value })}
+                onFocus={() => touch("passwordFocus")}
+                onBlur={() => touch("password")}
+              />
               <button
                 type="button"
-                onClick={() => setShowTermsModal(true)}
-                className="text-primary hover:underline font-semibold"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
               </button>
-            </label>
+            </div>
+            <PasswordChecklist
+              value={Regisdata.password}
+              visible={!!touched.passwordFocus || !!touched.password || submitted}
+            />
+          </div>
+
+          <div>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                maxLength={50}
+                placeholder="ยืนยันรหัสผ่าน"
+                value={Regisdata.confirmPassword}
+                className={inputCls(!!show("confirmPassword"), "pr-10")}
+                onChange={(e) =>
+                  setData({ ...Regisdata, confirmPassword: e.target.value })
+                }
+                onBlur={() => touch("confirmPassword")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+            <FieldError message={show("confirmPassword")} />
+          </div>
+
+          <div>
+            <div className="flex items-start gap-2.5 text-xs text-gray-500 pt-1">
+              <input
+                type="checkbox"
+                id="agree-customer"
+                checked={agreed}
+                onChange={(e) => {
+                  setAgreed(e.target.checked);
+                  touch("agreed");
+                }}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+              />
+              <label htmlFor="agree-customer" className="leading-relaxed cursor-pointer">
+                ฉันยอมรับ{" "}
+                <button
+                  type="button"
+                  onClick={() => setShowTermsModal(true)}
+                  className="text-primary hover:underline font-semibold"
+                >
+                  เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว
+                </button>
+              </label>
+            </div>
+            <FieldError message={show("agreed")} />
           </div>
 
           <button

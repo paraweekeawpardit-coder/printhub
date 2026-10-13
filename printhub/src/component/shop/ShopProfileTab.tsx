@@ -48,9 +48,6 @@ type Props = {
   onToggleEdit: () => void;
 };
 
-// ==========================================
-// รูปโปรไฟล์ร้าน: แสดงรูป + กดเพื่อเปลี่ยนรูปได้ (ไม่มีปุ่มลบ เพราะร้านต้องมีรูปเสมอ)
-// ==========================================
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_MB = 5;
 
@@ -68,7 +65,6 @@ function ShopAvatar({
   const inputRef = useRef<HTMLInputElement>(null);
   const [failed, setFailed] = useState(false);
 
-  // เปลี่ยนรูปใหม่แล้วให้ลองโหลดใหม่
   useEffect(() => {
     setFailed(false);
   }, [src]);
@@ -120,7 +116,7 @@ function ShopAvatar({
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          e.target.value = ""; // เลือกไฟล์เดิมซ้ำได้
+          e.target.value = "";
           if (file) onSelectFile(file);
         }}
       />
@@ -128,10 +124,6 @@ function ShopAvatar({
   );
 }
 
-// ==========================================
-// TimePicker: เลือกเวลาแบบ 24 ชั่วโมง (00-23) ให้เข้ากับธีม
-// value / onChange ใช้รูปแบบ "HH:mm" เหมือนที่เก็บในฐานข้อมูล
-// ==========================================
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
 const parseTime = (value: string) => {
@@ -168,7 +160,6 @@ function TimePicker({
 
   const { hour, minute } = parseTime(value);
 
-  // นาทีทุก 5 นาที (ถ้าค่าเดิมในระบบไม่ลงตัว เช่น 09:07 ให้แสดงค่านั้นด้วย จะได้ไม่หาย)
   const minutes = useMemo(() => {
     const base = Array.from({ length: 12 }, (_, i) => i * 5);
     return base.includes(minute)
@@ -176,7 +167,6 @@ function TimePicker({
       : [...base, minute].sort((a, b) => a - b);
   }, [minute]);
 
-  // ปิดเมื่อคลิกข้างนอก หรือกด Esc
   useEffect(() => {
     if (!open) return;
     const handleMouseDown = (e: MouseEvent) => {
@@ -195,7 +185,6 @@ function TimePicker({
     };
   }, [open]);
 
-  // เปิดมาแล้วเลื่อนให้ค่าที่เลือกอยู่กลางรายการ
   useEffect(() => {
     if (!open) return;
     [hourListRef.current, minuteListRef.current].forEach((list) => {
@@ -335,6 +324,53 @@ export default function ShopProfileTab({
   isEditing,
   onToggleEdit,
 }: Props) {
+  const [phoneError, setPhoneError] = useState<string>("");
+  const [addressErrors, setAddressErrors] = useState<{
+    detail?: string;
+    subdistrict?: string;
+    district?: string;
+    province?: string;
+    postcode?: string;
+  }>({});
+
+  const snapshotRef = useRef<{
+    shopName: string;
+    ownerName: string;
+    phone: string;
+    openTime: string;
+    closeTime: string;
+    address: AddressData;
+  } | null>(null);
+
+  const handleStartEdit = () => {
+    snapshotRef.current = {
+      shopName,
+      ownerName,
+      phone,
+      openTime,
+      closeTime,
+      address: { ...address },
+    };
+    setPhoneError("");
+    setAddressErrors({});
+    onToggleEdit();
+  };
+
+  const handleCancelEdit = () => {
+    if (snapshotRef.current) {
+      setShopName(snapshotRef.current.shopName);
+      setOwnerName(snapshotRef.current.ownerName);
+      setPhone(snapshotRef.current.phone);
+      setOpenTime(snapshotRef.current.openTime);
+      setCloseTime(snapshotRef.current.closeTime);
+      setAddress({ ...snapshotRef.current.address });
+      snapshotRef.current = null;
+    }
+    setPhoneError("");
+    setAddressErrors({});
+    onToggleEdit();
+  };
+
   const addressText = [
     address.detail,
     address.subdistrict,
@@ -350,7 +386,6 @@ export default function ShopProfileTab({
     text: string;
   } | null>(null);
 
-  // ข้อความ "เปลี่ยนรูปแล้ว" หายเองหลัง 3 วินาที
   useEffect(() => {
     if (imageMessage?.type !== "success") return;
     const timer = setTimeout(() => setImageMessage(null), 3000);
@@ -375,6 +410,54 @@ export default function ShopProfileTab({
         ? { type: "error", text: error }
         : { type: "success", text: "เปลี่ยนรูปร้านเรียบร้อยแล้ว" }
     );
+  };
+
+  const handlePhoneChange = (val: string) => {
+    const numericVal = val.replace(/\D/g, "").slice(0, 10);
+    setPhone(numericVal);
+
+    if (numericVal.length > 0 && numericVal.length < 10) {
+      setPhoneError("เบอร์โทรศัพท์ต้องมี 10 หลัก");
+    } else {
+      setPhoneError("");
+    }
+  };
+
+  const handleSaveProfile = () => {
+    let hasError = false;
+    const newErrors: typeof addressErrors = {};
+
+    if (phone.length > 0 && phone.length < 10) {
+      setPhoneError("เบอร์โทรศัพท์ต้องมี 10 หลัก");
+      hasError = true;
+    }
+
+    if (!address.detail.trim()) {
+      newErrors.detail = "กรุณากรอกรายละเอียดที่อยู่";
+      hasError = true;
+    }
+    if (!address.subdistrict.trim()) {
+      newErrors.subdistrict = "กรุณากรอกตำบล/แขวง";
+      hasError = true;
+    }
+    if (!address.district.trim()) {
+      newErrors.district = "กรุณากรอกอำเภอ/เขต";
+      hasError = true;
+    }
+    if (!address.province.trim()) {
+      newErrors.province = "กรุณากรอกจังหวัด";
+      hasError = true;
+    }
+    if (address.postcode.length !== 5) {
+      newErrors.postcode = "รหัสไปรษณีย์ต้องมี 5 หลัก";
+      hasError = true;
+    }
+
+    setAddressErrors(newErrors);
+    if (hasError) return;
+
+    snapshotRef.current = null;
+    onSave();
   };
 
   const imageFeedback = (
@@ -409,7 +492,6 @@ export default function ShopProfileTab({
           !isVerified ? "pointer-events-none blur-[2px] select-none" : ""
         }`}
       >
-        {/* สถานะร้าน: เปิด / ปิดชั่วคราว */}
         <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
           <div className="flex items-center gap-2">
             <span
@@ -446,7 +528,6 @@ export default function ShopProfileTab({
           </button>
         </div>
 
-        {/* Default Mode: View Mode */}
         {!isEditing ? (
           <div className="space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -465,7 +546,7 @@ export default function ShopProfileTab({
               </div>
               <button
                 type="button"
-                onClick={onToggleEdit}
+                onClick={handleStartEdit}
                 className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-[#0F2942] hover:border-[#0F2942] transition-colors"
               >
                 <Pencil size={14} /> แก้ไขข้อมูล
@@ -496,9 +577,7 @@ export default function ShopProfileTab({
             </div>
           </div>
         ) : (
-          /* Edit Mode Form */
           <div className="space-y-6">
-            {/* Profile Image */}
             <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
               <ShopAvatar
                 src={profileImage}
@@ -518,12 +597,12 @@ export default function ShopProfileTab({
               </div>
             </div>
 
-            {/* Inputs Form */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold text-slate-600">ชื่อร้านค้า</label>
                 <input
                   type="text"
+                  maxLength={100}
                   value={shopName}
                   onChange={(e) => setShopName(e.target.value)}
                   placeholder="เช่น ตั๋วปริ้น ลาดกระบัง"
@@ -534,6 +613,7 @@ export default function ShopProfileTab({
                 <label className="text-xs font-semibold text-slate-600">ชื่อเจ้าของร้าน</label>
                 <input
                   type="text"
+                  maxLength={100}
                   value={ownerName}
                   onChange={(e) => setOwnerName(e.target.value)}
                   placeholder="ชื่อ-นามสกุล"
@@ -541,14 +621,22 @@ export default function ShopProfileTab({
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">เบอร์โทรศัพท์</label>
+                <label className="text-xs font-semibold text-slate-600">เบอร์โทรศัพท์ (ตัวเลข 10 หลัก)</label>
                 <input
                   type="text"
+                  maxLength={10}
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="08x-xxx-xxxx"
-                  className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
+                  onChange={(e) => handlePhoneChange(e.target.value)}
+                  placeholder="08xxxxxxxx"
+                  className={`mt-1.5 w-full rounded-xl border px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED] ${
+                    phoneError ? "border-rose-400" : "border-slate-200"
+                  }`}
                 />
+                {phoneError && (
+                  <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-500">
+                    <AlertCircle size={12} /> {phoneError}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-600">อีเมล</label>
@@ -561,7 +649,6 @@ export default function ShopProfileTab({
               </div>
             </div>
 
-            {/* Business Hours */}
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-2 block">เวลาทำการ</label>
               <div className="flex items-center gap-3">
@@ -580,46 +667,115 @@ export default function ShopProfileTab({
               </div>
             </div>
 
-            {/* Address */}
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-2 block">ที่อยู่ร้านค้า</label>
               <div className="space-y-3">
-                <textarea
-                  value={address.detail}
-                  onChange={(e) => setAddress((prev) => ({ ...prev, detail: e.target.value }))}
-                  placeholder="เลขที่ อาคาร ซอย ถนน"
-                  rows={2}
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED] resize-none"
-                />
+                <div>
+                  <textarea
+                    maxLength={250}
+                    value={address.detail}
+                    onChange={(e) => {
+                      setAddress((prev) => ({ ...prev, detail: e.target.value }));
+                      if (addressErrors.detail) setAddressErrors((prev) => ({ ...prev, detail: undefined }));
+                    }}
+                    placeholder="เลขที่ อาคาร ซอย ถนน (สูงสุด 250 ตัวอักษร)"
+                    rows={2}
+                    className={`w-full rounded-xl border p-3 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED] resize-none ${
+                      addressErrors.detail ? "border-rose-400" : "border-slate-200"
+                    }`}
+                  />
+                  {addressErrors.detail && (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-500">
+                      <AlertCircle size={12} /> {addressErrors.detail}
+                    </p>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    value={address.subdistrict}
-                    onChange={(e) => setAddress((prev) => ({ ...prev, subdistrict: e.target.value }))}
-                    placeholder="ตำบล / แขวง"
-                    className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-                  />
-                  <input
-                    type="text"
-                    value={address.district}
-                    onChange={(e) => setAddress((prev) => ({ ...prev, district: e.target.value }))}
-                    placeholder="อำเภอ / เขต"
-                    className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-                  />
-                  <input
-                    type="text"
-                    value={address.province}
-                    onChange={(e) => setAddress((prev) => ({ ...prev, province: e.target.value }))}
-                    placeholder="จังหวัด"
-                    className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-                  />
-                  <input
-                    type="text"
-                    value={address.postcode}
-                    onChange={(e) => setAddress((prev) => ({ ...prev, postcode: e.target.value }))}
-                    placeholder="รหัสไปรษณีย์"
-                    className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED]"
-                  />
+                  <div>
+                    <input
+                      type="text"
+                      maxLength={50}
+                      value={address.subdistrict}
+                      onChange={(e) => {
+                        setAddress((prev) => ({ ...prev, subdistrict: e.target.value }));
+                        if (addressErrors.subdistrict) setAddressErrors((prev) => ({ ...prev, subdistrict: undefined }));
+                      }}
+                      placeholder="ตำบล / แขวง"
+                      className={`w-full rounded-xl border px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED] ${
+                        addressErrors.subdistrict ? "border-rose-400" : "border-slate-200"
+                      }`}
+                    />
+                    {addressErrors.subdistrict && (
+                      <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-500">
+                        <AlertCircle size={12} /> {addressErrors.subdistrict}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      maxLength={50}
+                      value={address.district}
+                      onChange={(e) => {
+                        setAddress((prev) => ({ ...prev, district: e.target.value }));
+                        if (addressErrors.district) setAddressErrors((prev) => ({ ...prev, district: undefined }));
+                      }}
+                      placeholder="อำเภอ / เขต"
+                      className={`w-full rounded-xl border px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED] ${
+                        addressErrors.district ? "border-rose-400" : "border-slate-200"
+                      }`}
+                    />
+                    {addressErrors.district && (
+                      <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-500">
+                        <AlertCircle size={12} /> {addressErrors.district}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      maxLength={50}
+                      value={address.province}
+                      onChange={(e) => {
+                        setAddress((prev) => ({ ...prev, province: e.target.value }));
+                        if (addressErrors.province) setAddressErrors((prev) => ({ ...prev, province: undefined }));
+                      }}
+                      placeholder="จังหวัด"
+                      className={`w-full rounded-xl border px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED] ${
+                        addressErrors.province ? "border-rose-400" : "border-slate-200"
+                      }`}
+                    />
+                    {addressErrors.province && (
+                      <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-500">
+                        <AlertCircle size={12} /> {addressErrors.province}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      maxLength={5}
+                      value={address.postcode}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 5);
+                        setAddress((prev) => ({ ...prev, postcode: val }));
+                        if (addressErrors.postcode) setAddressErrors((prev) => ({ ...prev, postcode: undefined }));
+                      }}
+                      placeholder="รหัสไปรษณีย์ (5 หลัก)"
+                      className={`w-full rounded-xl border px-3.5 py-2 text-sm text-[#0F2942] outline-none focus:border-[#2F6FED] ${
+                        addressErrors.postcode ? "border-rose-400" : "border-slate-200"
+                      }`}
+                    />
+                    {addressErrors.postcode && (
+                      <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-500">
+                        <AlertCircle size={12} /> {addressErrors.postcode}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -627,14 +783,14 @@ export default function ShopProfileTab({
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
               <button
                 type="button"
-                onClick={onToggleEdit}
+                onClick={handleCancelEdit}
                 disabled={saving}
                 className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-semibold text-slate-500 hover:border-slate-300 transition-colors disabled:opacity-50"
               >
                 ยกเลิก
               </button>
               <button
-                onClick={onSave}
+                onClick={handleSaveProfile}
                 disabled={saving}
                 className="rounded-xl bg-[#0F2942] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#16385c] transition-colors disabled:opacity-50"
               >
@@ -645,7 +801,6 @@ export default function ShopProfileTab({
         )}
       </div>
 
-      {/* Verification Overlay */}
       {!isVerified && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/70 backdrop-blur-xs">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">

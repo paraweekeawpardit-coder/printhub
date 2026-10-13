@@ -3,6 +3,7 @@ import supabase from "../../config/supabase.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import "multer"
+import { isValidEmail, passwordPolicyError } from "./Validator.js";
 
 interface MulterRequest extends Request {
   files?: {
@@ -16,7 +17,7 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
       shop_name,
       owner_name,
       id_card,
-      email,
+      email: rawEmail,
       contact,
       location,
       latitude,
@@ -29,9 +30,23 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
       bank_number,
       password,
     } = req.body;
+    const email = typeof rawEmail === "string" ? rawEmail.trim() : "";
 
     if (!email || !password || !shop_name || !owner_name || !id_card) {
       return res.status(400).json({ error: "กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน" });
+    }
+
+    if (!/^\d{13}$/.test(String(id_card))) {
+      return res.status(400).json({ error: "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก" });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "รูปแบบอีเมลไม่ถูกต้อง" });
+    }
+
+    const passwordError = passwordPolicyError(password);
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
     }
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
@@ -130,6 +145,7 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
 
     if (shopError || !newShop) {
       console.error("Shop Insert Error:", shopError);
+      await supabase.from("address").delete().eq("id", newAddress.id);
       return res.status(500).json({ error: "ไม่สามารถสร้างบัญชีร้านค้าได้" });
     }
 
@@ -143,6 +159,10 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
 
     if (idCardError) {
       console.error("ID Card Insert Error:", idCardError);
+      // rollback: ไม่ให้เหลือร้านที่ไม่มีข้อมูลบัตรประชาชน (ไม่งั้นสมัครซ้ำด้วยอีเมลเดิมไม่ได้)
+      await supabase.from("print_shop").delete().eq("id", newShop.id);
+      await supabase.from("address").delete().eq("id", newAddress.id);
+      return res.status(500).json({ error: "ไม่สามารถบันทึกข้อมูลบัตรประชาชนได้ กรุณาลองใหม่อีกครั้ง" });
     }
 
     if (bank && bank_number) {
@@ -172,9 +192,10 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
 
 export const LoginShop = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { contact, password } = req.body;
+    const { password } = req.body;
+    const contact = typeof req.body.contact === "string" ? req.body.contact.trim() : "";
 
-    if (!contact || !password) {
+    if (!contact || typeof password !== "string" || !password) {
       return res.status(400).json({
         error: "Please enter email/phone and password",
       });
@@ -199,7 +220,7 @@ export const LoginShop = async (req: Request, res: Response): Promise<Response> 
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, shop.password);
+    const isPasswordValid = !!shop.password && (await bcrypt.compare(password, shop.password));
 
     if (!isPasswordValid) {
       return res.status(400).json({

@@ -18,7 +18,7 @@ export const getReviewOrderDetail = async (
       });
     }
 
-    const { data: order, error } = await supabase
+    const { data: orders, error } = await supabase
       .from("print_order")
       .select(`
         id,
@@ -36,8 +36,7 @@ export const getReviewOrderDetail = async (
 
         print_order_item (*)
       `)
-      .eq("id", orderId)
-      .maybeSingle();
+      .eq("id", orderId);
 
     if (error) {
       console.error("❌ Get Review Order Detail Error:", error);
@@ -48,41 +47,34 @@ export const getReviewOrderDetail = async (
       });
     }
 
-    if (!order) {
+    if (!orders || orders.length === 0) {
       return res.status(404).json({
         success: false,
         message: "ไม่พบข้อมูลออเดอร์",
       });
     }
 
-    // 🛑 1. ตรวจสอบว่าออร์เดอร์นี้เคยถูกรายงานไปแล้วหรือยัง
+    const order = orders[0];
+
     const { data: existingReport } = await supabase
       .from("report")
       .select("id")
-      .eq("order_id", orderId)
-      .maybeSingle();
+      .eq("order_id", orderId);
 
-    // 🛑 2. ตรวจสอบว่าออร์เดอร์นี้เคยถูกรีวิวไปแล้วหรือยัง
     const { data: existingReview } = await supabase
       .from("review")
       .select("id")
-      .eq("order_id", orderId)
-      .maybeSingle();
+      .eq("order_id", orderId);
 
-    console.log("✅ Review Order:", {
-      id: order.id,
-      customer_id: order.customer_id,
-      shop_id: order.shop_id,
-      has_reported: !!existingReport,
-      has_reviewed: !!existingReview,
-    });
+    const hasReported = existingReport && existingReport.length > 0;
+    const hasReviewed = existingReview && existingReview.length > 0;
 
     return res.status(200).json({
       success: true,
       data: {
         ...order,
-        has_reported: !!existingReport,
-        has_reviewed: !!existingReview,
+        has_reported: !!hasReported,
+        has_reviewed: !!hasReviewed,
       },
     });
   } catch (error: any) {
@@ -141,26 +133,28 @@ export const submitOrderReview = async (
       });
     }
 
-    const { data: order, error: orderError } = await supabase
+    // ตรวจสอบ Order โดยใช้ Array
+    const { data: orders, error: orderError } = await supabase
       .from("print_order")
       .select(`
         id,
         customer_id,
         shop_id
       `)
-      .eq("id", order_id)
-      .maybeSingle();
+      .eq("id", order_id);
 
     if (orderError) {
       throw orderError;
     }
 
-    if (!order) {
+    if (!orders || orders.length === 0) {
       return res.status(404).json({
         success: false,
         message: "ไม่พบคำสั่งซื้อ",
       });
     }
+
+    const order = orders[0];
 
     if (order.customer_id !== customer_id) {
       return res.status(403).json({
@@ -176,18 +170,18 @@ export const submitOrderReview = async (
       });
     }
 
-    const { data: existingReview, error: existingReviewError } =
+    // ตรวจสอบรีวิวซ้ำ
+    const { data: existingReviews, error: existingReviewError } =
       await supabase
         .from("review")
         .select("id")
-        .eq("order_id", order_id)
-        .maybeSingle();
+        .eq("order_id", order_id);
 
     if (existingReviewError) {
       throw existingReviewError;
     }
 
-    if (existingReview) {
+    if (existingReviews && existingReviews.length > 0) {
       return res.status(409).json({
         success: false,
         message: "คำสั่งซื้อนี้ได้รับการรีวิวไปแล้ว ไม่สามารถรีวิวซ้ำได้",
@@ -301,44 +295,44 @@ export const submitOrderReport = async (
       });
     }
 
-    // 🛑 ป้องกันการส่งซ้ำ: เช็กในตาราง report ก่อนบันทึก
-    const { data: existingReport, error: checkError } = await supabase
+    // 🛑 ตรวจสอบการส่งรายงานซ้ำ
+    const { data: existingReports, error: checkError } = await supabase
       .from("report")
       .select("id")
-      .eq("order_id", order_id)
-      .maybeSingle();
+      .eq("order_id", order_id);
 
     if (checkError) {
       throw checkError;
     }
 
-    if (existingReport) {
+    if (existingReports && existingReports.length > 0) {
       return res.status(400).json({
         success: false,
         message: "คุณได้ส่งคำร้องขอคืนเงินสำหรับคำสั่งซื้อนี้ไปแล้ว ไม่สามารถส่งซ้ำได้",
       });
     }
 
-    const { data: order, error: orderError } = await supabase
+    const { data: orders, error: orderError } = await supabase
       .from("print_order")
       .select(`
         id,
         customer_id,
         shop_id
       `)
-      .eq("id", order_id)
-      .maybeSingle();
+      .eq("id", order_id);
 
     if (orderError) {
       throw orderError;
     }
 
-    if (!order) {
+    if (!orders || orders.length === 0) {
       return res.status(404).json({
         success: false,
         message: "ไม่พบคำสั่งซื้อ",
       });
     }
+
+    const order = orders[0];
 
     if (order.customer_id !== customer_id) {
       return res.status(403).json({
@@ -448,7 +442,7 @@ export const submitOrderReport = async (
 };
 
 // ==========================================
-// 4. ดึงรายการรีวิวทั้งหมดของร้านค้า
+// 4. ดึงรายการรีวิวทั้งหมดของร้านค้า (ดึงชื่อ-นามสกุลจริง และรายการสินค้าในออร์เดอร์)
 // ==========================================
 export const getShopReviews = async (req: Request, res: Response) => {
   try {
@@ -474,6 +468,11 @@ export const getShopReviews = async (req: Request, res: Response) => {
           id,
           first_name,
           last_name
+        ),
+        print_order:order_id (
+          id,
+          description,
+          print_order_item (*)
         )
       `)
       .eq("shop_id", shopId)
@@ -510,6 +509,7 @@ export const getShopReviews = async (req: Request, res: Response) => {
         image_url: rev.image_url,
         created_at: rev.created_at,
         customer_name: customerName,
+        print_order: rev.print_order,
       };
     });
 

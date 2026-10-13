@@ -63,7 +63,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
     // 2. Routing แยกตาม Role
     if (role === "admin") {
-      // 🟢 เพิ่มการเช็กเรื่องคำขอปลดระงับร้านค้า ให้วาร์ปไปหน้า /admin/shops?tab=appeals
+      // 🟢 เช็กเรื่องคำขอปลดระงับร้านค้า ให้วาร์ปไปหน้า /admin/shops?tab=appeals
       if (
         type === "shop_appeal" ||
         type === "contact_admin" ||
@@ -77,7 +77,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
         noti.title?.includes("รายงาน") ||
         noti.title?.includes("แจ้งปัญหา")
       ) {
-        // วาร์ปไปหน้ารายงานปัญหา (ถ้ามี order_id แนบไปเพื่อเสิร์ชด้วย)
         if (orderId) {
           router.push(`/admin/reports?search=${orderId}`);
         } else {
@@ -107,16 +106,27 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     }
   };
 
+  // 🟢 ฟังก์ชันแปลงเวลาที่เพิ่มการปรับ UTC เป็น GMT+7 (เวลาไทย)
   const formatDate = (dateStr: string) => {
     try {
-      const date = new Date(dateStr);
+      if (!dateStr) return "";
+
+      // ถ้า ISO String ที่ส่งมาจาก DB ไม่มี 'Z' ลงท้าย และไม่มี timezone offset ให้เติม 'Z' เพื่อให้ Date parser รับรู้ว่าเป็นเวลา UTC
+      let formattedStr = dateStr;
+      if (!formattedStr.endsWith("Z") && !formattedStr.includes("+")) {
+        formattedStr += "Z";
+      }
+
+      const date = new Date(formattedStr);
       if (isNaN(date.getTime())) return "";
+
       return date.toLocaleString("th-TH", {
         day: "2-digit",
         month: "short",
         year: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: "Asia/Bangkok", // 🟢 บังคับใช้โซนเวลาประเทศไทย (GMT+7)
       });
     } catch {
       return "";

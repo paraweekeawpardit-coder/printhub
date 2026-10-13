@@ -1,137 +1,144 @@
 import { Request, Response } from "express";
 import supabase from "../config/supabase.js";
 
+// Helper สำหรับดึงเลข ORD- ให้ถูกต้อง
+const formatOrderNo = (orderNo: any, orderId: string) => {
+  if (!orderNo) return orderId.slice(0, 8);
+  return String(orderNo).startsWith("ORD-") ? orderNo : `ORD-${orderNo}`;
+};
+
+// 🌟 ฟังก์ชันป้องกัน Timezone
+const parseSafeTime = (dateStr?: string | null) => {
+  if (!dateStr) return null;
+  let cleaned = String(dateStr).trim();
+  if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
+    cleaned = `${cleaned.replace(" ", "T")}Z`;
+  }
+  const parsed = new Date(cleaned).getTime();
+  return isNaN(parsed) ? null : parsed;
+};
+
+// 🌟 เวลานัดรับ (appointment_time) เก็บเป็นเวลาไทยแบบไม่มี timezone เช่น "2026-10-14T00:14:00"
+// จึงต้องตีความเป็น +07:00 (ห้ามใช้ parseSafeTime ซึ่งตีความเป็น UTC จะทำให้เวลาเลื่อนไป 7 ชั่วโมง)
+const parseBangkokTime = (dateStr?: string | null) => {
+  if (!dateStr) return null;
+  let cleaned = String(dateStr).trim().replace(" ", "T");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) cleaned += "T00:00:00";
+  if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(cleaned)) cleaned += "+07:00";
+  const parsed = new Date(cleaned).getTime();
+  return isNaN(parsed) ? null : parsed;
+};
+
+// ==========================================
+// 1. ดึงข้อมูล Dashboard ลูกค้า
+// ==========================================
 export const getCustomerDashboard = async (req: Request, res: Response) => {
   try {
     const { customer_id } = req.query;
+    if (!customer_id) return res.status(400).json({ success: false, error: "Missing customer_id" });
 
-    if (!customer_id) {
-      return res.status(400).json({ success: false, error: "Missing customer_id" });
-    }
+    const { data: customer } = await supabase.from("customer").select("id, first_name, last_name, contact").eq("id", customer_id).single();
+    if (!customer) return res.status(404).json({ success: false, error: "ไม่พบข้อมูลลูกค้า" });
 
-    // 1. ดึงข้อมูลส่วนตัวของลูกค้า
-    const { data: customer, error: custError } = await supabase
-      .from("customer")
-      .select("id, first_name, last_name, contact")
-      .eq("id", customer_id)
-      .single();
-
-    if (custError || !customer) {
-      return res.status(404).json({ success: false, error: "ไม่พบข้อมูลลูกค้า" });
-    }
-
-    // 2. ดึงรายการคำสั่งซื้อทั้งหมดของลูกค้ารายนี้ พร้อมสถานะและชื่อร้าน
     const { data: orders, error: ordersError } = await supabase
       .from("print_order")
       .select(`
-        id,
-        order_no,
-        description,
-        subtotal_price,
-        small_order_fee,
-        total_price,
-        total_amount,
-        receive_date,
-        appointment_time,
-        order_date,
-        review_id,
-        report_id,
-        shop:shop_id (
-          id,
-          shop_name,
-          phone
-        ),
-        current_status:current_status_id (
-          id,
-          state
-        ),
-        print_order_item (
-          id,
-          category,
-          quantity,
-          unit_price,
-          subtotal,
-          page_count,
-          describe
-        )
+        id, order_no, description, subtotal_price, small_order_fee, total_price, total_amount,
+        receive_date, appointment_time, order_date, review_id, report_id, payment_id, expires_at, cancel_reason,
+        shop:shop_id ( id, shop_name, phone ),
+        current_status:current_status_id ( id, state ),
+        print_order_item ( id, category, quantity, unit_price, subtotal, page_count, describe )
       `)
       .eq("customer_id", customer_id)
       .order("order_date", { ascending: false });
 
-    if (ordersError) {
-      console.error("Fetch orders error:", ordersError);
-      return res.status(500).json({ success: false, error: ordersError.message });
-    }
-
-    // 3. ดึงประวัติเรื่องร้องเรียนของลูกค้าจากตาราง report
-    const { data: reports, error: reportsError } = await supabase
-      .from("report")
-      .select(`
-        id,
-        order_id,
-        description,
-        image_url,
-        is_verified,
-        created_at,
-        shop:shop_id (
-          shop_name
-        ),
-        order:order_id (
-          order_no
-        )
-      `)
-      .eq("customer_id", customer_id)
-      .order("created_at", { ascending: false });
-
-    if (reportsError) {
-      console.error("Fetch reports error:", reportsError);
-    }
+    if (ordersError) throw ordersError;
 
     const orderList = orders || [];
+    const now = Date.now();
+    const cancelStatusId = "9aee439b-3d24-4b4e-8d68-d9b63081b80c";
+
+    // 🌟 ฟังก์ชันป้องกัน Timezone
+    const parseSafeTime = (dateStr?: string | null) => {
+      if (!dateStr) return null;
+      let cleaned = String(dateStr).trim();
+      if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
+        cleaned = `${cleaned.replace(" ", "T")}Z`;
+      }
+      const parsed = new Date(cleaned).getTime();
+      return isNaN(parsed) ? null : parsed;
+    };
+
+    for (const order of orderList as any[]) {
+      let { data: paymentData } = await supabase.from("payment").select("*").eq("order_id", order.id).maybeSingle();
+      if (!paymentData && order.payment_id) {
+        const { data: directPay } = await supabase.from("payment").select("*").eq("id", order.payment_id).maybeSingle();
+        paymentData = directPay;
+      }
+
+      order.payment = paymentData || null;
+      order.payment_detail = paymentData || null;
+
+      const isSlipRejected = paymentData?.is_verified === false || String(paymentData?.status).toLowerCase() === "rejected";
+      const hasPaid = paymentData?.status === "paid" || paymentData?.status === "refunded";
+
+      let expiresAtMs: number | null = null;
+      if (order.expires_at) {
+        expiresAtMs = parseSafeTime(order.expires_at);
+      } else if (order.order_date) {
+        const orderDateMs = parseSafeTime(order.order_date);
+        if (orderDateMs) expiresAtMs = orderDateMs + 10 * 60 * 1000;
+      }
+
+      if (isSlipRejected && order.current_status?.state !== "ยกเลิกการพิมพ์") {
+        if (order.current_status) order.current_status.state = "รอการชำระเงิน";
+      }
+        
+
+      // 1. ตัดยกเลิกเมื่อเวลาหมดจริงๆ
+      if (order.current_status?.state === "รอการชำระเงิน" && !hasPaid && expiresAtMs && now >= expiresAtMs) {
+        await supabase.from("print_order").update({ current_status_id: cancelStatusId, cancel_reason: "payment_timeout" }).eq("id", order.id);
+        order.current_status_id = cancelStatusId;
+        order.cancel_reason = "payment_timeout";
+        if (order.current_status) order.current_status.state = "ยกเลิกการพิมพ์";
+      }
+
+      // 2. ถ้าเลยเวลานัดรับงาน
+      if (order.appointment_time) {
+        const appointmentMs = parseBangkokTime(order.appointment_time);
+        const isPendingOrPrinting = order.current_status?.state === "รอการดำเนินงาน" || order.current_status?.state === "กำลังพิมพ์";
+        if (appointmentMs && !isNaN(appointmentMs) && now >= appointmentMs && isPendingOrPrinting) {
+          await supabase.from("print_order").update({ current_status_id: cancelStatusId, cancel_reason: "appointment_timeout" }).eq("id", order.id);
+          order.current_status_id = cancelStatusId;
+          order.cancel_reason = "appointment_timeout";
+          if (order.current_status) order.current_status.state = "ยกเลิกการพิมพ์";
+        }
+      }
+    }
+
+    const { data: reports } = await supabase.from("report").select("id, order_id, description, image_url, is_verified, created_at, shop:shop_id(shop_name), order:order_id(order_no)").eq("customer_id", customer_id).order("created_at", { ascending: false });
+
     const reportList = reports || [];
-
-    // 4. คำนวณตัวเลขสถิติ 4 ช่องตามค่า state ในตาราง status
-    const inProgressCount = orderList.filter((o: any) => {
-      const state = o.current_status?.state;
-      return state === "รอการดำเนินงาน" || state === "กำลังพิมพ์";
-    }).length;
-
-    const readyCount = orderList.filter((o: any) => {
-      const state = o.current_status?.state;
-      return state === "พิมพ์เสร็จสิ้น";
-    }).length;
-
-    const completedCount = orderList.filter((o: any) => {
-      const state = o.current_status?.state;
-      return state === "รายการเสร็จสิ้น";
-    }).length;
-
-    const reportCount = reportList.length;
+    const inProgressCount = orderList.filter((o: any) => o.current_status?.state === "รอการดำเนินงาน" || o.current_status?.state === "กำลังพิมพ์").length;
+    const readyCount = orderList.filter((o: any) => o.current_status?.state === "พิมพ์เสร็จสิ้น").length;
+    const completedCount = orderList.filter((o: any) => o.current_status?.state === "รายการเสร็จสิ้น").length;
 
     return res.status(200).json({
       success: true,
       data: {
-        customer: {
-          fullName: `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || customer.contact || "ลูกค้า",
-        },
-        stats: {
-          inProgress: inProgressCount,
-          ready: readyCount,
-          completed: completedCount,
-          reports: reportCount,
-        },
-        orders: orderList,
-        reports: reportList,
+        customer: { fullName: `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || customer.contact || "ลูกค้า" },
+        stats: { inProgress: inProgressCount, ready: readyCount, completed: completedCount, reports: reportList.length },
+        orders: orderList, reports: reportList,
       },
     });
   } catch (err: any) {
-    console.error("Customer Dashboard Exception:", err);
+    console.error("Dashboard Exception:", err);
     return res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };
 
 // ==========================================
-// 2. ฟังก์ชันเพิ่มใหม่: สร้าง Order เมื่อกดชำระเงิน
+// 2. ฟังก์ชัน: สร้าง Order เมื่อกดชำระเงิน
 // ==========================================
 export const createOrder = async (req: Request, res: Response) => {
   try {
@@ -141,229 +148,187 @@ export const createOrder = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: "ข้อมูลไม่ครบถ้วน" });
     }
 
-    // 1. คำนวณยอดเงินจริง
     const subtotal_price = items.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
     const small_order_fee = (subtotal_price < 50 && subtotal_price > 0) ? 20 : 0;
     const total_price = subtotal_price + small_order_fee;
 
-    // 2. ดึง UUID สถานะ "รอการดำเนินงาน" จากตาราง status
-    const { data: statusData } = await supabase
-      .from("status")
-      .select("id")
-      .eq("state", "รอการดำเนินงาน")
-      .single();
+    const pendingPaymentStatusId = "8961dbd1-5317-4690-b037-e2ed4e9587e5";
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    const current_status_id = statusData?.id || "8c416cf8-140c-4563-a912-6a4a6c0a4d9f";
-
-    // 3. บันทึกลงตาราง print_order
     const { data: newOrder, error: orderErr } = await supabase
       .from("print_order")
       .insert({
-        customer_id,
-        shop_id,
-        description: description || "",
-        subtotal_price,
-        small_order_fee,
-        total_price,
-        receive_date,
-        appointment_time,
-        current_status_id,
+        customer_id, shop_id, description: description || "",
+        subtotal_price, small_order_fee, total_price,
+        receive_date, appointment_time,
+        current_status_id: pendingPaymentStatusId, expires_at: expiresAt,
       })
-      .select("id, order_no, total_price")
+      .select("id, order_no, total_price, expires_at")
       .single();
 
     if (orderErr || !newOrder) throw orderErr;
 
-    // 4. บันทึกรายการลงตาราง print_order_item
+    const { data: wsDataList } = await supabase.from("work_status").insert([{ order_id: newOrder.id, status_id: pendingPaymentStatusId }]).select("id");
+    const wsId = wsDataList?.[0]?.id || null;
+    if (wsId) await supabase.from("print_order").update({ work_state_id: wsId }).eq("id", newOrder.id);
+
     const orderItemsPayload = items.map((item: any) => ({
-      order_id: newOrder.id,
-      category: item.category,
-      file_url: item.file_url,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      subtotal: item.subtotal,
-      page_count: item.total_pages || 1,
-      describe: `${item.selected_size || ""} | ${item.color_type || ""} | ${item.finishing_option || ""}`.trim(),
+      order_id: newOrder.id, category: item.category, file_url: item.file_url,
+      quantity: item.quantity, unit_price: item.unit_price, subtotal: item.subtotal,
+      page_count: item.total_pages || 1, describe: `${item.selected_size || ""} | ${item.color_type || ""} | ${item.finishing_option || ""}`.trim(),
     }));
 
-    const { error: itemErr } = await supabase.from("print_order_item").insert(orderItemsPayload);
-    if (itemErr) throw itemErr;
+    await supabase.from("print_order_item").insert(orderItemsPayload);
 
-    // 5. สร้าง Record ในตาราง payment
-    const { data: paymentData, error: payErr } = await supabase
+    const { data: paymentData } = await supabase
       .from("payment")
-      .insert({
-        order_id: newOrder.id,
-        sender: customer_id,
-        receiver: shop_id,
-        amount: total_price,
-        status: "pending",
-      })
+      .insert({ order_id: newOrder.id, sender: customer_id, receiver: shop_id, amount: total_price, status: "pending" })
       .select("id")
       .single();
 
-    if (payErr || !paymentData) throw payErr;
-
-    // 6. อัปเดต payment_id กลับไปที่ print_order
-    await supabase
-      .from("print_order")
-      .update({ payment_id: paymentData.id })
-      .eq("id", newOrder.id);
+    if (paymentData) await supabase.from("print_order").update({ payment_id: paymentData.id }).eq("id", newOrder.id);
 
     return res.status(200).json({
       success: true,
-      data: {
-        order_id: newOrder.id,
-        order_no: newOrder.order_no,
-        total_price: newOrder.total_price,
-      },
+      data: { order_id: newOrder.id, order_no: newOrder.order_no, total_price: newOrder.total_price, expires_at: newOrder.expires_at },
     });
   } catch (err: any) {
-    console.error("Create Order Exception:", err);
     return res.status(500).json({ success: false, error: err.message });
   }
 };
 
 // ==========================================
-// 3. ฟังก์ชันเพิ่มใหม่: อัปโหลดสลิปเข้า Bucket payment_slip
+// 3. อัปโหลดสลิปชำระเงิน
 // ==========================================
 export const uploadPaymentSlip = async (req: Request, res: Response) => {
   try {
-    const { orderId } = req.body;
+    const { orderId, order_id } = req.body;
+    const targetOrderId = orderId || order_id;
     const file = req.file;
 
-    if (!orderId || !file) {
-      return res.status(400).json({ success: false, error: "ขาดข้อมูล orderId หรือไฟล์สลิป" });
-    }
+    if (!targetOrderId || !file) return res.status(400).json({ success: false, error: "ขาดข้อมูล" });
 
-    // 1. ตั้งชื่อไฟล์ลงใน Bucket payment_slip
+    const { data: orderData } = await supabase.from("print_order").select("id, order_no, customer_id, shop_id, total_price, expires_at, order_date").eq("id", targetOrderId).maybeSingle();
+    if (!orderData) return res.status(404).json({ success: false, error: "ไม่พบคำสั่งซื้อ" });
+
     const fileExt = file.originalname.split(".").pop();
-    const fileName = `slip_${orderId}_${Date.now()}.${fileExt}`;
+    const fileName = `slip_${targetOrderId}_${Date.now()}.${fileExt}`;
 
-    // 2. Upload ไฟล์ไปที่ Supabase Storage Bucket 'payment_slip'
-    const { error: storageErr } = await supabase.storage
-      .from("payment_slip")
-      .upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        upsert: true,
-      });
-
-    if (storageErr) throw storageErr;
-
-    // 3. ดึง Public URL ของภาพสลิป
-    const { data: urlData } = supabase.storage
-      .from("payment_slip")
-      .getPublicUrl(fileName);
-
+    await supabase.storage.from("payment_slip").upload(fileName, file.buffer, { contentType: file.mimetype, upsert: true });
+    const { data: urlData } = supabase.storage.from("payment_slip").getPublicUrl(fileName);
     const slipPublicUrl = urlData.publicUrl;
 
-    // 4. อัปเดต slip_url และเปลี่ยนสถานะเป็น 'paid' ในตาราง payment
-    const { error: payUpdateErr } = await supabase
+    const { data: payList } = await supabase
       .from("payment")
-      .update({
-        slip_url: slipPublicUrl,
-        status: "paid",
-        payment_date: new Date().toISOString(),
-      })
-      .eq("order_id", orderId);
+      .upsert({
+        order_id: targetOrderId, sender: orderData.customer_id, receiver: orderData.shop_id, amount: orderData.total_price,
+        slip_url: slipPublicUrl, status: "paid", payment_date: new Date().toISOString(), is_verified: null,
+      }, { onConflict: "order_id" })
+      .select("id");
 
-    if (payUpdateErr) throw payUpdateErr;
+    const paymentId = payList?.[0]?.id || null;
+    const inProgressStatusId = "8c416cf8-140c-4563-a912-6a4a6c0a4d9f"; 
 
-    return res.status(200).json({
-      success: true,
-      message: "อัปโหลดสลิปชำระเงินสำเร็จ",
-      slip_url: slipPublicUrl,
-    });
+    const { data: wsDataList } = await supabase.from("work_status").insert([{ order_id: targetOrderId, status_id: inProgressStatusId }]).select("id");
+    const wsId = wsDataList?.[0]?.id || null;
+
+    await supabase.from("print_order").update({ payment_id: paymentId, current_status_id: inProgressStatusId, work_state_id: wsId }).eq("id", targetOrderId);
+
+    if (orderData.shop_id) {
+      await supabase.from("notifications").insert([{ shop_id: orderData.shop_id, order_id: targetOrderId, title: "แจ้งชำระเงินแล้ว", message: `ออเดอร์ #${formatOrderNo(orderData.order_no, targetOrderId)} ชำระเงินแล้ว กรุณาตรวจสอบสลิป`, is_read: false }]);
+    }
+
+    return res.status(200).json({ success: true, message: "อัปโหลดสลิปชำระเงินสำเร็จ", slip_url: slipPublicUrl });
   } catch (err: any) {
-    console.error("Upload Slip Exception:", err);
     return res.status(500).json({ success: false, error: err.message });
   }
 };
 
 // ==========================================
-// 3. ดึงรายชื่อลูกค้าทั้งหมดสำหรับ Admin
+// 4. ดึงรายชื่อลูกค้าทั้งหมดสำหรับ Admin
 // ==========================================
 export const getAllCustomers = async (req: Request, res: Response) => {
   try {
-    const { data: customers, error } = await supabase
-      .from("customer")
-      .select("*") // ดึงมาทุกคอลัมน์ก่อนเพื่อไม่ให้เกิด Error คอลัมน์หาไม่เจอ
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Fetch all customers error:", error.message);
-      return res.status(400).json({ error: error.message });
-    }
-
+    const { data: customers } = await supabase.from("customer").select("*").order("created_at", { ascending: false });
     return res.status(200).json(customers);
   } catch (err: any) {
-    console.error("Get all customers exception:", err.message || err);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
 // ==========================================
-// ตรวจเช็คการรายงาน ว่าลูกค้ามีการรายงานคำสั่งซื้อไปแล้วหรือยัง ถ้ารายงานไปแล้ว จะไม่สามารถรายงานใหม่ได้
+// 5. บันทึกรายงานปัญหา / ขอคืนเงิน
 // ==========================================
-// ตัวอย่างฟังก์ชันบันทึกรายงานใน customerController.ts
 export const createReport = async (req: Request, res: Response) => {
   try {
-    const { order_id, customer_id, issue_type, description, resolution } = req.body;
+    const { order_id, customer_id, issue_type, description, resolution, image_url, shop_id } = req.body;
+    if (!order_id) return res.status(400).json({ success: false, message: "ไม่พบรหัสคำสั่งซื้อ" });
 
-    if (!order_id) {
-      return res.status(400).json({ success: false, message: "ไม่พบรหัสคำสั่งซื้อ" });
-    }
+    const { data: existingReport } = await supabase.from("report").select("id").eq("order_id", order_id).maybeSingle();
+    if (existingReport) return res.status(400).json({ success: false, message: "คุณได้ส่งคำร้องสำหรับคำสั่งซื้อนี้ไปแล้ว" });
 
-    // 🛑 1. เช็กตรงนี้: ถ้า order_id นี้เคยถูกแจ้งรายงานไปแล้ว ให้ตีกลับทันที!
-    const { data: existingReport, error: checkErr } = await supabase
-      .from("report")
-      .select("id")
-      .eq("order_id", order_id)
-      .maybeSingle();
+    const { data: newReport } = await supabase.from("report").insert([{ order_id, customer_id, shop_id: shop_id || null, issue_type: issue_type || "อื่น ๆ", description: description || "", resolution: resolution || null, image_url: image_url || null, is_verified: false }]).select("id").single();
 
-    if (existingReport) {
-      return res.status(400).json({
-        success: false,
-        message: "คุณได้ส่งคำร้องขอคืนเงินสำหรับคำสั่งซื้อนี้ไปแล้ว ไม่สามารถส่งซ้ำได้",
-      });
-    }
-
-    // 2. โค้ดเดิมสำหรับบันทึกข้อมูลรายงาน (Insert ลงตาราง report และอัปโหลดรูปภาพต่อจากตรงนี้...)
-
+    return res.status(201).json({ success: true, message: "ส่งคำร้องสำเร็จ", data: newReport });
   } catch (err: any) {
-    console.error("Create Report Error:", err);
-    return res.status(500).json({ success: false, error: "Internal Server Error" });
+    return res.status(500).json({ success: false, error: err.message });
   }
 };
 
 // ==========================================
-// ตรวจสอบว่าออร์เดอร์นี้เคยถูกรายงานไปแล้วหรือยัง (สำหรับให้ Frontend เช็กตอนโหลดหน้า)
+// 6. ตรวจสอบว่าออร์เดอร์นี้เคยถูกรายงานไปแล้วหรือยัง
 // ==========================================
 export const checkOrderStatusReported = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
+    if (!orderId) return res.status(400).json({ success: false, error: "Missing orderId" });
 
-    if (!orderId) {
-      return res.status(400).json({ success: false, error: "Missing orderId" });
-    }
+    const { data: reportData } = await supabase.from("report").select("id, created_at, description").eq("order_id", orderId).maybeSingle();
+    return res.status(200).json({ success: true, hasReported: !!reportData, report: reportData || null });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+};
 
-    const { data: reportData, error } = await supabase
-      .from("report")
-      .select("id, created_at, description")
-      .eq("order_id", orderId)
-      .maybeSingle();
+
+// ==========================================
+// ดึงรายการร้านค้าทั้งหมด พร้อมคำนวณคะแนนและจำนวนรีวิว
+// ==========================================
+export const getShops = async (req: Request, res: Response) => {
+  try {
+    // 1. ดึงข้อมูลร้านค้าพร้อมรีวิว (ปรับชื่อตาราง print_shop หรือ print_shops ตามฐานข้อมูลของคุณ)
+    const { data: shops, error } = await supabase
+      .from("print_shop")
+      .select(`
+        *,
+        reviews: review ( score )
+      `);
 
     if (error) {
+      console.error("Fetch shops error:", error);
       return res.status(500).json({ success: false, error: error.message });
     }
 
+    // 2. คำนวณ rating และ review_count ให้กับแต่ละร้าน
+    const formattedShops = (shops || []).map((shop: any) => {
+      const shopReviews = shop.reviews || [];
+      const review_count = shopReviews.length;
+      const totalScore = shopReviews.reduce((sum: number, r: any) => sum + Number(r.score || 0), 0);
+      const rating = review_count > 0 ? Number((totalScore / review_count).toFixed(1)) : 0;
+
+      return {
+        ...shop,
+        rating,
+        review_count,
+      };
+    });
+
     return res.status(200).json({
       success: true,
-      hasReported: !!reportData, // จะเป็น true ทันทีถ้าเคยรายงานแล้ว
-      report: reportData || null,
+      data: formattedShops,
     });
   } catch (err: any) {
-    console.error("Check Report Exception:", err);
+    console.error("Get Shops Exception:", err);
     return res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };
