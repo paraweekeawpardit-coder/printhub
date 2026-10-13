@@ -106,6 +106,15 @@ export default function CustomerDashboardView({
       "";
 
     // 1. ถ้าระบุชัดเจนใน DB ว่ายกเลิก ให้ยึดเป็นยกเลิกการพิมพ์ทันที
+    // แอดมินอนุมัติคืนเงินจากคำร้อง -> ใน DB เป็นยกเลิก แต่ฝั่งลูกค้านับเป็น "รายการเสร็จสิ้น"
+    const reportStatus = String(o?.report?.status || "").toLowerCase();
+    if (
+      reportStatus === "resolved_refund" &&
+      (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก" || dbState === "cancelled")
+    ) {
+      return "รายการเสร็จสิ้น";
+    }
+
     if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก" || dbState === "cancelled") {
       return "ยกเลิกการพิมพ์";
     }
