@@ -22,6 +22,8 @@ export interface IMessage extends Document {
   time?: string;
   is_read?: boolean;
   isRead?: boolean;
+  is_unsent?: boolean; // 🟢 เพิ่มประเภทข้อมูล
+  isUnsent?: boolean;  // 🟢 เพิ่มประเภทข้อมูล
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -65,6 +67,10 @@ const messageSchema: Schema = new Schema({
   time: { type: String },
   is_read: { type: Boolean, default: false },
   isRead: { type: Boolean, default: false },
+  
+  // 🟢 เพิ่มฟิลด์ควบคุมการยกเลิกข้อความลงใน Schema
+  is_unsent: { type: Boolean, default: false },
+  isUnsent: { type: Boolean, default: false },
 }, { 
   timestamps: true,
   collection: 'messages' // 👈 บังคับเซฟลง Collection 'messages' ใน DB test
@@ -77,6 +83,12 @@ messageSchema.set('toJSON', {
     ret.text = ret.text || ret.message || '';
     ret.sender = ret.sender || ret.sender_role || 'customer';
     ret.timestamp = ret.createdAt ? new Date(ret.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ret.time;
+    
+    // 🟢 ส่งค่าสถานะการยกเลิกข้อความทั้ง 2 รูปแบบกลับไปที่ Client
+    const unsentStatus = Boolean(ret.isUnsent || ret.is_unsent);
+    ret.isUnsent = unsentStatus;
+    ret.is_unsent = unsentStatus;
+
     delete ret._id;
     delete ret.__v;
     return ret;
