@@ -1,5 +1,4 @@
 "use client";
-import PaymentActionButton from "@/component/customer/payment/PaymentActionButton";
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -14,9 +13,11 @@ import {
   Star, 
   AlertTriangle,
   CheckCircle2,
-  CalendarDays,
-  FileText
+  CalendarDays
 } from "lucide-react";
+import PaymentActionButton from "@/component/customer/payment/PaymentActionButton";
+import OrderCancellationAlert from "./OrderCancellationAlert";
+import OrderItemsAccordion from "./OrderItemsAccordion";
 
 interface CustomerOrderCardProps {
   order: any;
@@ -46,12 +47,25 @@ export default function CustomerOrderCard({
 
   if (!order) return null;
 
-  // 1. ตรวจสอบข้อมูล payment
-  const paymentData = Array.isArray(order?.payment) ? order.payment[0] : order?.payment;
-  const isSlipRejected = paymentData?.is_verified === false || paymentData?.status === "rejected";
-  const hasPaidSlip = Boolean(paymentData?.slip_url) && !isSlipRejected;
+  // 1. ตรวจสอบข้อมูล payment ให้รอบด้าน
+  const rawPayment = order?.payment || order?.payment_detail || order?.payments;
+  const paymentData = Array.isArray(rawPayment) ? rawPayment[0] : rawPayment;
+  
+  const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
+  const refundSlipUrl = paymentData?.refund_slip_url || null;
 
-  // 2. ฟังก์ชันแปลงเวลา Timezone แบบปลอดภัย
+  // ตรวจจับว่ามีการจ่ายเงิน/แนบสลิปแล้วหรือไม่
+  const hasPaidSlip = Boolean(
+    paymentData?.slip_url || 
+    paymentStatus === "paid" || 
+    paymentStatus === "refunded" || 
+    paymentStatus === "pending_payout" ||
+    order?.payment_id
+  );
+
+  const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
+
+  // 2. ฟังก์ชันแปลงเวลา Timezone
   const parseSafeTime = (dateStr?: string | null) => {
     if (!dateStr) return null;
     let cleaned = String(dateStr).trim();
@@ -69,12 +83,10 @@ export default function CustomerOrderCard({
     order?.status?.state || 
     (typeof order?.status === "string" ? order.status : "รอการชำระเงิน");
 
-  // ถ้าสลิปถูกปฏิเสธ ให้ดีดกลับมาเป็น "รอการชำระเงิน"
   if (isSlipRejected && state !== "ยกเลิกการพิมพ์") {
     state = "รอการชำระเงิน";
   }
 
-  // เช็คเวลาหมดอายุชำระเงิน
   const expiresAtMs = parseSafeTime(order?.expires_at);
   const orderDateMs = parseSafeTime(order?.order_date);
 
@@ -85,16 +97,13 @@ export default function CustomerOrderCard({
     isPaymentExpired = now > (orderDateMs + 10 * 60 * 1000);
   }
 
-  // หากอยู่ในสถานะรอชำระเงินแล้วเวลาหมดลงจริง ให้ถือว่ายกเลิก
   if (state === "รอการชำระเงิน" && isPaymentExpired && !hasPaidSlip && !isSlipRejected) {
     state = "ยกเลิกการพิมพ์";
   }
 
-  // ตรวจสอบว่าเลยเวลานัดรับงานแล้วหรือยัง
-  const appointmentMs = parseSafeTime(order?.appointment_time);
+  const appointmentMs = parseSafeTime(order?.appointment_time || order?.receive_date);
   const isOverdue = appointmentMs ? now >= appointmentMs : false;
 
-  // S2G7: ถ้าเลยเวลานัดรับแล้วงานยังไม่เสร็จ ให้ตัดเป็นยกเลิกการพิมพ์ทันที
   if (isOverdue && (state === "รอการดำเนินงาน" || state === "กำลังพิมพ์")) {
     state = "ยกเลิกการพิมพ์";
   }
@@ -106,10 +115,7 @@ export default function CustomerOrderCard({
   const isReceived = state === "รับงานแล้ว" || state === "รายการเสร็จสิ้น";
   const isCanceled = state === "ยกเลิกการพิมพ์";
 
-  // 🌟 แยกประเภทกล่องข้อความยกเลิก (แก้ไขให้ถูกต้อง ไม่แสดงสลับกัน)
-  const isOverdueCancelled = isCanceled && isOverdue;
-  const isTimeoutCancelled = isCanceled && isPaymentExpired && !hasPaidSlip && !isOverdue;
-  const isUserCancelled = isCanceled && !isOverdueCancelled && !isTimeoutCancelled;
+  const isTimeoutCancelled = isCanceled && isPaymentExpired && !hasPaidSlip;
 
   const stateBadgeStyle =
     isPendingPayment
@@ -124,7 +130,6 @@ export default function CustomerOrderCard({
       ? "bg-blue-50 text-blue-700 border-blue-200/80"
       : "bg-slate-50 text-slate-600 border-slate-200";
 
-  // ฟังก์ชันจัดรูปแบบเวลา
   const formatThaiDateTime = (dateStr?: string | null) => {
     if (!dateStr) return { date: "-", time: "" };
     const ts = parseSafeTime(dateStr);
@@ -167,6 +172,8 @@ export default function CustomerOrderCard({
       .join(", ");
   })();
 
+  const subtotalPrice = Number(order?.subtotal_price || order?.total_price || 0);
+  const smallOrderFee = Number(order?.small_order_fee || 0);
   const orderPrice = Number(order?.total_amount || order?.total_price || 0);
   const orderNumberStr = `#ORD-${order?.order_no || order?.id?.slice(0, 6) || "------"}`;
   const shopId = order?.shop?.id || order?.print_shop?.id || order?.shop_id;
@@ -251,42 +258,16 @@ export default function CustomerOrderCard({
           </div>
         </div>
 
-        {/* 🌟 กล่องที่ 1: ยกเลิกเพราะเลยเวลานัดรับงาน */}
-        {isOverdueCancelled && (
-          <div className="bg-amber-50 border border-amber-200/90 text-amber-900 px-3.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2 mt-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span className="leading-relaxed">
-                คำสั่งซื้อถูกยกเลิกเนื่องจากเลยกำหนดเวลานัดรับงาน ระบบกำลังดำเนินการตรวจสอบเพื่อคืนเงินภายใน 48 ชั่วโมง
-              </span>
-            </div>
-            <span className="font-bold text-amber-800 shrink-0 text-[10px] sm:text-[11px] bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded-md">
-              รอตรวจสอบ
-            </span>
-          </div>
-        )}
+        {/* 🌟 แสดงกล่องแจ้งเตือนยกเลิก / คืนเงิน จุดเดียวเท่านั้น */}
+        <OrderCancellationAlert 
+          isCanceled={isCanceled}
+          hasPaidSlip={hasPaidSlip}
+          paymentStatus={paymentStatus}
+          refundSlipUrl={refundSlipUrl}
+          isTimeoutCancelled={isTimeoutCancelled}
+        />
 
-        {/* 🌟 กล่องที่ 2: ลูกค้ากดยกเลิกเองตามสิทธิ์ FR-2.10 */}
-        {isUserCancelled && (
-          <div className="bg-slate-50 border border-slate-200 text-slate-600 px-3.5 py-2 rounded-xl text-xs flex items-center justify-between gap-2 mt-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <Ban className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>คุณได้ทำการยกเลิกคำสั่งซื้อนี้เรียบร้อยแล้ว</span>
-            </div>
-            <span className="text-[10px] sm:text-[11px] bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-md font-medium">
-              ยกเลิกแล้ว
-            </span>
-          </div>
-        )}
-
-        {/* 🌟 กล่องที่ 3: ยกเลิกเพราะหมดเวลาชำระเงิน 10 นาที (ไม่จ่ายเงิน) */}
-        {isTimeoutCancelled && (
-          <div className="bg-slate-50 border border-slate-200 text-slate-600 px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 mt-1">
-            <AlertTriangle className="w-4 h-4 text-slate-400 shrink-0" />
-            <span>คำสั่งซื้อนี้ถูกยกเลิกอัตโนมัติ เนื่องจากไม่ได้ชำระเงินภายในเวลาที่กำหนด</span>
-          </div>
-        )}
-
+        {/* แถวล่าง: ปุ่มรายละเอียด และปุ่ม Action */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1 border-t border-slate-100/80">
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
@@ -321,6 +302,7 @@ export default function CustomerOrderCard({
                 <PaymentActionButton order={order} />
               )}
 
+              {/* ปุ่มยกเลิก: แสดงเฉพาะตอนรอดำเนินงาน หรือ รอชำระเงิน และยังไม่ยกเลิก */}
               {!isCanceled && (isPending || isPendingPayment) && (
                 <button
                   type="button"
@@ -347,7 +329,7 @@ export default function CustomerOrderCard({
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => router.push(`/customer/orders/${order.id}/review`)}
+                    onClick={() => router.push(`/customer/review?order_id=${order.id}&shop_id=${shopId}`)}
                     className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
                   >
                     <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
@@ -356,7 +338,7 @@ export default function CustomerOrderCard({
 
                   <button
                     type="button"
-                    onClick={() => router.push(`/customer/orders/${order.id}/report`)}
+                    onClick={() => onReportClick?.(order)}
                     className="px-2.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
                   >
                     <AlertTriangle className="w-3.5 h-3.5" />
@@ -376,85 +358,14 @@ export default function CustomerOrderCard({
         </div>
       </div>
 
-      {/* 3. รายละเอียดใน Dropdown */}
-      {isExpanded && (
-        <div className="border-t border-slate-100 bg-[#F9FAFB] p-4 text-xs space-y-3">
-          <div className="space-y-2">
-            {items.map((item: any, idx: number) => {
-              const pageCount = Number(item?.page_count) || 1;
-              const unitPrice = Number(item?.unit_price) || 0;
-              const quantity = Number(item?.quantity) || 1;
-              const itemSubtotal = Number(item?.subtotal) || unitPrice * pageCount * quantity;
-
-              const specs = item?.describe
-                ? item.describe.split("|").map((s: string) => s.trim()).filter(Boolean)
-                : [];
-
-              return (
-                <div key={item?.id || idx} className="bg-white p-3 rounded-xl border border-slate-200/70 space-y-1.5">
-                  <div className="flex justify-between items-start">
-                    <span className="font-bold text-slate-800 text-xs">
-                      {idx + 1}. {item?.category || "งานพิมพ์เอกสาร"}
-                    </span>
-                    <span className="font-bold text-slate-900">
-                      ฿{itemSubtotal.toFixed(2)}
-                    </span>
-                  </div>
-
-                  {specs.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {specs.map((spec: string, sIdx: number) => (
-                        <span key={sIdx} className="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded-md font-medium">
-                          {spec}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="text-[11px] text-slate-400 flex justify-between pt-0.5">
-                    <span>{pageCount} หน้า × ฿{unitPrice.toFixed(2)}/หน้า</span>
-                    <span className="font-medium text-slate-600">รวม {quantity} ชุด</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* 🌟 แสดงหมายเหตุใน Dropdown */}
-          {order?.description && (
-            <div className="bg-white border border-slate-200/80 rounded-xl p-3 text-xs flex items-start gap-2 shadow-2xs">
-              <FileText className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-              <div className="space-y-0.5 leading-relaxed">
-                <span className="font-bold text-slate-700 block">หมายเหตุถึงร้าน:</span>
-                <p className="text-slate-600 break-words">{order.description}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-white p-3 rounded-xl border border-slate-200/70 space-y-1 text-slate-600 text-[11px]">
-            <div className="flex justify-between">
-              <span>ค่างานพิมพ์รวม</span>
-              <span className="font-semibold text-slate-800">
-                ฿{Number(order?.subtotal_price || order?.total_price || 0).toFixed(2)}
-              </span>
-            </div>
-
-            {Number(order?.small_order_fee) > 0 && (
-              <div className="flex justify-between text-orange-600">
-                <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (&lt;50 บาท)</span>
-                <span className="font-semibold">+฿{Number(order.small_order_fee).toFixed(2)}</span>
-              </div>
-            )}
-
-            <div className="flex justify-between items-center text-xs font-bold text-slate-900 pt-1.5 border-t border-slate-100">
-              <span className="text-blue-700">ยอดชำระสุทธิ</span>
-              <span className="text-sm font-extrabold text-blue-700">
-                ฿{orderPrice.toFixed(2)}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+      <OrderItemsAccordion
+        isExpanded={isExpanded}
+        items={items}
+        description={order?.description}
+        subtotalPrice={subtotalPrice}
+        smallOrderFee={smallOrderFee}
+        netTotalPrice={orderPrice}
+      />
 
     </div>
   );

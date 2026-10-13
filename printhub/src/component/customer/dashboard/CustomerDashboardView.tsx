@@ -84,7 +84,7 @@ export default function CustomerDashboardView({
     return isNaN(parsed) ? null : parsed;
   };
 
-  // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์
+  // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์ให้สอดคล้องกับตาราง payment และการ์ดแสดงผล
   const getRealOrderState = (o: any) => {
     if (!o) return "รอการดำเนินงาน";
 
@@ -95,36 +95,52 @@ export default function CustomerDashboardView({
       (typeof o.status === "string" ? o.status : null) ||
       "";
 
+    // 1. ถ้าใน DB บันทึกว่ายกเลิกแล้ว ให้เป็น "ยกเลิกการพิมพ์" ทันที
     if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก") {
       return "ยกเลิกการพิมพ์";
     }
 
     const now = Date.now();
-    const paymentData = Array.isArray(o?.payment) ? o.payment[0] : o?.payment;
-    const isSlipRejected = paymentData?.is_verified === false || paymentData?.status === "rejected";
+    const rawPayment = o?.payment || o?.payment_detail || o?.payments;
+    const paymentData = Array.isArray(rawPayment) ? rawPayment[0] : rawPayment;
+    const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
+    
+    // ตรวจสอบสถานะการจ่ายเงิน
+    const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
+    const hasPaidSlip = Boolean(
+      paymentData?.slip_url || 
+      paymentStatus === "paid" || 
+      paymentStatus === "refunded" || 
+      paymentStatus === "pending_payout" ||
+      o?.payment_id
+    );
 
-    let isExpired = false;
     const expiresAtMs = parseSafeTime(o?.expires_at);
     const orderDateMs = parseSafeTime(o?.order_date);
 
+    // คำนวณการหมดเวลาชำระเงิน (10 นาที หรือตาม expires_at)
+    let isPaymentExpired = false;
     if (expiresAtMs) {
-      isExpired = now > expiresAtMs;
+      isPaymentExpired = now > expiresAtMs;
     } else if (!isSlipRejected && orderDateMs) {
-      isExpired = now > (orderDateMs + 10 * 60 * 1000);
+      isPaymentExpired = now > (orderDateMs + 10 * 60 * 1000);
     }
 
-    if (isExpired) {
+    // 🌟 2. ดักยกเลิกอัตโนมัติ: ถ้าหมดเวลาชำระเงิน และไม่มีการชำระเงินเข้ามา
+    if ((dbState === "รอการชำระเงิน" || isSlipRejected) && isPaymentExpired && !hasPaidSlip) {
       return "ยกเลิกการพิมพ์";
     }
 
-    const appointmentMs = parseSafeTime(o?.appointment_time);
+    // 🌟 3. ดักยกเลิกอัตโนมัติ: เลยเวลานัดรับงานแล้วร้านยังทำไม่เสร็จ (S2G7 Auto-Cancel)
+    const appointmentMs = parseSafeTime(o?.appointment_time || o?.receive_date);
     if (appointmentMs && now >= appointmentMs) {
       if (dbState === "รอการดำเนินงาน" || dbState === "กำลังพิมพ์") {
         return "ยกเลิกการพิมพ์";
       }
     }
 
-    if (isSlipRejected) {
+    // 🌟 4. ถ้าสลิปโดนปฏิเสธ แต่ยังไม่หมดเวลา ให้ดีดกลับมารอชำระเงินเพื่อให้ส่งสลิปใหม่
+    if (isSlipRejected && dbState !== "ยกเลิกการพิมพ์") {
       return "รอการชำระเงิน";
     }
 
@@ -161,7 +177,7 @@ export default function CustomerDashboardView({
     fetchDashboardData(cid);
   }, [router, fetchDashboardData]);
 
-  // 🟢 ปรับกรอบไฮไลต์ให้เส้นบางลง (ring-2) และสีเข้มขึ้น (ring-blue-600)
+  // ปรับกรอบไฮไลต์เมื่อมี highlightOrderId เข้ามา
   useEffect(() => {
     if (!loading && highlightOrderId && orders.length > 0) {
       const targetOrder = orders.find((o) => String(o.id) === String(highlightOrderId));
@@ -171,7 +187,6 @@ export default function CustomerDashboardView({
           if (element) {
             element.scrollIntoView({ behavior: "smooth", block: "center" });
 
-            // 🟢 เปลี่ยนคลาสเป็น ring-2 (เส้นบางลง) และ ring-blue-600 (สีเข้มขึ้น)
             element.classList.add(
               "ring-2",
               "ring-blue-600",
@@ -195,7 +210,7 @@ export default function CustomerDashboardView({
     }
   }, [loading, highlightOrderId, orders]);
 
-  // คำนวณจำนวนออเดอร์ในแต่ละสถานะ
+  // คำนวณจำนวนออเดอร์ในแต่ละสถานะสำหรับตัวเลข Badge
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       ทั้งหมด: orders.length,

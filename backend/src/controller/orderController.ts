@@ -50,7 +50,7 @@ const formatOrderNo = (orderNo: any, orderId: string) => {
   return String(orderNo).startsWith("ORD-") ? orderNo : `ORD-${orderNo}`;
 };
 
-// Helper แปลงเวลา Timezone ให้ปลอดภัย
+// Helper แปลงเวลา Timezone ให้ปลอดภัย (UTC vs GMT+7)
 const parseSafeTime = (dateStr?: string | null) => {
   if (!dateStr) return null;
   let cleaned = String(dateStr).trim();
@@ -76,7 +76,6 @@ export const createOrder = async (req: Request, res: Response) => {
     const customerId = (req as any).user?.id || req.body.customer_id;
     const { description, receive_date, appointment_time } = req.body;
     
-    // 🌟 รับ shop_id และป้องกันค่าว่าง
     const targetShopId = req.body.shop_id || req.query.shop_id;
 
     if (!customerId || !targetShopId) {
@@ -91,7 +90,7 @@ export const createOrder = async (req: Request, res: Response) => {
       .from("cart")
       .select("id, shop_id, cart_item (*)")
       .eq("customer_id", customerId)
-      .eq("shop_id", targetShopId) // 👈 ล็อกตรงนี้เลย ห้ามใช้ if ครอบ
+      .eq("shop_id", targetShopId)
       .maybeSingle();
 
     if (cartError) throw cartError;
@@ -132,10 +131,8 @@ export const createOrder = async (req: Request, res: Response) => {
 
         let isWithinHours = false;
         if (closeMin < openMin) {
-          // ร้านเปิดข้ามเที่ยงคืน (เช่น 09:30 - 02:00 น.)
           isWithinHours = selMin >= openMin || selMin <= closeMin;
         } else {
-          // ร้านเปิด-ปิดวันเดียวกัน (เช่น 08:00 - 18:00 น.)
           isWithinHours = selMin >= openMin && selMin <= closeMin;
         }
 
@@ -248,7 +245,6 @@ export const createOrder = async (req: Request, res: Response) => {
       await supabase.from("print_file").insert(filesToInsert);
     }
 
-    // 🌟 ลบเฉพาะไอเทมและตะกร้าของร้านที่เพิ่งสั่งซื้อเท่านั้น
     await supabase.from("cart_item").delete().eq("cart_id", cart.id);
     await supabase.from("cart").delete().eq("id", cart.id).eq("shop_id", targetShopId);
 
@@ -279,48 +275,75 @@ export const createOrder = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. ดึงประวัติคำสั่งซื้อ (ปรับแก้ไขจุด Relation Ambiguity)
+// 2. ดึงประวัติคำสั่งซื้อ (getCustomerOrders)
 // ==========================================
 export const getCustomerOrders = async (req: Request, res: Response) => {
   try {
     const customerId = (req as any).user?.id || req.query.customer_id;
-
     if (!customerId) {
       return res.status(400).json({ success: false, message: "Missing customer_id" });
     }
 
     const now = Date.now();
-    const CANCELLED_STATUS_ID = "9aee439b-3d24-4b4e-8d68-d9b63081b80c";
-    const PENDING_STATUS_ID = "8c416cf8-140c-4563-a912-6a4a6c0a4d9f";
-    const PRINTING_STATUS_ID = "adce12c6-d8cd-4c2e-b7ca-e69fe603a8a0";
+    const CANCELLED_STATUS_ID = "9aee439b-3d24-4b4e-8d68-d9b63081b80c"; // ยกเลิกการพิมพ์
+    const PENDING_PAYMENT_STATUS_ID = "8961dbd1-5317-4690-b037-e2ed4e9587e5"; // รอการชำระเงิน
+    const PENDING_STATUS_ID = "8c416cf8-140c-4563-a912-6a4a6c0a4d9f";   // รอการดำเนินงาน
+    const PRINTING_STATUS_ID = "adce12c6-d8cd-4c2e-b7ca-e69fe603a8a0";  // กำลังพิมพ์
 
-    // 🌟 ระบุ Foreign Key payment!order_id (*) เพื่อป้องกัน 500 Error
+    // 1. ดึง print_order พร้อม join ตารางที่เกี่ยวข้อง
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(`
         *,
         current_status:current_status_id (id, state),
         shop:shop_id (id, shop_name),
-        print_order_item (*),
-        payment!order_id (*)
+        print_order_item (*)
       `)
       .eq("customer_id", customerId)
       .order("order_date", { ascending: false });
 
     if (error) throw error;
 
+    // 2. วนลูปเพื่อดึง payment ตรงจาก order_id และตรวจสอบเงื่อนไข Auto-Cancel
     for (const order of orders || []) {
-      const currentState = order.current_status?.state;
-      const appointmentMs = parseSafeTime(order.appointment_time);
+      // 🌟 ดึงข้อมูลจากตาราง payment ตรงๆ ด้วย order_id เพื่อความแม่นยำ 100%
+      const { data: paymentData } = await supabase
+        .from("payment")
+        .select("*")
+        .eq("order_id", order.id)
+        .order("payment_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      // กรณี Auto-Cancel: เลยเวลานัดรับ และค้างอยู่ที่รอดำเนินงาน หรือ กำลังพิมพ์
+      // แนบ payment กลับเข้าไปใน order เพื่อให้หน้าบ้าน CustomerOrderCard เรียกใช้ได้โดยตรง
+      order.payment = paymentData || null;
+      order.payment_detail = paymentData || null;
+
+      const currentState = order.current_status?.state;
+      const appointmentMs = parseSafeTime(order.appointment_time || order.receive_date);
+      const expiresAtMs = parseSafeTime(order.expires_at);
+
+      const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
+      const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
+
+      // 🌟 1. ดักยกเลิกอัตโนมัติ: หมดเวลาชำระเงิน expires_at
+      const isPaymentTimeout = 
+        (currentState === "รอการชำระเงิน" || order.current_status_id === PENDING_PAYMENT_STATUS_ID || isSlipRejected) &&
+        currentState !== "ยกเลิกการพิมพ์" &&
+        expiresAtMs !== null && 
+        now >= expiresAtMs;
+
+      // 🌟 2. ดักยกเลิกอัตโนมัติ: เลยเวลานัดรับงานแล้วร้านยังไม่เสร็จ (S2G7 Auto-Cancel)
       const isPendingOrPrinting = 
         currentState === "รอการดำเนินงาน" || 
         currentState === "กำลังพิมพ์" ||
         order.current_status_id === PENDING_STATUS_ID ||
         order.current_status_id === PRINTING_STATUS_ID;
 
-      if (appointmentMs && now >= appointmentMs && isPendingOrPrinting) {
+      const isOverdueCancel = appointmentMs && now >= appointmentMs && isPendingOrPrinting;
+
+      // ถ้าเข้าเงื่อนไข Auto-Cancel ให้อัปเดตเป็น "ยกเลิกการพิมพ์"
+      if (isPaymentTimeout || isOverdueCancel) {
         let cancelWsId = null;
         try {
           const { data: wsCancelList } = await supabase
@@ -729,7 +752,7 @@ export const cancelOrderTimeout = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 8. ร้านค้าปฏิเสธสลิป / สลิปไม่ถูกต้อง (นับเวลาต่อจากเดิมที่ Pause ไว้ตาม S2G7)
+// 8. ร้านค้าปฏิเสธสลิป / สลิปไม่ถูกต้อง (is_verified = false, status = rejected)
 // ==========================================
 export const rejectPaymentSlip = async (req: Request, res: Response) => {
   try {
@@ -764,7 +787,6 @@ export const rejectPaymentSlip = async (req: Request, res: Response) => {
 
     const pendingPaymentStatusId = "8961dbd1-5317-4690-b037-e2ed4e9587e5"; // รอการชำระเงิน
 
-    // 1. บันทึกประวัติสถานะลง work_status
     const { data: wsDataList, error: wsErr } = await supabase
       .from("work_status")
       .insert([
@@ -778,7 +800,7 @@ export const rejectPaymentSlip = async (req: Request, res: Response) => {
     if (wsErr) console.warn("work_status insert warning:", wsErr);
     const wsId = wsDataList?.[0]?.id || null;
 
-    // 2. คำนวณเวลานับถอยหลังต่อจากเวลาเดิมที่ Pause ไว้
+    // คำนวณเวลานับถอยหลังต่อจากเวลาเดิมที่ Pause ไว้
     let remainingMs = 5 * 60 * 1000;
     if (order.expires_at) {
       const expMs = parseSafeTime(order.expires_at);
@@ -795,7 +817,7 @@ export const rejectPaymentSlip = async (req: Request, res: Response) => {
 
     const newExpiresAt = new Date(calculatedExpiresAtMs).toISOString();
 
-    // 3. ปรับสถานะ print_order กลับเป็น "รอการชำระเงิน"
+    // ปรับสถานะ print_order กลับเป็น "รอการชำระเงิน"
     const { error: updateErr } = await supabase
       .from("print_order")
       .update({ 
@@ -807,13 +829,13 @@ export const rejectPaymentSlip = async (req: Request, res: Response) => {
 
     if (updateErr) throw updateErr;
 
-    // 4. บันทึกใน payment ว่าสลิปไม่ถูกต้อง (is_verified = false)
+    // บันทึกใน payment ว่าร้านปฏิเสธสลิป (is_verified = false)
     await supabase
       .from("payment")
       .update({ is_verified: false, status: "rejected" })
       .eq("order_id", orderId);
 
-    // 5. แจ้งเตือนลูกค้า
+    // แจ้งเตือนลูกค้า
     if (order.customer_id) {
       await supabase.from("notifications").insert([
         {
@@ -836,5 +858,64 @@ export const rejectPaymentSlip = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Reject slip error:", error.message);
     return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 9. แอดมินอนุมัติคืนเงิน (status: 'refunded' พร้อมแนบ refund_slip_url)
+// ==========================================
+export const adminApproveRefund = async (req: Request, res: Response) => {
+  try {
+    const { order_id, refund_slip_url } = req.body;
+
+    if (!order_id || !refund_slip_url) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "กรุณาระบุ order_id และแนบ refund_slip_url" 
+      });
+    }
+
+    const { error: payErr } = await supabase
+      .from("payment")
+      .update({
+        status: "refunded",
+        refund_slip_url: refund_slip_url,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("order_id", order_id);
+
+    if (payErr) throw payErr;
+
+    return res.status(200).json({ success: true, message: "บันทึกการคืนเงินสำเร็จ" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ==========================================
+// 10. แอดมินปฏิเสธคืนเงิน (สลิปปลอม / ไม่คืนเงิน: status: 'rejected')
+// ==========================================
+export const adminRejectRefund = async (req: Request, res: Response) => {
+  try {
+    const { order_id } = req.body;
+
+    if (!order_id) {
+      return res.status(400).json({ success: false, message: "กรุณาระบุ order_id" });
+    }
+
+    const { error: payErr } = await supabase
+      .from("payment")
+      .update({
+        status: "rejected",
+        is_verified: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("order_id", order_id);
+
+    if (payErr) throw payErr;
+
+    return res.status(200).json({ success: true, message: "ปฏิเสธการคืนเงินเรียบร้อยแล้ว" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
   }
 };

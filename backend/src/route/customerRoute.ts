@@ -23,6 +23,8 @@ import {
   uploadPaymentSlip,
   cancelOrderTimeout,
   rejectPaymentSlip,
+  adminApproveRefund, // 👈 1. นำเข้าฟังก์ชันแอดมินอนุมัติคืนเงิน
+  adminRejectRefund,  // 👈 2. นำเข้าฟังก์ชันแอดมินปฏิเสธคืนเงิน
   upload as slipUpload
 } from '../controller/orderController.js';
 
@@ -30,7 +32,7 @@ import {
   getReviewOrderDetail,
   submitOrderReview,
   submitOrderReport,
-  getShopReviews, // 👈 1. นำเข้าฟังก์ชันดึงรีวิวร้านค้า
+  getShopReviews,
 } from '../controller/reviewController.js';
 
 import {
@@ -52,12 +54,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.get('/shops', getShops);
 router.get('/service-types', getAllServiceTypes);
 router.get('/shops/:shopId/services', getShopServices);
-
-// 💡 2. เพิ่ม Route สำหรับดึงรายการรีวิวทั้งหมดของร้านค้า
 router.get('/shops/:shopId/reviews', getShopReviews);
 
 // ==========================================
-// 3. ตะกร้าสินค้า (Cart)
+// 2. ตะกร้าสินค้า (Cart)
 // ==========================================
 router.get('/cart', getCart);
 router.post('/cart', addToCart);
@@ -65,7 +65,7 @@ router.delete('/cart', clearCart);
 router.delete('/cart/item/:itemId', removeCartItem);
 
 // ==========================================
-// 4. คำสั่งซื้อและสถานะ (Order)
+// 3. คำสั่งซื้อและสถานะ (Order)
 // ==========================================
 router.post('/order', createOrder);
 router.get('/orders', getCustomerOrders);
@@ -80,16 +80,16 @@ router.put('/order/:orderId/cancel-timeout', cancelOrderTimeout);
 // เส้นทางสำหรับร้านค้ากดปฏิเสธสลิป (ให้ลูกค้าแนบใหม่โดยนับเวลาเดิมต่อ)
 router.put('/order/:orderId/reject-slip', rejectPaymentSlip);
 
+// 🌟 Route สำหรับแอดมิน: จัดการการคืนเงิน (ปรับ status เป็น refunded หรือ rejected)
+router.post('/admin/refund/approve', adminApproveRefund);
+router.post('/admin/refund/reject', adminRejectRefund);
+
 // ==========================================
-// 5. รีวิวและรายงานปัญหา (Review & Report)
+// 4. รีวิวและรายงานปัญหา (Review & Report)
 // ==========================================
 router.get('/order/:orderId/review', getReviewOrderDetail);
-
 router.post('/review', upload.single('image'), submitOrderReview);
-
 router.post('/report', upload.single('image'), submitOrderReport);
-
-// Route สำหรับเช็กสถานะรายงานปัญหา
 router.get("/customer/report/check/:orderId", checkOrderStatusReported);
 
 // Route หน้า Dashboard
