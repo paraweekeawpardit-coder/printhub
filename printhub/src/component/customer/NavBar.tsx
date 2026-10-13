@@ -12,7 +12,7 @@ import {
   Settings, 
   LogOut,
   LayoutDashboard,
-  Headset, // 👈 เพิ่ม Headset Icon สำหรับ Support Chat
+  Headset,
   Bell
 } from "lucide-react";
 import NotificationBell from "@/component/NotificationBell";
@@ -27,56 +27,86 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
   const pathname = usePathname();
   const router = useRouter();
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string>("");
 
   useEffect(() => {
-    const getUserId = async () => {
-      // 1. ลองดึงจาก localStorage ตรงๆ
+    const getUserIdAndAvatar = async () => {
+      // 1. ดึง ID จาก localStorage
       const directCustomerId =
         localStorage.getItem("customer_id") ||
         localStorage.getItem("user_id") ||
         localStorage.getItem("userId") ||
         localStorage.getItem("id");
 
-      if (directCustomerId) {
-        setCustomerId(directCustomerId);
-        return;
-      }
+      let effectiveId = directCustomerId;
 
       // 2. แกะจาก object 'user' หรือ 'customer'
-      const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
-      if (userStr) {
-        try {
-          const user = JSON.parse(userStr);
-          const actualId =
-            user.customer_id ||
-            user.id ||
-            user.user_id ||
-            user.customer?.id ||
-            user.customer?.customer_id;
-
-          if (actualId) {
-            setCustomerId(String(actualId));
-            return;
+      if (!effectiveId) {
+        const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            effectiveId =
+              user.customer_id ||
+              user.id ||
+              user.user_id ||
+              user.customer?.id ||
+              user.customer?.customer_id;
+          } catch (e) {
+            console.error("Error parsing user data:", e);
           }
-        } catch (e) {
-          console.error("Error parsing user data:", e);
         }
       }
 
-      // 3. สำรอง: ดึงตรงจาก Supabase Auth Session เผื่อไม่ได้ลง localStorage
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user?.id) {
-        setCustomerId(data.session.user.id);
+      // 3. สำรอง: ดึงตรงจาก Supabase Auth Session
+      if (!effectiveId) {
+        const { data } = await supabase.auth.getSession();
+        effectiveId = data?.session?.user?.id || null;
+      }
+
+      if (effectiveId) {
+        setCustomerId(String(effectiveId));
+
+        // 🟢 ดึงรูป Avatar จาก localStorage ก่อน (เพื่อความเร็ว)
+        const cachedAvatar = localStorage.getItem("user_avatar");
+        if (cachedAvatar) {
+          setUserAvatar(cachedAvatar);
+        }
+
+        // 🟢 ดึงคอลัมน์ avatar ล่าสุดจากตาราง customer ใน Supabase
+        const { data: customerRow } = await supabase
+          .from("customer")
+          .select("avatar")
+          .eq("id", effectiveId)
+          .maybeSingle();
+
+        if (customerRow?.avatar) {
+          setUserAvatar(customerRow.avatar);
+          localStorage.setItem("user_avatar", customerRow.avatar);
+        }
       }
     };
 
-    getUserId();
+    getUserIdAndAvatar();
+
+    // 🟢 ฟัง Event เมื่อมีการอัปเดตโปรไฟล์จากหน้าอื่น เพื่ออัปเดตรูปบน Navbar ทันที
+    const handleProfileUpdate = () => {
+      const updatedAvatar = localStorage.getItem("user_avatar");
+      if (updatedAvatar) {
+        setUserAvatar(updatedAvatar);
+      }
+    };
+
+    window.addEventListener("profileUpdated", handleProfileUpdate);
+    return () => {
+      window.removeEventListener("profileUpdated", handleProfileUpdate);
+    };
   }, []);
 
   // ตรวจจับ active path
   const isHomeActive = pathname === "/customer" || pathname === "/";
   const isOrdersActive = pathname.startsWith("/customer/orders") || pathname.startsWith("/customer/order");
-  const isSupportActive = pathname.startsWith("/customer/support"); // 👈 เช็ก active state ของหน้า support
+  const isSupportActive = pathname.startsWith("/customer/support");
   const isSettingActive = pathname.startsWith("/customer/setting") || pathname.startsWith("/customer/profile");
   const isDashboardActive = pathname.startsWith("/customer/dashboard");
 
@@ -88,6 +118,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
       localStorage.removeItem("user_id");
       localStorage.removeItem("userId");
       localStorage.removeItem("user");
+      localStorage.removeItem("user_avatar");
       localStorage.removeItem("token");
       sessionStorage.clear();
     }
@@ -112,7 +143,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
           </span>
         </Link>
 
-        {/* เมนูหลักตรงกลาง (หน้าแรก / คำสั่งซื้อของฉัน / ติดต่อแอดมิน) */}
+        {/* เมนูหลักตรงกลาง */}
         <div className="flex items-center gap-1 text-sm font-medium">
           {/* หน้าแรก */}
           <Link
@@ -146,7 +177,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </span>
           </Link>
 
-          {/* 🟢 ติดต่อแอดมิน (Support Chat) */}
+          {/* ติดต่อแอดมิน */}
           <Link
             href="/customer/support"
             title="ติดต่อแอดมิน"
@@ -163,10 +194,10 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
           </Link>
         </div>
 
-        {/* ฝั่งขวา: การแจ้งเตือน, ตะกร้า, แดชบอร์ด (ข้างซ้ายรูปโปรไฟล์), รูปโปรไฟล์, ออกจากระบบ */}
+        {/* ฝั่งขวา */}
         <div className="flex items-center gap-2">
           
-          {/* กระดิ่งแจ้งเตือนสำหรับลูกค้า */}
+          {/* กระดิ่งแจ้งเตือน */}
           {customerId ? (
             <NotificationBell userId={customerId} role="customer" />
           ) : (
@@ -194,7 +225,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             )}
           </button>
 
-          {/* แดชบอร์ด (ย้ายมาอยู่ข้างซ้ายของรูปโปรไฟล์) */}
+          {/* แดชบอร์ด */}
           <Link
             href="/customer/dashboard"
             title="แดชบอร์ด"
@@ -210,17 +241,30 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
             </span>
           </Link>
 
-          {/* Setting / Profile Button */}
+          {/* 🟢 ปุ่มตั้งค่าบัญชี + แสดงรูปโปรไฟล์ (แก้ไขเรื่อง overflow-hidden ไม่ให้บังไอคอนฟันเฟือง) */}
           <Link
             href="/customer/setting"
             title="ตั้งค่าบัญชี"
             className="flex items-center gap-2.5 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none"
           >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative shrink-0">
-              <User size={16} />
-              <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-xs">
+            <div className="relative shrink-0 w-9 h-9">
+              {/* กรอบรูปภาพทรงกลม */}
+              <div className="w-full h-full rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold overflow-hidden border border-slate-200">
+                {userAvatar ? (
+                  <img 
+                    src={userAvatar} 
+                    alt="Profile Avatar" 
+                    className="w-full h-full object-cover" 
+                  />
+                ) : (
+                  <User size={16} />
+                )}
+              </div>
+
+              {/* ไอคอน Settings อยู่ซ้อนข้างนอกกรอบ overflow-hidden เพื่อไม่ให้โดนตัดขอบ */}
+              <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-xs border border-slate-100 z-10 flex items-center justify-center">
                 <Settings
-                  size={12}
+                  size={11}
                   className={
                     isSettingActive ? "text-[#0F2942]" : "text-slate-500"
                   }
@@ -232,7 +276,7 @@ export default function CustomerNavBar({ cartCount = 0, onOpenCart }: NavBarProp
           {/* เส้นคั่นแบ่งสัดส่วน */}
           <div className="h-5 w-[1px] bg-slate-200 my-auto" />
 
-          {/* ปุ่มออกจากระบบ (Logout Button) */}
+          {/* ปุ่มออกจากระบบ */}
           <button
             type="button"
             onClick={handleLogout}
