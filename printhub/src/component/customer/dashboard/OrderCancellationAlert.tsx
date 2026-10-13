@@ -8,6 +8,7 @@
  *  - payment_timeout      ระบบยกเลิกอัตโนมัติ เพราะไม่ชำระเงินภายในเวลา    → ไม่มีการคืนเงิน (เทา)
  *  - customer_paid        ลูกค้ากดยกเลิกเอง หลังแนบสลิปแล้ว (รอการดำเนินงาน) → เข้าขั้นตอนคืนเงิน
  *  - appointment_timeout  ระบบยกเลิกอัตโนมัติ เพราะเลยเวลานัดรับ           → เข้าขั้นตอนคืนเงิน
+ *  - report_refund        แอดมินอนุมัติคำร้อง (รายงานปัญหา) ให้คืนเงินเต็มจำนวน → เข้าขั้นตอนคืนเงิน
  *
  * สถานะการคืนเงิน (ใช้กับ 2 กรณีหลัง)
  *  - มี refund_slip_url หรือ payment.status = "refunded"  → เขียว: คืนเงินแล้ว
@@ -24,16 +25,18 @@ export type CancelReason =
   | "customer_unpaid"
   | "payment_timeout"
   | "customer_paid"
-  | "appointment_timeout";
+  | "appointment_timeout"
+  | "report_refund";
 
 const KNOWN_REASONS: CancelReason[] = [
   "customer_unpaid",
   "payment_timeout",
   "customer_paid",
   "appointment_timeout",
+  "report_refund",
 ];
 
-const REFUND_REASONS: CancelReason[] = ["customer_paid", "appointment_timeout"];
+const REFUND_REASONS: CancelReason[] = ["customer_paid", "appointment_timeout", "report_refund"];
 
 type Tone = "gray" | "yellow" | "green" | "red";
 
@@ -88,10 +91,11 @@ export default function OrderCancellationAlert({
   const isRefunded = Boolean(refundSlipUrl) || paymentStatus === "refunded";
   const isRefundRejected = paymentStatus === "refund_rejected";
 
+  // มีสลิปคืนเงิน (refund_slip_url) เมื่อไหร่ ให้แสดงกล่องคืนเงินเสมอ ไม่ว่าจะยกเลิกด้วยสาเหตุใด
   // ข้อมูลเก่าที่ยังไม่มี cancel_reason: ดูจากว่ามีการชำระเงินที่ถูกต้องหรือมีประวัติคืนเงินหรือไม่
-  const needsRefund = reason
-    ? REFUND_REASONS.includes(reason)
-    : hasPaidSlip || isRefunded || isRefundRejected;
+  const needsRefund =
+    isRefunded ||
+    (reason ? REFUND_REASONS.includes(reason) : hasPaidSlip || isRefundRejected);
 
   let tone: Tone;
   let Icon = Ban;
@@ -114,6 +118,12 @@ export default function OrderCancellationAlert({
         ? "คุณยกเลิกคำสั่งซื้อหลังชำระเงินแล้ว"
         : reason === "appointment_timeout"
         ? "คำสั่งซื้อถูกยกเลิกอัตโนมัติ เนื่องจากร้านดำเนินการไม่ทันเวลานัดรับ"
+        : reason === "report_refund"
+        ? "คืนเงินตามคำร้องเรียนของคุณ"
+        : reason === "customer_unpaid"
+        ? "คุณยกเลิกคำสั่งซื้อนี้แล้ว"
+        : reason === "payment_timeout"
+        ? "คำสั่งซื้อถูกยกเลิกอัตโนมัติ"
         : "คำสั่งซื้อถูกยกเลิก";
 
     if (isRefunded) {
@@ -127,7 +137,10 @@ export default function OrderCancellationAlert({
     } else {
       tone = "yellow";
       Icon = Clock;
-      description = "ระบบกำลังตรวจสอบหลักฐานการชำระเงิน และจะคืนเงินให้ภายใน 24 ชั่วโมง";
+      description =
+        reason === "report_refund"
+          ? "แอดมินอนุมัติคืนเงินเต็มจำนวนแล้ว กำลังดำเนินการโอนเงินคืนให้คุณ"
+          : "ระบบกำลังตรวจสอบหลักฐานการชำระเงิน และจะคืนเงินให้ภายใน 24 ชั่วโมง";
     }
   }
 

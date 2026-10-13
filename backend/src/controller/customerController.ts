@@ -116,12 +116,35 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
       }
     }
 
-    const { data: reports } = await supabase.from("report").select("id, order_id, description, image_url, is_verified, created_at, shop:shop_id(shop_name), order:order_id(order_no)").eq("customer_id", customer_id).order("created_at", { ascending: false });
+    const { data: reports } = await supabase.from("report").select("*, shop:shop_id(shop_name), order:order_id(order_no)").eq("customer_id", customer_id).order("created_at", { ascending: false });
 
     const reportList = reports || [];
+
+    // แนบผลการคืนเงิน (อยู่ในตาราง payment) ให้คำร้อง และผูกสถานะคำร้องเข้ากับออเดอร์
+    const orderById = new Map((orderList as any[]).map((o: any) => [o.id, o]));
+    for (const rep of reportList as any[]) {
+      const ord: any = orderById.get(rep.order_id);
+      // สลิปคืนเงิน: ใช้ report.refund_slip_url ก่อน ถ้าไม่มีใช้ payment.refund_slip_url (ที่ processRefund ของแอดมินบันทึกไว้)
+      rep.refund_slip_url = rep.refund_slip_url || ord?.payment?.refund_slip_url || null;
+      // ไม่ต้องส่งข้อมูลบัญชีธนาคารกลับไปที่หน้าเว็บ
+      delete rep.bank_name;
+      delete rep.account_number;
+      delete rep.account_name;
+      rep.payment_status = ord?.payment?.status || null;
+      if (ord) {
+        ord.report = { id: rep.id, status: rep.status || "pending", refund_slip_url: rep.refund_slip_url };
+
+        // แอดมินอนุมัติคืนเงินจากคำร้อง -> ใน DB ออเดอร์ถูกตั้งเป็น "ยกเลิกการพิมพ์" (เพื่อเข้าหน้าคืนเงินของแอดมิน)
+        // แต่งานพิมพ์เสร็จและลูกค้ารับของแล้ว ฝั่งลูกค้าจึงแสดงเป็น "รายการเสร็จสิ้น" (แก้เฉพาะข้อมูลที่ส่งกลับ ไม่แก้ DB)
+        if (String(rep.status).toLowerCase() === "resolved_refund" && ord.current_status?.state === "ยกเลิกการพิมพ์") {
+          ord.current_status.state = "รายการเสร็จสิ้น";
+        }
+      }
+    }
     const inProgressCount = orderList.filter((o: any) => o.current_status?.state === "รอการดำเนินงาน" || o.current_status?.state === "กำลังพิมพ์").length;
     const readyCount = orderList.filter((o: any) => o.current_status?.state === "พิมพ์เสร็จสิ้น").length;
-    const completedCount = orderList.filter((o: any) => o.current_status?.state === "รายการเสร็จสิ้น").length;
+    // ออเดอร์ที่แอดมินอนุมัติคืนเงินจากคำร้อง นับเป็นรายการเสร็จสิ้นในฝั่งลูกค้า
+    const completedCount = orderList.filter((o: any) => o.current_status?.state === "รายการเสร็จสิ้น" || o.report?.status === "resolved_refund").length;
 
     return res.status(200).json({
       success: true,

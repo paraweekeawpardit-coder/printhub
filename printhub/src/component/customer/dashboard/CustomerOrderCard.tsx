@@ -18,6 +18,7 @@ import {
 import PaymentActionButton from "@/component/customer/payment/PaymentActionButton";
 import OrderCancellationAlert from "./OrderCancellationAlert";
 import OrderItemsAccordion from "./OrderItemsAccordion";
+import RefundSlipButton from "./RefundSlipButton";
 
 interface CustomerOrderCardProps {
   order: any;
@@ -54,6 +55,11 @@ export default function CustomerOrderCard({
   const refundSlipUrl = paymentData?.refund_slip_url || null;
 
   const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
+
+  // สถานะคำร้อง (ถ้าลูกค้าเคยกดรายงานปัญหา/ขอคืนเงิน) : pending | investigating | resolved_refund | rejected
+  const reportStatus: string | null = order?.report?.status
+    ? String(order.report.status).toLowerCase().trim()
+    : null;
 
   // 🌟 จุดแก้สำคัญ: ถ้าสลิปโดนปฏิเสธ (isSlipRejected) ต้องถือว่า "ยังไม่มีสลิปที่ถูกต้อง" (hasPaidSlip = false)
   const hasPaidSlip = Boolean(
@@ -99,6 +105,12 @@ export default function CustomerOrderCard({
   } else if (isSlipRejected && state !== "ยกเลิกการพิมพ์") {
     // ถ้ายังไม่หมดเวลา ค่อยให้แสดงเป็นรอการชำระเงิน
     state = "รอการชำระเงิน";
+  }
+
+  // แอดมินอนุมัติคืนเงินจากคำร้อง (report = resolved_refund): ใน DB แอดมินตั้งเป็น "ยกเลิกการพิมพ์"
+  // เพื่อให้เข้าหน้ารายการคืนเงิน แต่ฝั่งลูกค้าแสดงเป็น "รายการเสร็จสิ้น" เพราะงานพิมพ์เสร็จและรับของแล้ว
+  if (reportStatus === "resolved_refund" && (state === "ยกเลิกการพิมพ์" || state === "ยกเลิก")) {
+    state = "รายการเสร็จสิ้น";
   }
 
   const isCanceled = state === "ยกเลิกการพิมพ์";
@@ -184,6 +196,34 @@ export default function CustomerOrderCard({
   const shopId = order?.shop?.id || order?.print_shop?.id || order?.shop_id;
   const shopName = order?.shop?.shop_name || order?.print_shop?.shop_name || "ร้านค้า";
 
+  // ป้ายสถานะคำร้อง (แสดงแทนปุ่ม "ขอคืนเงิน" และแทนกล่องแจ้งเตือนเมื่อแอดมินอนุมัติคืนเงิน)
+  const reportBadge = reportStatus ? (
+    <span
+      className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-xl border flex items-center gap-1 ${
+        reportStatus === "resolved_refund"
+          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+          : reportStatus === "rejected"
+          ? "bg-slate-50 text-slate-600 border-slate-200"
+          : reportStatus === "investigating"
+          ? "bg-blue-50 text-blue-700 border-blue-200"
+          : "bg-amber-50 text-amber-700 border-amber-200"
+      }`}
+    >
+      {reportStatus === "resolved_refund" ? (
+        <CheckCircle2 className="w-3.5 h-3.5" />
+      ) : (
+        <AlertTriangle className="w-3.5 h-3.5" />
+      )}
+      {reportStatus === "resolved_refund"
+        ? "คืนเงินแล้ว"
+        : reportStatus === "rejected"
+        ? "คำร้องไม่ได้รับอนุมัติ"
+        : reportStatus === "investigating"
+        ? "แอดมินกำลังพิจารณาคำร้อง"
+        : "ส่งคำร้องแล้ว รอดำเนินการ"}
+    </span>
+  ) : null;
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all overflow-hidden">
 
@@ -265,8 +305,8 @@ export default function CustomerOrderCard({
 
         {/* 🌟 แสดงกล่องแจ้งเตือนยกเลิก / คืนเงิน จุดเดียวเท่านั้น */}
         <OrderCancellationAlert
-          isCanceled={isCanceled}
-          cancelReason={order?.cancel_reason}
+          isCanceled={isCanceled && reportStatus !== "resolved_refund"}
+          cancelReason={reportStatus === "resolved_refund" ? "report_refund" : order?.cancel_reason}
           hasPaidSlip={hasPaidSlip}
           paymentStatus={paymentStatus}
           refundSlipUrl={refundSlipUrl}
@@ -343,15 +383,42 @@ export default function CustomerOrderCard({
                     <span>รีวิว</span>
                   </button>
 
-                  {/* 🌟 2. ปุ่มขอคืนเงิน: เปลี่ยนเส้นทางไปที่ /customer/orders/[order_id]/report */}
+                  {/* 🌟 2. ปุ่มขอคืนเงิน: ถ้าส่งคำร้องไปแล้ว แสดงสถานะคำร้องแทน (ดูรายละเอียดได้ที่แท็บข้อร้องเรียน) */}
+                  {reportStatus ? (
+                    <>
+                      {reportBadge}
+                      {reportStatus === "resolved_refund" && (
+                        <RefundSlipButton slipUrl={order?.report?.refund_slip_url || refundSlipUrl} size="sm" />
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/customer/orders/${order.id}/report`)}
+                      className="px-2.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>ขอคืนเงิน</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* ออเดอร์ที่ถูกยกเลิกจากคำร้อง (แอดมินอนุมัติคืนเงิน): ยังรีวิวได้ และแสดงป้ายแทนกล่องแจ้งเตือน */}
+              {isCanceled && reportStatus && (
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => router.push(`/customer/orders/${order.id}/report`)}
-                    className="px-2.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
+                    onClick={() => router.push(`/customer/orders/${order.id}/review`)}
+                    className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
                   >
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>ขอคืนเงิน</span>
+                    <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                    <span>รีวิว</span>
                   </button>
+                  {reportBadge}
+                  {reportStatus === "resolved_refund" && (
+                    <RefundSlipButton slipUrl={order?.report?.refund_slip_url || refundSlipUrl} size="sm" />
+                  )}
                 </div>
               )}
             </div>
