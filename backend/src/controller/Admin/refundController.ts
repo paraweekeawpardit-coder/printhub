@@ -3,7 +3,7 @@ import supabase from "../../config/supabase.js";
 
 /**
  * GET /api/admin/refunds
- * ดึงรายการออเดอร์ที่มีสถานะ "ยกเลิกการพิมพ์" ทั้งหมด
+ * ดึงรายการออเดอร์ที่มีสถานะ "ยกเลิกการพิมพ์" และมีการแนบสลิปชำระเงินจริงเท่านั้น
  */
 export const getPendingRefunds = async (req: Request, res: Response): Promise<Response> => {
   try {
@@ -22,8 +22,8 @@ export const getPendingRefunds = async (req: Request, res: Response): Promise<Re
         status:current_status_id ( id, state ),
         customer:customer_id ( id, first_name, last_name, contact ),
         shop:shop_id ( id, shop_name ),
-        payment:payment!order_id ( id, slip_url, refund_slip_url, amount, status, payment_date, payout_date, updated_at ),
-        report:report!order_id ( bank_name, account_number, account_name, description, issue_type ),
+        payment:payment!order_id ( id, slip_url, refund_slip_url, payout_slip_url, amount, status, is_verified, payment_date, payout_date, updated_at ),
+        report:report!order_id ( bank_name, account_number, account_name, description, issue_type, status ),
         cancel_history:work_status!order_id ( updated_at, status_id )
       `)
       .eq("current_status_id", statusObj.id);
@@ -36,24 +36,33 @@ export const getPendingRefunds = async (req: Request, res: Response): Promise<Re
     const formattedRefunds = (refunds || [])
       .map((item: any) => {
         const payList = Array.isArray(item.payment) ? item.payment : item.payment ? [item.payment] : [];
-        
-        // หากถูกปฏิเสธแล้ว (REJECTED) ไม่ต้องโชว์ในตาราง PENDING
+        const payObj = payList[0];
+
+        // 🟢 1. เช็กสลิปเดิม: หากไม่มีการแนบสลิปชำระเงินเดิม -> ตัดออก
+        const originalSlip = payObj?.slip_url || null;
+        if (!originalSlip) return null;
+
+        // 🟢 2. หากรายการนี้ถูกโอนเงินให้ร้านค้าไปแล้ว (payout_slip_url มีค่า) -> ไม่ต้องโชว์ในตารางคืนเงินลูกค้า (Refunds)
+        if (payObj?.payout_slip_url) return null;
+
+        // 🟢 3. หากรายงานปัญหาได้รับการตัดสินอนุมัติ Payout ร้านค้า (resolved_payout) -> ไม่ต้องโชว์ใน Refunds
+        const reportData = Array.isArray(item.report) ? item.report[0] : item.report;
+        if (reportData?.status === "resolved_payout") return null;
+
+        // 🟢 4. หากรายการชำระเงินถูกปฏิเสธสลิป (REJECTED) ไม่ต้องโชว์ในตาราง PENDING
         const isRejected = payList.some((p: any) => p.status === "REJECTED");
         if (isRejected) return null;
 
-        const refundedPayment = payList.find((p: any) => p.status === "REFUNDED");
-        const isRefunded = Boolean(refundedPayment);
-        
-        const refundSlip = refundedPayment?.refund_slip_url || payList[0]?.refund_slip_url || null;
-        const originalSlip = payList[0]?.slip_url || null;
+        const refundedPayment = payList.find((p: any) => String(p.status || "").toUpperCase() === "REFUNDED");
+        const isRefunded = Boolean(refundedPayment || payObj?.refund_slip_url);
+
+        const refundSlip = refundedPayment?.refund_slip_url || payObj?.refund_slip_url || null;
 
         const cancelHistoryList = Array.isArray(item.cancel_history) ? item.cancel_history : [];
         const cancelRecord = cancelHistoryList.find((ws: any) => ws.status_id === statusObj.id);
 
         const canceledAt = cancelRecord?.updated_at || item.updated_at || item.order_date || item.created_at;
-        const refundedAt = refundedPayment?.updated_at || refundedPayment?.payout_date || refundedPayment?.payment_date || canceledAt;
-
-        const reportData = Array.isArray(item.report) ? item.report[0] : item.report;
+        const refundedAt = refundedPayment?.payout_date || refundedPayment?.updated_at || payObj?.updated_at || null;
 
         return {
           ...item,
@@ -68,7 +77,7 @@ export const getPendingRefunds = async (req: Request, res: Response): Promise<Re
           bank_account_name: reportData?.account_name || null,
         };
       })
-      .filter(Boolean);
+      .filter(Boolean); // กรองรายการที่เป็น null ออกทั้งหมด
 
     formattedRefunds.sort((a, b) => new Date(b.canceled_at).getTime() - new Date(a.canceled_at).getTime());
 

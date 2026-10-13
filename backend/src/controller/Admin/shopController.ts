@@ -10,6 +10,7 @@ export const getPendingShops = async (
   res: Response
 ): Promise<Response> => {
   try {
+    // 🟢 กรองเฉพาะร้านค้าที่สถานะเป็น 'pending' จริงๆ
     const { data: shops, error: shopError } = await supabase
       .from("print_shop")
       .select("*, address:address_id(*)")
@@ -64,7 +65,7 @@ export const getPendingShops = async (
 
 /**
  * GET /api/admin/shops/all
- * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่เคยผ่านการอนุมัติแล้ว (is_verify = true รวมถึงร้านที่โดนระงับ suspended)
+ * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่เคยผ่านการอนุมัติแล้ว
  */
 export const getAllShops = async (
   _req: Request,
@@ -454,7 +455,6 @@ export const createContactAdmin = async (
       });
     }
 
-    // 📌 บันทึกข้อมูลคำร้องพร้อม attachment_urls ลงในตาราง shop_appeals
     const { data, error } = await supabase
       .from("shop_appeals")
       .insert([
@@ -474,7 +474,6 @@ export const createContactAdmin = async (
       return res.status(400).json({ error: error.message });
     }
 
-    // 🟢 สร้าง Notification แยกตาม admin_id ของแอดมินทุกคนเหมือนกับ Report
     try {
       const { data: admins } = await supabase.from("admin").select("id");
       if (admins && admins.length > 0) {
@@ -537,14 +536,19 @@ export const getShopAppealStatus = async (
   }
 };
 
+/**
+ * GET /api/admin/appeals
+ * ดึงรายการคำขอปลดระงับทั้งหมด (พร้อมข้อมูล phone และ suspend_reason จาก print_shop)
+ */
 export const getShopAppeals = async (
   _req: Request,
   res: Response
 ): Promise<Response> => {
   try {
+    // 🟢 แก้ไข: ระบุ phone และ suspend_reason เข้าไปใน select query ของร้านค้า
     const { data: appeals, error } = await supabase
       .from("shop_appeals")
-      .select("*, shop:shop_id(shop_name, profile_image, email)")
+      .select("*, shop:shop_id(shop_name, profile_image, email, phone, suspend_reason)")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -556,6 +560,47 @@ export const getShopAppeals = async (
   } catch (err: any) {
     console.error("GetShopAppeals Exception:", err.message || err);
     return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+/**
+ * PATCH /api/admin/appeals/reject
+ * ปฏิเสธคำขอปลดระงับร้านค้า
+ */
+export const rejectShopAppeal = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const appealId = req.body.appeal_id || req.body.appealId || req.body.id;
+
+    if (!appealId) {
+      return res.status(400).json({ error: "appeal_id is required" });
+    }
+
+    const { data, error } = await supabase
+      .from("shop_appeals")
+      .update({
+        status: "rejected",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", appealId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("RejectShopAppeal DB Error:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ปฏิเสธคำขอปลดระงับเรียบร้อยแล้ว",
+      data,
+    });
+  } catch (err: any) {
+    console.error("RejectShopAppeal Exception:", err.message || err);
+    return res.status(500).json({ error: "Server Error" });
   }
 };
 
@@ -597,7 +642,6 @@ export const nudgeShopAppeal = async (
       });
     }
 
-    // 🟢 สร้าง Notification แยกตาม admin_id ของแอดมินทุกคนเหมือนกับ Report
     try {
       const { data: admins } = await supabase.from("admin").select("id");
       if (admins && admins.length > 0) {

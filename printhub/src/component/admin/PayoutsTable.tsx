@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import PaginationBar from "./PaginationBar"; // 🟢 Import PaginationBar Component
 
 export interface PayoutItem {
   id: string; // payment_id
@@ -32,8 +33,47 @@ interface PayoutsTableProps {
   activeTab: "PENDING" | "PAID";
   onSelectPayout: (item: PayoutItem) => void;
   onViewSlip?: (url: string) => void;
-  formatDate: (dateString?: string) => string;
+  formatDate?: (dateString?: string) => string;
+  itemsPerPage?: number;
 }
+
+// 🟢 พาร์สวันเวลา รองรับทั้ง ค.ศ. และ พ.ศ. ป้องกันปีเพี้ยน
+export const parseThaiDate = (dateString?: string | null): Date | null => {
+  if (!dateString) return null;
+
+  let formattedStr = String(dateString);
+  const yearMatch = formattedStr.match(/^(\d{4})/);
+  if (yearMatch && Number(yearMatch[1]) > 2400) {
+    const adYear = Number(yearMatch[1]) - 543;
+    formattedStr = formattedStr.replace(/^(\d{4})/, String(adYear));
+  }
+
+  if (formattedStr.includes("T") && !formattedStr.endsWith("Z") && !formattedStr.includes("+")) {
+    formattedStr += "Z";
+  }
+
+  let d = new Date(formattedStr);
+  if (isNaN(d.getTime())) {
+    d = new Date(formattedStr.replace(" ", "T"));
+  }
+  return isNaN(d.getTime()) ? null : d;
+};
+
+// 🟢 Helper Function แปลงเวลาเป็น Thai Local Time (Asia/Bangkok +7)
+export const formatThaiDate = (dateString?: string | null) => {
+  const date = parseThaiDate(dateString);
+  if (!date) return "-";
+
+  return date.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+};
 
 export default function PayoutsTable({
   payouts,
@@ -41,19 +81,32 @@ export default function PayoutsTable({
   activeTab,
   onSelectPayout,
   onViewSlip,
-  formatDate,
+  formatDate: propFormatDate,
+  itemsPerPage = 10, // 🟢 กำหนดให้แสดงผลหน้าละ 10 รายการ
 }: PayoutsTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  
+
   // State สลับมุมมอง: "SINGLE" = รายออเดอร์, "GROUPED" = รวมตามร้านค้า
   const [viewMode, setViewMode] = useState<"SINGLE" | "GROUPED">("GROUPED");
+
+  // 🟢 State สำหรับ Pagination
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // ใช้ formatThaiDate บังคับ +7 เป็นหลัก
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "-";
+    return formatThaiDate(dateString);
+  };
 
   // คำนวณ SLA ความเร่งด่วน
   const getPayoutUrgency = (dateString?: string) => {
     if (!dateString) return { label: "ปกติ", color: "text-slate-500 bg-slate-100" };
-    
-    const payoutDate = new Date(dateString).getTime();
+
+    const parsed = parseThaiDate(dateString);
+    if (!parsed) return { label: "ปกติ", color: "text-slate-500 bg-slate-100" };
+
+    const payoutDate = parsed.getTime();
     const now = Date.now();
     const diffHours = (now - payoutDate) / (1000 * 60 * 60);
 
@@ -126,6 +179,27 @@ export default function PayoutsTable({
 
     return Object.values(groups);
   }, [filteredPayouts]);
+
+  // 🟢 คำนวณจำนวนไอเทมและจำนวนหน้าตามโหมดที่เลือก
+  const totalItems = viewMode === "GROUPED" ? groupedPayouts.length : filteredPayouts.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+
+  // 🟢 รีเซ็ตกลับหน้า 1 เมื่อเปลี่ยนแท็บ เปลี่ยนโหมด หรือเปลี่ยนคำค้นหา
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [payouts.length, activeTab, viewMode, searchTerm]);
+
+  // 🟢 ตัดแบ่งข้อมูลของหน้าปัจจุบันสำหรับโหมด GROUPED
+  const paginatedGroupedPayouts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return groupedPayouts.slice(startIndex, startIndex + itemsPerPage);
+  }, [groupedPayouts, currentPage, itemsPerPage]);
+
+  // 🟢 ตัดแบ่งข้อมูลของหน้าปัจจุบันสำหรับโหมด SINGLE
+  const paginatedSinglePayouts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredPayouts.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredPayouts, currentPage, itemsPerPage]);
 
   return (
     <div className="space-y-4 font-sans">
@@ -215,8 +289,8 @@ export default function PayoutsTable({
                       กำลังโหลดข้อมูลการโอนเงิน...
                     </td>
                   </tr>
-                ) : groupedPayouts.length > 0 ? (
-                  groupedPayouts.map((group, idx) => {
+                ) : paginatedGroupedPayouts.length > 0 ? (
+                  paginatedGroupedPayouts.map((group, idx) => {
                     const bankAcc = getBankDetail(group.shop);
                     const orderNos = group.items
                       .map((i) => `#${String(i.order_no || i.id.slice(0, 8)).replace(/^#+/, "")}`)
@@ -313,7 +387,7 @@ export default function PayoutsTable({
                               onClick={() => onSelectPayout(aggregatedItem)}
                               className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all active:scale-95 cursor-pointer"
                             >
-                              โอนรวมให้ร้านนี้ (฿{group.totalAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })})
+                              โอนเงินให้ร้านนี้ (฿{group.totalAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })})
                             </button>
                           </td>
                         )}
@@ -361,8 +435,8 @@ export default function PayoutsTable({
                       กำลังโหลดข้อมูลการโอนเงิน...
                     </td>
                   </tr>
-                ) : filteredPayouts.length > 0 ? (
-                  filteredPayouts.map((item) => {
+                ) : paginatedSinglePayouts.length > 0 ? (
+                  paginatedSinglePayouts.map((item) => {
                     const displayOrderNo = item.order_no
                       ? `#${String(item.order_no).replace(/^#+/, "")}`
                       : "-";
@@ -473,6 +547,17 @@ export default function PayoutsTable({
           )}
         </div>
       </div>
+
+      {/* 🟢 แสดงปุ่มเปลี่ยนหน้า Pagination ด้านล่างตารางเมื่อรายการมากกว่า 1 หน้า */}
+      {totalPages > 1 && (
+        <div className="pt-2">
+          <PaginationBar
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,13 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import StatCard from "../../component/admin/StatCard";
 
+interface OrderStatusStats {
+  pendingAction: number;
+  inProduction: number;
+  completed: number;
+  cancelled: number;
+}
+
 interface DashboardStats {
   totalCustomers: number;
   totalActiveShops: number;
@@ -13,6 +20,7 @@ interface DashboardStats {
   pendingPayouts?: number;
   overdueAppeals: number;
   nudgedAppeals?: number;
+  orderStats?: OrderStatusStats;
 }
 
 export default function AdminHomePage() {
@@ -32,18 +40,21 @@ export default function AdminHomePage() {
 
       const data = await res.json();
 
-      // แสดงค่าที่ดึงได้ลงบน Console เพื่อใช้ในการตรวจดูข้อมูล
-      console.log("📊 Dashboard API Data:", data);
-
       setStats({
         totalCustomers: data.totalCustomers ?? 0,
         totalActiveShops: data.totalActiveShops ?? 0,
         pendingReports: data.pendingReports ?? 0,
         pendingAppeals: data.pendingAppeals ?? 0,
-        pendingRefunds: data.pendingRefunds ?? data.refundsCount ?? 0,
-        pendingPayouts: data.pendingPayouts ?? data.payoutsCount ?? 0,
+        pendingRefunds: data.pendingRefunds ?? 0,
+        pendingPayouts: data.pendingPayouts ?? 0,
         overdueAppeals: data.overdueAppeals ?? 0,
         nudgedAppeals: data.nudgedAppeals ?? 0,
+        orderStats: {
+          pendingAction: data.orderStats?.pendingAction ?? 0,
+          inProduction: data.orderStats?.inProduction ?? 0,
+          completed: data.orderStats?.completed ?? 0,
+          cancelled: data.orderStats?.cancelled ?? 0,
+        },
       });
     } catch (error) {
       console.error("Fetch dashboard error:", error);
@@ -56,6 +67,12 @@ export default function AdminHomePage() {
         pendingPayouts: 0,
         overdueAppeals: 0,
         nudgedAppeals: 0,
+        orderStats: {
+          pendingAction: 0,
+          inProduction: 0,
+          completed: 0,
+          cancelled: 0,
+        },
       });
     } finally {
       setLoading(false);
@@ -172,6 +189,82 @@ export default function AdminHomePage() {
           href="/admin/payouts"
           isAlert={(stats.pendingPayouts ?? 0) > 0}
         />
+      </section>
+
+      {/* 🟢 สถิติคำสั่งซื้อในระบบ (แยก รอดำเนินการ และ กำลังพิมพ์ ชัดเจน) */}
+      <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3 font-sans">
+        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 tracking-tight">
+              สถิติคำสั่งซื้อในระบบ (Order Status Overview)
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              สรุปสถิติจำนวนออเดอร์จำแนกตามสถานะการดำเนินงานในระบบ
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          {/* 1. รอดำเนินการ */}
+          <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200/80 space-y-1">
+            <span className="text-[11px] font-semibold text-amber-800">
+              1. รอดำเนินการ
+            </span>
+            <div className="flex items-baseline justify-between pt-0.5">
+              <span className="text-xl font-extrabold text-amber-900">
+                {stats.orderStats?.pendingAction || 0}
+              </span>
+              <span className="text-[10px] text-amber-600 font-medium">
+                รายการ
+              </span>
+            </div>
+          </div>
+
+          {/* 2. กำลังพิมพ์ */}
+          <div className="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200/80 space-y-1">
+            <span className="text-[11px] font-semibold text-blue-800">
+              2. กำลังพิมพ์
+            </span>
+            <div className="flex items-baseline justify-between pt-0.5">
+              <span className="text-xl font-extrabold text-blue-900">
+                {stats.orderStats?.inProduction || 0}
+              </span>
+              <span className="text-[10px] text-blue-600 font-medium">
+                รายการ
+              </span>
+            </div>
+          </div>
+
+          {/* 3. รายการเสร็จสิ้น */}
+          <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200/80 space-y-1">
+            <span className="text-[11px] font-semibold text-emerald-800">
+              3. พิมพ์เสร็จสิ้น
+            </span>
+            <div className="flex items-baseline justify-between pt-0.5">
+              <span className="text-xl font-extrabold text-emerald-900">
+                {stats.orderStats?.completed || 0}
+              </span>
+              <span className="text-[10px] text-emerald-600 font-medium">
+                รายการ
+              </span>
+            </div>
+          </div>
+
+          {/* 4. ยกเลิกการพิมพ์ */}
+          <div className="p-3.5 bg-rose-50/70 rounded-xl border border-rose-200/80 space-y-1">
+            <span className="text-[11px] font-semibold text-rose-800">
+              4. ยกเลิกการพิมพ์
+            </span>
+            <div className="flex items-baseline justify-between pt-0.5">
+              <span className="text-xl font-extrabold text-rose-900">
+                {stats.orderStats?.cancelled || 0}
+              </span>
+              <span className="text-[10px] text-rose-600 font-medium">
+                รายการ
+              </span>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Main Console Grid */}

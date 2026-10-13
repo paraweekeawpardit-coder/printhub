@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { Image as ImageIcon } from "lucide-react";
 
 export interface ReportItem {
@@ -33,6 +34,37 @@ export default function ReportTable({
   onAcceptReport,
   onOpenImage,
 }: ReportTableProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // 🟢 ฟังก์ชันคำนวณการเลื่อนแนวนอนแบบ Smooth และลื่นไหล
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!scrollContainerRef.current) return;
+
+    const container = scrollContainerRef.current;
+    const { scrollLeft, scrollWidth, clientWidth } = container;
+    const maxScrollLeft = scrollWidth - clientWidth;
+
+    // ถ้าตารางกว้างจนสามารถเลื่อนแนวนอนได้
+    if (maxScrollLeft > 0) {
+      // ตรวจสอบว่าตารางยังไม่ชนขอบซ้ายสุดหรือขวาสุด
+      const isScrollable =
+        (e.deltaY > 0 && scrollLeft < maxScrollLeft) ||
+        (e.deltaY < 0 && scrollLeft > 0);
+
+      if (isScrollable) {
+        // ป้องกันไม่ให้หน้าต่างหลักเลื่อนขึ้น-ลงขณะหมุนเมาส์บนตาราง
+        e.preventDefault();
+
+        // ปรับความเร็วและใช้ scrollTo แบบ behavior: "smooth" เพื่อความนุ่มนวล
+        const scrollAmount = e.deltaY * 1.5;
+        container.scrollTo({
+          left: container.scrollLeft + scrollAmount,
+          behavior: "smooth",
+        });
+      }
+    }
+  };
+
   // พาร์สวันเวลา รองรับทั้ง ค.ศ. และ พ.ศ. ป้องกันปีเพี้ยน
   const parseDate = (dateString?: string): Date | null => {
     if (!dateString) return null;
@@ -68,12 +100,11 @@ export default function ReportTable({
     });
   };
 
-  // คำนวณเวลานับถอยหลัง 48 ชม. (เวลารับเรื่อง + 48 ชม. - เวลาปัจจุบัน)
+  // คำนวณเวลานับถอยหลัง 48 ชม.
   const getRemainingCountdown = (updatedAt?: string) => {
     const acceptedDate = parseDate(updatedAt);
     if (!acceptedDate) return null;
 
-    // วันเวลารับเรื่อง + 48 ชั่วโมงเต็ม (มิลลิวินาที)
     const targetDeadlineMs = acceptedDate.getTime() + (48 * 60 * 60 * 1000);
     const nowMs = Date.now();
 
@@ -101,17 +132,21 @@ export default function ReportTable({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden font-sans">
-      <div className="overflow-x-auto">
+      <div 
+        ref={scrollContainerRef}
+        onWheel={handleWheel}
+        className="overflow-x-auto scroll-smooth"
+      >
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              <th className="py-4 px-4">สถานะ</th>
-              <th className="py-4 px-4">ข้อมูลออเดอร์และผู้เกี่ยวข้อง</th>
-              <th className="py-4 px-4">รายละเอียดปัญหา</th>
-              <th className="py-4 px-4">หลักฐาน</th>
-              <th className="py-4 px-4">วันที่ยื่นเรื่อง</th>
-              <th className="py-4 px-4">วันที่รับเรื่อง</th>
-              <th className="py-4 px-4 text-center">การจัดการ</th>
+              <th className="py-4 px-4 whitespace-nowrap">สถานะ</th>
+              <th className="py-4 px-4 whitespace-nowrap">ข้อมูลออเดอร์และผู้เกี่ยวข้อง</th>
+              <th className="py-4 px-4 whitespace-nowrap">รายละเอียดปัญหา</th>
+              <th className="py-4 px-4 whitespace-nowrap">หลักฐาน</th>
+              <th className="py-4 px-4 whitespace-nowrap">วันที่ยื่นเรื่อง</th>
+              <th className="py-4 px-4 whitespace-nowrap">วันที่รับเรื่อง</th>
+              <th className="py-4 px-4 text-center whitespace-nowrap">การจัดการ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm">
@@ -176,13 +211,13 @@ export default function ReportTable({
                     </td>
 
                     {/* รายละเอียดปัญหา */}
-                    <td className="py-4 px-4 max-w-xs">
+                    <td className="py-4 px-4 min-w-[220px] max-w-xs">
                       <p className="font-medium text-slate-800 truncate text-xs" title={item.description}>
                         {item.description || "-"}
                       </p>
                     </td>
 
-                    {/* หลักฐาน - ไอคอนรูปภาพแบบ Lucide Image */}
+                    {/* หลักฐาน */}
                     <td className="py-4 px-4 whitespace-nowrap">
                       {item.image_url ? (
                         <button
@@ -197,12 +232,12 @@ export default function ReportTable({
                       )}
                     </td>
 
-                    {/* วันที่ยื่นเรื่อง (created_at) */}
+                    {/* วันที่ยื่นเรื่อง */}
                     <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600">
                       <div>{formatDate(item.created_at)}</div>
                     </td>
 
-                    {/* วันที่รับเรื่อง (updated_at) / นับถอยหลัง 48 ชม. */}
+                    {/* วันที่รับเรื่อง / นับถอยหลัง 48 ชม. */}
                     <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600">
                       {isAccepted ? (
                         <div>

@@ -10,6 +10,7 @@ import {
   createContactAdmin,
   getShopAppeals,
   getShopAppealStatus,
+  rejectShopAppeal,
   nudgeShopAppeal
 } from "../controller/Admin/shopController.js";
 import { 
@@ -100,5 +101,6 @@ router.post("/logout", adminLogout);
 // Shop Appeals & Nudge
 router.get("/shop-appeal/:shop_id", getShopAppealStatus);
 router.patch("/shop-appeal/nudge", nudgeShopAppeal);
+router.patch("/appeals/reject", rejectShopAppeal);
 
 export default router;
