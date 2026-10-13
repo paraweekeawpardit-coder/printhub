@@ -27,52 +27,85 @@ export default function CustomerNavBar({ cartCount: propCartCount, onOpenCart }:
   const pathname = usePathname();
   const router = useRouter();
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string>("");
   const [internalCartCount, setInternalCartCount] = useState<number>(0);
 
-  // 1. ดึง customerId ของผู้ใช้
+  // 1. ดึง customerId ของผู้ใช้ และรูป Avatar
   useEffect(() => {
-    const getUserId = async () => {
+    const getUserIdAndAvatar = async () => {
+      // 1.1 ดึง ID จาก localStorage
       const directCustomerId =
         localStorage.getItem("customer_id") ||
         localStorage.getItem("user_id") ||
         localStorage.getItem("userId") ||
         localStorage.getItem("id");
 
-      if (directCustomerId) {
-        setCustomerId(directCustomerId);
-        return;
-      }
+      let effectiveId = directCustomerId;
 
-      const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
-      if (userStr) {
-        try {
-          const user = JSON.parse(userStr);
-          const actualId =
-            user.customer_id ||
-            user.id ||
-            user.user_id ||
-            user.customer?.id ||
-            user.customer?.customer_id;
-
-          if (actualId) {
-            setCustomerId(String(actualId));
-            return;
+      // 1.2 แกะจาก object 'user' หรือ 'customer'
+      if (!effectiveId) {
+        const userStr = localStorage.getItem("user") || localStorage.getItem("customer");
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            effectiveId =
+              user.customer_id ||
+              user.id ||
+              user.user_id ||
+              user.customer?.id ||
+              user.customer?.customer_id;
+          } catch (e) {
+            console.error("Error parsing user data:", e);
           }
-        } catch (e) {
-          console.error("Error parsing user data:", e);
         }
       }
 
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user?.id) {
-        setCustomerId(data.session.user.id);
+      // 1.3 สำรอง: ดึงตรงจาก Supabase Auth Session
+      if (!effectiveId) {
+        const { data } = await supabase.auth.getSession();
+        effectiveId = data?.session?.user?.id || null;
+      }
+
+      if (effectiveId) {
+        setCustomerId(String(effectiveId));
+
+        // 🟢 ดึงรูป Avatar จาก localStorage ก่อน (เพื่อความเร็ว)
+        const cachedAvatar = localStorage.getItem("user_avatar");
+        if (cachedAvatar) {
+          setUserAvatar(cachedAvatar);
+        }
+
+        // 🟢 ดึงคอลัมน์ avatar ล่าสุดจากตาราง customer ใน Supabase
+        const { data: customerRow } = await supabase
+          .from("customer")
+          .select("avatar")
+          .eq("id", effectiveId)
+          .maybeSingle();
+
+        if (customerRow?.avatar) {
+          setUserAvatar(customerRow.avatar);
+          localStorage.setItem("user_avatar", customerRow.avatar);
+        }
       }
     };
 
-    getUserId();
+    getUserIdAndAvatar();
+
+    // 🟢 ฟัง Event เมื่อมีการอัปเดตโปรไฟล์จากหน้าอื่น เพื่ออัปเดตรูปบน Navbar ทันที
+    const handleProfileUpdate = () => {
+      const updatedAvatar = localStorage.getItem("user_avatar");
+      if (updatedAvatar) {
+        setUserAvatar(updatedAvatar);
+      }
+    };
+
+    window.addEventListener("profileUpdated", handleProfileUpdate);
+    return () => {
+      window.removeEventListener("profileUpdated", handleProfileUpdate);
+    };
   }, []);
 
-  // 2. ฟังก์ชันดึงยอดสินค้าในตะกร้าจาก API โดยตรง
+  // 2. ฟังก์ชันดึงยอดสินค้าในตะกร้าจาก API โดยตรง (งานเพื่อน)
   const fetchGlobalCartCount = useCallback(async (cid: string) => {
     try {
       if (!cid || cid.startsWith("customer_")) return;
@@ -135,6 +168,7 @@ export default function CustomerNavBar({ cartCount: propCartCount, onOpenCart }:
       localStorage.removeItem("user_id");
       localStorage.removeItem("userId");
       localStorage.removeItem("user");
+      localStorage.removeItem("user_avatar");
       localStorage.removeItem("token");
       sessionStorage.clear();
     }
@@ -191,6 +225,7 @@ export default function CustomerNavBar({ cartCount: propCartCount, onOpenCart }:
             </span>
           </Link>
 
+          {/* ติดต่อแอดมิน */}
           <Link
             href="/customer/support"
             title="ติดต่อแอดมิน"
@@ -223,7 +258,7 @@ export default function CustomerNavBar({ cartCount: propCartCount, onOpenCart }:
             </button>
           )}
 
-          {/* ตะกร้าสินค้า (แสดงตัวเลขเสมอทุกหน้า) */}
+          {/* ตะกร้าสินค้า (แสดงตัวเลขตามที่ดึงได้เสมอ) */}
           <button
             type="button"
             onClick={onOpenCart || (() => router.push("/customer/cart"))}
@@ -254,17 +289,28 @@ export default function CustomerNavBar({ cartCount: propCartCount, onOpenCart }:
             </span>
           </Link>
 
-          {/* Setting / Profile Button */}
+          {/* 🟢 ปุ่มตั้งค่าบัญชี + แสดงรูปโปรไฟล์ (ไม่บังไอคอนฟันเฟือง) */}
           <Link
             href="/customer/setting"
             title="ตั้งค่าบัญชี"
             className="flex items-center gap-2.5 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none"
           >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold relative shrink-0">
-              <User size={16} />
-              <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-xs">
+            <div className="relative shrink-0 w-9 h-9">
+              <div className="w-full h-full rounded-full bg-gradient-to-br from-[#0F2942] to-[#1d5d9b] flex items-center justify-center text-white font-bold overflow-hidden border border-slate-200">
+                {userAvatar ? (
+                  <img 
+                    src={userAvatar} 
+                    alt="Profile Avatar" 
+                    className="w-full h-full object-cover" 
+                  />
+                ) : (
+                  <User size={16} />
+                )}
+              </div>
+
+              <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-xs border border-slate-100 z-10 flex items-center justify-center">
                 <Settings
-                  size={12}
+                  size={11}
                   className={
                     isSettingActive ? "text-[#0F2942]" : "text-slate-500"
                   }

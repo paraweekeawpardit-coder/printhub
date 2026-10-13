@@ -13,6 +13,7 @@ import {
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
 import { useRouter, useParams } from "next/navigation";
+import { RejectOrderModal } from "./OrderModals";
 
 export type OrderItemDetail = {
   id: string;
@@ -35,6 +36,7 @@ export type OrderDetail = {
   status: OrderStatus | string;
   amount: number;
   description?: string | null; // หมายเหตุจากลูกค้า
+  reject_reason?: string | null; // เหตุผลที่ร้านปฏิเสธ
   items: OrderItemDetail[];
   payment?: {
     id: string;
@@ -46,7 +48,11 @@ export type OrderDetail = {
 type Props = {
   order: OrderDetail;
   onClick?: () => void;
-  onUpdateStatus?: (orderId: string, newStatus: OrderStatus) => void;
+  onUpdateStatus?: (
+    orderId: string,
+    newStatus: OrderStatus,
+    rejectReason?: string
+  ) => void | Promise<void>;
   onVerifyPayment?: (orderId: string, isVerified: boolean) => Promise<void>;
   onChatClick?: (orderId: string) => void;
   disabled?: boolean;
@@ -119,6 +125,8 @@ export default function OrderDetailCard({
 
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
   const [verifyingSlip, setVerifyingSlip] = useState<boolean>(false);
+  const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
+  const [rejecting, setRejecting] = useState<boolean>(false);
 
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
@@ -165,6 +173,21 @@ export default function OrderDetailCard({
       console.error("Verify payment error:", err);
     } finally {
       setVerifyingSlip(false);
+    }
+  };
+
+  const REJECT_STATUS = "ยกเลิกการพิมพ์";
+
+  const handleRejectConfirm = async (reason: string) => {
+    if (rejecting) return;
+    setRejecting(true);
+    try {
+      await onUpdateStatus?.(order.order_id, REJECT_STATUS as OrderStatus, reason);
+      setShowRejectModal(false);
+    } catch (err) {
+      console.error("Reject order error:", err);
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -285,6 +308,19 @@ export default function OrderDetailCard({
             </div>
           )}
 
+          {/* เหตุผลที่ร้านปฏิเสธ */}
+          {order.status === REJECT_STATUS && (
+            <div className="mt-3 rounded-2xl border border-rose-100 bg-rose-50/70 px-3 py-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-rose-600">
+                เหตุผลที่ปฏิเสธ
+              </span>
+              <p className="mt-0.5 whitespace-pre-line break-words text-xs leading-relaxed text-slate-700">
+                {order.reject_reason?.trim() ||
+                  "ระบบยกเลิกอัตโนมัติ (เลยเวลานัดรับ)"}
+              </p>
+            </div>
+          )}
+
           {/* Items List */}
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
@@ -386,13 +422,27 @@ export default function OrderDetailCard({
             <OrderActions
               status={order.status as OrderStatus}
               isVerified={isVerified}
-              onUpdateStatus={(newStatus) =>
-                onUpdateStatus?.(order.order_id, newStatus)
-              }
+              onUpdateStatus={(newStatus) => {
+                // ปฏิเสธ -> ต้องเลือก/พิมพ์เหตุผลก่อน
+                if ((newStatus as string) === REJECT_STATUS) {
+                  setShowRejectModal(true);
+                  return;
+                }
+                onUpdateStatus?.(order.order_id, newStatus);
+              }}
             />
           </div>
         </div>
       </div>
+
+      {/* Reject Reason Modal */}
+      <RejectOrderModal
+        isOpen={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        isUpdating={rejecting}
+        orderLabel={`#${order.order_no ?? order.order_id.slice(0, 8)}`}
+        onConfirm={handleRejectConfirm}
+      />
 
       {/* Slip Modal */}
       {showSlipModal && (

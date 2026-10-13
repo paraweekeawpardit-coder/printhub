@@ -4,23 +4,36 @@ import { useState } from "react";
 import { Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import axios from "axios";
+import { isValidEmail, EMAIL_FORMAT_ERROR } from "../../component/auth/Validators";
 
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const API_URL = rawApiUrl.replace(/\/+\$/, "");
+const API_URL = rawApiUrl.replace(/\/+$/, "");
 
 export default function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [touched, setTouched] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const emailTrim = email.trim();
+  const emailError = !emailTrim
+    ? "กรุณากรอกอีเมล"
+    : !isValidEmail(emailTrim)
+    ? EMAIL_FORMAT_ERROR
+    : "";
+  const showEmailError = touched || submitted ? emailError : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    if (emailError) return;
     setIsLoading(true);
     setErrorMessage("");
 
     try {
-      await axios.post(`${API_URL}/auth/forgot-password`, { email });
+      await axios.post(`${API_URL}/auth/forgot-password`, { email: emailTrim });
       setIsSubmitted(true);
     } catch (error: any) {
       console.error("Failed to send reset email:", error);
@@ -71,7 +84,7 @@ export default function ForgotPasswordForm() {
       )}
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
             อีเมล
@@ -83,13 +96,20 @@ export default function ForgotPasswordForm() {
             <input
               id="email"
               type="email"
-              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => setTouched(true)}
               placeholder="name@example.com"
-              className="w-full rounded-xl border border-gray-300 py-3 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:border-[#001B3A] focus:outline-none focus:ring-2 focus:ring-[#001B3A]/20 transition-all"
+              className={`w-full rounded-xl border py-3 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:border-[#001B3A] focus:outline-none focus:ring-2 focus:ring-[#001B3A]/20 transition-all ${
+                showEmailError ? "border-red-400" : "border-gray-300"
+              }`}
             />
           </div>
+          {showEmailError && (
+            <p role="alert" className="mt-1 text-xs font-medium text-red-500">
+              {showEmailError}
+            </p>
+          )}
         </div>
 
         <button

@@ -50,8 +50,12 @@ export default function ShopChatPage() {
   const searchParams = useSearchParams();
   const params = useParams();
 
-  // ดึง shop_id จาก URL Parameters
-  const rawShopId = (params?.shop_id as string) || searchParams.get("shopId") || "";
+  // ดึง shop_id จาก URL Parameters หรือ localStorage
+  const rawShopId = 
+    (params?.shop_id as string) || 
+    searchParams.get("shopId") || 
+    (typeof window !== "undefined" ? localStorage.getItem("shop_id") || localStorage.getItem("user_id") : "") ||
+    "";
 
   // รองรับทั้ง orderId (camelCase) และ order_id (snake_case)
   const rawOrderId =
@@ -89,12 +93,18 @@ export default function ShopChatPage() {
     checkShopSuspended();
   }, [rawShopId]);
 
-  // 🟢 1. ดึงรายการออเดอร์ (Supabase) + สรุปแชต MongoDB (Express API)
+  // 🟢 1. ดึงรายการออเดอร์เฉพาะของร้านนี้ (Supabase) + สรุปแชต MongoDB (Express API)
   const fetchShopChats = async () => {
+    if (!rawShopId) {
+      setOrderChats([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
 
-      // ดึงข้อมูลออเดอร์ทั้งหมดจาก Supabase
+      // 🟢 เพิ่ม .eq("shop_id", rawShopId) เพื่อสโคปเฉพาะของร้านนี้เท่านั้น
       const { data: orders, error: orderErr } = await supabase
         .from("print_order")
         .select(`
@@ -106,7 +116,8 @@ export default function ShopChatPage() {
           current_status_id,
           status:current_status_id ( state ),
           customer:customer_id ( first_name, last_name )
-        `);
+        `)
+        .eq("shop_id", rawShopId); // 👈 แก้ไขจุดนี้เพื่อป้องกันข้อมูลร้านอื่นหลุด
 
       if (orderErr) {
         console.error("Order fetch error:", orderErr);
@@ -116,7 +127,7 @@ export default function ShopChatPage() {
       // ดึงสรุปข้อความแชตจาก Express (MongoDB Collection messages)
       let mongoMap: Record<string, any> = {};
       try {
-        const mongoRes = await axios.get(`${API_BASE}/api/chat/shop-summary/${rawShopId}`);
+        const mongoRes = await axios.get(`${API_BASE}/api/chat/shop/rooms/${rawShopId}`);
         const mongoList = mongoRes.data?.data || [];
         mongoList.forEach((m: any) => {
           if (m._id) mongoMap[m._id] = m;
@@ -171,7 +182,7 @@ export default function ShopChatPage() {
 
   useEffect(() => {
     fetchShopChats();
-  }, [rawOrderId, searchParams]);
+  }, [rawOrderId, searchParams, rawShopId]);
 
   // 🟢 2. Realtime Socket.io ดักฟัง receive_message แล้วดันขึ้นบนสุด + นับ Unread Count
   useEffect(() => {
@@ -197,7 +208,6 @@ export default function ShopChatPage() {
           };
 
           const remainingChats = prevChats.filter((_, idx) => idx !== chatIndex);
-          // ดันขึ้นเป็นอันดับ 1 บนสุด
           return [updatedChat, ...remainingChats];
         } else {
           fetchShopChats();
@@ -250,18 +260,16 @@ export default function ShopChatPage() {
     fetchOrderStatus();
   }, [selectedOrderId]);
 
-  // 🟢 4. เมื่อคลิกเลือกแชต เคลียร์ Unread Badge ทันที + ยิง API Mark Read ไปที่ MongoDB
+  // 🟢 4. เมื่อคลิกเลือกแชต เคลียร์ Unread Badge ทันที + ยิง API Mark Read
   const handleSelectChat = async (orderId: string) => {
     setSelectedOrderId(orderId);
 
-    // เคลียร์ Badge สีเขียวทันที
     setOrderChats((prev) =>
       prev.map((chat) =>
         chat.id === orderId ? { ...chat, unread_count: 0 } : chat
       )
     );
 
-    // ยิง API สั่ง Mark Read ใน MongoDB
     try {
       await axios.put(`${API_BASE}/api/chat/read/${orderId}`);
     } catch (e) {
@@ -293,10 +301,8 @@ export default function ShopChatPage() {
 
   return (
     <div className="h-screen w-full bg-[#F4F6F9] flex flex-col font-sans overflow-hidden">
-      {/* Navbar ของร้านค้า */}
       <ShopNavbar />
 
-      {/* แถบแจ้งเตือนเมื่อร้านถูกระงับการใช้งาน */}
       {isSuspended && (
         <div className="bg-amber-500 text-white px-6 py-2.5 flex items-center justify-center gap-2 text-xs md:text-sm font-medium shadow-inner shrink-0">
           <Lock size={16} />
@@ -304,7 +310,6 @@ export default function ShopChatPage() {
         </div>
       )}
 
-      {/* Main Container */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex gap-4 min-h-0 overflow-hidden">
         
         {/* ================= ฝั่งซ้าย: รายการกล่องข้อความทั้งหมด ================= */}
@@ -315,7 +320,6 @@ export default function ShopChatPage() {
             </h2>
           </div>
 
-          {/* ช่องค้นหา */}
           <div className="relative mb-2.5 shrink-0">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -335,7 +339,6 @@ export default function ShopChatPage() {
             )}
           </div>
 
-          {/* ปุ่มแท็บกรองตามสถานะ */}
           <div className="flex items-center gap-1 overflow-x-auto pb-2 mb-2 shrink-0 no-scrollbar text-[11px]">
             {statusFilterList.map((st) => (
               <button
@@ -390,7 +393,6 @@ export default function ShopChatPage() {
                       {chat.latest_message}
                     </p>
 
-                    {/* 🟢 Unread Badge สีเขียวแบบ LINE */}
                     {!!chat.unread_count && chat.unread_count > 0 && (
                       <span className="min-w-[20px] h-[20px] px-1.5 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0 shadow-xs animate-pulse">
                         {chat.unread_count > 99 ? "99+" : chat.unread_count}
@@ -411,7 +413,6 @@ export default function ShopChatPage() {
         <div className="w-2/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col min-h-0 overflow-hidden">
           {selectedOrderId ? (
             <>
-              {/* Header ฝั่งขวา */}
               <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                 <div>
                   <h3 className="font-bold text-slate-800 text-sm md:text-base">
@@ -429,7 +430,6 @@ export default function ShopChatPage() {
                 )}
               </div>
 
-              {/* ChatBox Component */}
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <ChatBox
                   key={selectedOrderId}

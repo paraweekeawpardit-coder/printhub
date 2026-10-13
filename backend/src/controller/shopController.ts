@@ -37,7 +37,7 @@ export const getShops = async (req: Request, res: Response) => {
     const filterMinPrice = parsedMin !== null && !isNaN(parsedMin) && parsedMin > 0 ? parsedMin : null;
     const filterMaxPrice = parsedMax !== null && !isNaN(parsedMax) && parsedMax > 0 ? parsedMax : null;
 
-    // 🌟 Query ดึงข้อมูลร้านค้า (กรองเฉพาะสถานะ 'approved' เพื่อตัดร้าน suspended / pending ออก)
+    // 🌟 1. ดึงข้อมูลร้านค้า ที่อยู่ และประเภทบริการ
     let query = supabase
       .from('print_shop')
       .select(`
@@ -62,7 +62,7 @@ export const getShops = async (req: Request, res: Response) => {
           )
         )
       `)
-      .eq('status', 'approved'); // 🛑 ใช้ status = approved เพื่อกรองเฉพาะร้านที่ใช้งานได้ปกติ
+      .eq('status', 'approved');
 
     if (is_top_rated === 'true') {
       query = query.gte('rating', 4.0);
@@ -71,8 +71,15 @@ export const getShops = async (req: Request, res: Response) => {
     const { data: shops, error } = await query;
 
     if (error) {
-      console.error('Supabase Error:', error);
+      console.error('Supabase Error (Shops):', error);
       return res.status(500).json({ success: false, message: error.message });
+    }
+
+    // 🌟 2. ดึงข้อมูลจากตาราง review และใช้ฟิลด์ score ตามโครงสร้างจริง
+    let allReviews: any[] = [];
+    const { data: reviewData } = await supabase.from('review').select('shop_id, score');
+    if (reviewData) {
+      allReviews = reviewData;
     }
 
     const now = new Date();
@@ -97,9 +104,9 @@ export const getShops = async (req: Request, res: Response) => {
         const a =
           Math.sin(dLat / 2) * Math.sin(dLat / 2) +
           Math.cos((userLat * Math.PI) / 180) *
-            Math.cos((Number(shop.address.latitude) * Math.PI) / 180) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2);
+          Math.cos((Number(shop.address.latitude) * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         distance = Number((R * c).toFixed(1));
       }
@@ -110,10 +117,10 @@ export const getShops = async (req: Request, res: Response) => {
 
       const allServiceDetails: string[] = Array.isArray(shop.service_type)
         ? shop.service_type.flatMap((st: any) =>
-            Array.isArray(st?.service_detail)
-              ? st.service_detail.map((sd: any) => sd?.detail?.trim()).filter(Boolean)
-              : []
-          )
+          Array.isArray(st?.service_detail)
+            ? st.service_detail.map((sd: any) => sd?.detail?.trim()).filter(Boolean)
+            : []
+        )
         : [];
 
       const detailsByCategory: Record<string, string[]> = {};
@@ -136,14 +143,24 @@ export const getShops = async (req: Request, res: Response) => {
         });
       }
 
+      // 🌟 คำนวณคะแนนเฉลี่ยจากฟิลด์ score และนับจำนวนรีวิวจริง
+      const shopReviews = allReviews.filter((r: any) => String(r.shop_id) === String(shop.id));
+      const reviewCount = shopReviews.length;
+
+      let calculatedRating = Number(shop.rating || 0);
+      if (reviewCount > 0) {
+        const totalScore = shopReviews.reduce((sum: number, r: any) => sum + Number(r.score || 0), 0);
+        calculatedRating = Number((totalScore / reviewCount).toFixed(1));
+      }
+
       return {
         id: shop.id,
         name: shop.shop_name,
         shop_name: shop.shop_name,
         image_url: shop.profile_image,
         profile_image: shop.profile_image,
-        rating: Number(shop.rating || 0),
-        review_count: 0,
+        rating: calculatedRating,
+        review_count: reviewCount,
         open_time: shop.open_time,
         close_time: shop.close_time,
         is_open: isOpenNow,
@@ -363,8 +380,7 @@ export const getShopServices = async (req: Request, res: Response) => {
       .maybeSingle();
 
     if (shopError) throw shopError;
-    
-    // 🛑 ตรวจสอบ: ถ้าร้านค้าไม่ได้มีสถานะอนุมัติ (approved) ให้ระบุว่าไม่พบร้าน
+
     if (!shop || shop.status !== 'approved') {
       return res.status(404).json({ success: false, message: "ไม่พบร้านค้านี้ในระบบ หรือร้านค้าถูกระงับการใช้งาน" });
     }
@@ -414,7 +430,7 @@ export const getCustomerShops = async (req: Request, res: Response) => {
           type
         )
       `)
-      .eq("status", "approved"); // 🛑 กรองเฉพาะสถานะ approved
+      .eq("status", "approved");
 
     if (error) throw error;
 
@@ -437,7 +453,7 @@ export const getCustomerShops = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 5. ยื่นเรื่องขอเปลี่ยน/เพิ่มบัญชีธนาคาร (ฝั่งร้านค้า - Status: Pending)
+// 5. ยื่นเรื่องขอเปลี่ยน/เพิ่มบัญชีธนาคาร
 // ==========================================
 export const requestBankAccountUpdate = async (req: Request, res: Response) => {
   try {
@@ -475,7 +491,7 @@ export const requestBankAccountUpdate = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 6. ดึงข้อมูลบัญชีธนาคารที่อนุมัติแล้ว (สำหรับลูกค้าชำระเงิน)
+// 6. ดึงข้อมูลบัญชีธนาคารที่อนุมัติแล้ว
 // ==========================================
 export const getApprovedBankAccount = async (req: Request, res: Response) => {
   try {
