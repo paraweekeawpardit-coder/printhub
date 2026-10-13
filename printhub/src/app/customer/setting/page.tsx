@@ -97,7 +97,7 @@ export default function CustomerSettingPage() {
           console.warn("Backend profile unreachable:", backendErr);
         }
 
-        // 2. Fallback: ดึงตรงจากตาราง customer (คอลัมน์ avatar)
+        // 2. Fallback: ดึงตรงจากตาราง customer
         if (!loadedName || !loadedAvatar) {
           const { data: customerRow } = await supabase
             .from("customer")
@@ -148,7 +148,7 @@ export default function CustomerSettingPage() {
           setCartCount(0);
         }
       } catch (err: any) {
-        console.error("Fetch profile error:", err);
+        console.error("Load user error:", err);
       } finally {
         setLoading(false);
       }
@@ -188,7 +188,7 @@ export default function CustomerSettingPage() {
     try {
       setSaving(true);
 
-      // 🔍 1. ตรวจสอบว่าอีเมลซ้ำหรือไม่
+      // 🔍 1. ตรวจสอบว่าอีเมลซ้ำในระบบ (customer, print_shop, admin)
       const { data: dupCustomer } = await supabase
         .from("customer")
         .select("id")
@@ -256,7 +256,7 @@ export default function CustomerSettingPage() {
       const firstName = parts[0] || "";
       const lastName = parts.slice(1).join(" ") || "";
 
-      // 3. อัปเดตตาราง customer ใน Supabase (คอลัมน์ avatar)
+      // 3. อัปเดตตาราง customer ใน Supabase
       const { error: cusErr } = await supabase
         .from("customer")
         .update({
@@ -269,7 +269,7 @@ export default function CustomerSettingPage() {
 
       if (cusErr) throw cusErr;
 
-      // 4. ลองอัปเดตผ่าน Backend Controller (ถ้าเชื่อมต่อได้)
+      // 4. ซิงค์ Backend API
       try {
         await fetch(`http://localhost:5000/api/customer/profile`, {
           method: "PUT",
@@ -302,13 +302,14 @@ export default function CustomerSettingPage() {
         console.warn("Auth sync notice:", authErr);
       }
 
-      // 6. บันทึกลง localStorage
+      // 6. บันทึกลง localStorage และส่งสัญญาณอัปเดต Navbar
       if (typeof window !== "undefined") {
         localStorage.setItem("user_name", newName);
         localStorage.setItem("user_email", newEmail);
         if (uploadedImageUrl) {
           localStorage.setItem("user_avatar", uploadedImageUrl);
         }
+        window.dispatchEvent(new Event("profileUpdated"));
       }
 
       setProfile((prev) => ({ ...prev, name: newName, email: newEmail, avatar: uploadedImageUrl }));
@@ -356,10 +357,7 @@ export default function CustomerSettingPage() {
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col font-sans text-slate-800 antialiased pb-12">
-      <NavBar 
-        cartCount={cartCount} 
-        onOpenCart={() => router.push("/customer/cart")} 
-      />
+      <NavBar cartCount={cartCount} />
 
       {toastMsg && (
         <div 

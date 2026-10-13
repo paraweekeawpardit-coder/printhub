@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
 const ORDER_PENDING_STATE = "รอการดำเนินงาน";
+const ORDER_CANCELLED_STATE = "ยกเลิกการพิมพ์";
+const REJECT_REASON_MAX_LENGTH = 500;
 
 // Helper: ปรับเวลาให้อยู่ในกรอบ 00:00:00 - 23:59:59.999 ของวันนั้นๆ
 export const getDayBounds = (dateInput: Date | string) => {
@@ -54,7 +56,7 @@ export const getOrder = async (
         `
         id, order_no, description, subtotal_price, small_order_fee, platform_fee,
         total_amount, order_date, receive_date, appointment_time, current_status_id,
-        payment_id, review_id,
+        payment_id, review_id, rejecect_reason,
         customer (
           id, first_name, last_name, contact,
           address ( detail, subdistrict, district, province, postcode )
@@ -98,6 +100,7 @@ export const getOrder = async (
         order_date: order.order_date,
         receive_date: resolveReceiveDate(order.receive_date, order.appointment_time),
         description: order.description,
+        reject_reason: (order as any).rejecect_reason || null,
         subtotal_price: Number(order.subtotal_price || 0),
         small_order_fee: Number(order.small_order_fee || 0),
         platform_fee: Number(order.platform_fee || 0),
@@ -135,10 +138,19 @@ export const updateOrderStatus = async (
   try {
     const id = req.params.id || req.params.order_id;
     const { status_name } = req.body;
+    const rejectReason =
+      typeof req.body.reject_reason === "string"
+        ? req.body.reject_reason.trim().slice(0, REJECT_REASON_MAX_LENGTH)
+        : "";
     const shop_id = (req.query.shop_id || req.headers.shop_id) as string | undefined;
 
     if (!id || !status_name) {
       return res.status(400).json({ error: "Missing required parameters" });
+    }
+
+    // ปฏิเสธออเดอร์ (ยกเลิกการพิมพ์) ต้องมีเหตุผลเสมอ
+    if (status_name === ORDER_CANCELLED_STATE && !rejectReason) {
+      return res.status(400).json({ error: "กรุณาระบุเหตุผลในการปฏิเสธออเดอร์" });
     }
 
     const { data: order, error: orderError } = await supabase
@@ -173,12 +185,28 @@ export const updateOrderStatus = async (
       updatePayload.work_state_id = newWorkStatus.id;
     }
 
-    await supabase
+    // เก็บเหตุผลที่ปฏิเสธลงคอลัมน์ rejecect_reason (ชื่อคอลัมน์ตามที่มีใน DB)
+    if (status_name === ORDER_CANCELLED_STATE) {
+      updatePayload.rejecect_reason = rejectReason;
+    }
+
+    const { error: updateError } = await supabase
       .from("print_order")
-      .update({ current_status_id: statusData.id, work_state_id: newWorkStatus?.id })
+      .update(updatePayload)
       .eq("id", id);
 
-    return res.status(200).json({ message: "Status updated", data: { status_state: statusData.state } });
+    if (updateError) {
+      console.error("Update order status error:", updateError);
+      return res.status(400).json({ error: updateError.message });
+    }
+
+    return res.status(200).json({
+      message: "Status updated",
+      data: {
+        status_state: statusData.state,
+        reject_reason: status_name === ORDER_CANCELLED_STATE ? rejectReason : null,
+      },
+    });
   } catch (err: any) {
     console.error("Update Order Status Error:", err);
     return res.status(500).json({ error: "Server Error" });

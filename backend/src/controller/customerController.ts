@@ -36,6 +36,8 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
         order_date,
         review_id,
         report_id,
+        payment_id,
+        expires_at,
         shop:shop_id (
           id,
           shop_name,
@@ -63,7 +65,23 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
       return res.status(500).json({ success: false, error: ordersError.message });
     }
 
-    // 3. ดึงประวัติเรื่องร้องเรียนของลูกค้าจากตาราง report
+    const orderList = orders || [];
+
+    // 🌟 3. ดึงข้อมูล payment ของแต่ละออเดอร์มาประกบให้หน้าบ้านใช้งานได้ 100%
+    for (const order of orderList) {
+      const { data: paymentData } = await supabase
+        .from("payment")
+        .select("*")
+        .eq("order_id", order.id)
+        .order("payment_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      order.payment = paymentData || null;
+      order.payment_detail = paymentData || null;
+    }
+
+    // 4. ดึงประวัติเรื่องร้องเรียนของลูกค้าจากตาราง report
     const { data: reports, error: reportsError } = await supabase
       .from("report")
       .select(`
@@ -87,10 +105,9 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
       console.error("Fetch reports error:", reportsError);
     }
 
-    const orderList = orders || [];
     const reportList = reports || [];
 
-    // 4. คำนวณตัวเลขสถิติ 4 ช่องตามค่า state ในตาราง status
+    // 5. คำนวณตัวเลขสถิติ 4 ช่องตามค่า state ในตาราง status
     const inProgressCount = orderList.filter((o: any) => {
       const state = o.current_status?.state;
       return state === "รอการดำเนินงาน" || state === "กำลังพิมพ์";
@@ -131,7 +148,7 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 2. ฟังก์ชันเพิ่มใหม่: สร้าง Order เมื่อกดชำระเงิน
+// 2. ฟังก์ชัน: สร้าง Order เมื่อกดชำระเงิน
 // ==========================================
 export const createOrder = async (req: Request, res: Response) => {
   try {
@@ -141,12 +158,10 @@ export const createOrder = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: "ข้อมูลไม่ครบถ้วน" });
     }
 
-    // 1. คำนวณยอดเงินจริง
     const subtotal_price = items.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
     const small_order_fee = (subtotal_price < 50 && subtotal_price > 0) ? 20 : 0;
     const total_price = subtotal_price + small_order_fee;
 
-    // 2. ดึง UUID สถานะ "รอการดำเนินงาน" จากตาราง status
     const { data: statusData } = await supabase
       .from("status")
       .select("id")
@@ -155,7 +170,6 @@ export const createOrder = async (req: Request, res: Response) => {
 
     const current_status_id = statusData?.id || "8c416cf8-140c-4563-a912-6a4a6c0a4d9f";
 
-    // 3. บันทึกลงตาราง print_order
     const { data: newOrder, error: orderErr } = await supabase
       .from("print_order")
       .insert({
@@ -174,7 +188,6 @@ export const createOrder = async (req: Request, res: Response) => {
 
     if (orderErr || !newOrder) throw orderErr;
 
-    // 4. บันทึกรายการลงตาราง print_order_item
     const orderItemsPayload = items.map((item: any) => ({
       order_id: newOrder.id,
       category: item.category,
@@ -189,7 +202,6 @@ export const createOrder = async (req: Request, res: Response) => {
     const { error: itemErr } = await supabase.from("print_order_item").insert(orderItemsPayload);
     if (itemErr) throw itemErr;
 
-    // 5. สร้าง Record ในตาราง payment
     const { data: paymentData, error: payErr } = await supabase
       .from("payment")
       .insert({
@@ -204,7 +216,6 @@ export const createOrder = async (req: Request, res: Response) => {
 
     if (payErr || !paymentData) throw payErr;
 
-    // 6. อัปเดต payment_id กลับไปที่ print_order
     await supabase
       .from("print_order")
       .update({ payment_id: paymentData.id })
@@ -225,7 +236,7 @@ export const createOrder = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 3. ฟังก์ชันเพิ่มใหม่: อัปโหลดสลิปเข้า Bucket payment_slip
+// 3. ฟังก์ชัน: อัปโหลดสลิปเข้า Bucket payment_slip
 // ==========================================
 export const uploadPaymentSlip = async (req: Request, res: Response) => {
   try {
@@ -236,11 +247,9 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: "ขาดข้อมูล orderId หรือไฟล์สลิป" });
     }
 
-    // 1. ตั้งชื่อไฟล์ลงใน Bucket payment_slip
     const fileExt = file.originalname.split(".").pop();
     const fileName = `slip_${orderId}_${Date.now()}.${fileExt}`;
 
-    // 2. Upload ไฟล์ไปที่ Supabase Storage Bucket 'payment_slip'
     const { error: storageErr } = await supabase.storage
       .from("payment_slip")
       .upload(fileName, file.buffer, {
@@ -250,14 +259,12 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
 
     if (storageErr) throw storageErr;
 
-    // 3. ดึง Public URL ของภาพสลิป
     const { data: urlData } = supabase.storage
       .from("payment_slip")
       .getPublicUrl(fileName);
 
     const slipPublicUrl = urlData.publicUrl;
 
-    // 4. อัปเดต slip_url และเปลี่ยนสถานะเป็น 'paid' ในตาราง payment
     const { error: payUpdateErr } = await supabase
       .from("payment")
       .update({
@@ -281,13 +288,13 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// 3. ดึงรายชื่อลูกค้าทั้งหมดสำหรับ Admin
+// 4. ดึงรายชื่อลูกค้าทั้งหมดสำหรับ Admin
 // ==========================================
 export const getAllCustomers = async (req: Request, res: Response) => {
   try {
     const { data: customers, error } = await supabase
       .from("customer")
-      .select("*") // ดึงมาทุกคอลัมน์ก่อนเพื่อไม่ให้เกิด Error คอลัมน์หาไม่เจอ
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -303,9 +310,8 @@ export const getAllCustomers = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// ตรวจเช็คการรายงาน ว่าลูกค้ามีการรายงานคำสั่งซื้อไปแล้วหรือยัง ถ้ารายงานไปแล้ว จะไม่สามารถรายงานใหม่ได้
+// 5. บันทึกรายงานปัญหา / ขอคืนเงิน
 // ==========================================
-// ตัวอย่างฟังก์ชันบันทึกรายงานใน customerController.ts
 export const createReport = async (req: Request, res: Response) => {
   try {
     const { order_id, customer_id, issue_type, description, resolution } = req.body;
@@ -314,8 +320,7 @@ export const createReport = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "ไม่พบรหัสคำสั่งซื้อ" });
     }
 
-    // 🛑 1. เช็กตรงนี้: ถ้า order_id นี้เคยถูกแจ้งรายงานไปแล้ว ให้ตีกลับทันที!
-    const { data: existingReport, error: checkErr } = await supabase
+    const { data: existingReport } = await supabase
       .from("report")
       .select("id")
       .eq("order_id", order_id)
@@ -328,8 +333,6 @@ export const createReport = async (req: Request, res: Response) => {
       });
     }
 
-    // 2. โค้ดเดิมสำหรับบันทึกข้อมูลรายงาน (Insert ลงตาราง report และอัปโหลดรูปภาพต่อจากตรงนี้...)
-
   } catch (err: any) {
     console.error("Create Report Error:", err);
     return res.status(500).json({ success: false, error: "Internal Server Error" });
@@ -337,7 +340,7 @@ export const createReport = async (req: Request, res: Response) => {
 };
 
 // ==========================================
-// ตรวจสอบว่าออร์เดอร์นี้เคยถูกรายงานไปแล้วหรือยัง (สำหรับให้ Frontend เช็กตอนโหลดหน้า)
+// 6. ตรวจสอบว่าออร์เดอร์นี้เคยถูกรายงานไปแล้วหรือยัง
 // ==========================================
 export const checkOrderStatusReported = async (req: Request, res: Response) => {
   try {
@@ -359,11 +362,54 @@ export const checkOrderStatusReported = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      hasReported: !!reportData, // จะเป็น true ทันทีถ้าเคยรายงานแล้ว
+      hasReported: !!reportData,
       report: reportData || null,
     });
   } catch (err: any) {
     console.error("Check Report Exception:", err);
+    return res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+};
+
+
+// ==========================================
+// ดึงรายการร้านค้าทั้งหมด พร้อมคำนวณคะแนนและจำนวนรีวิว
+// ==========================================
+export const getShops = async (req: Request, res: Response) => {
+  try {
+    // 1. ดึงข้อมูลร้านค้าพร้อมรีวิว (ปรับชื่อตาราง print_shop หรือ print_shops ตามฐานข้อมูลของคุณ)
+    const { data: shops, error } = await supabase
+      .from("print_shop")
+      .select(`
+        *,
+        reviews: review ( score )
+      `);
+
+    if (error) {
+      console.error("Fetch shops error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    // 2. คำนวณ rating และ review_count ให้กับแต่ละร้าน
+    const formattedShops = (shops || []).map((shop: any) => {
+      const shopReviews = shop.reviews || [];
+      const review_count = shopReviews.length;
+      const totalScore = shopReviews.reduce((sum: number, r: any) => sum + Number(r.score || 0), 0);
+      const rating = review_count > 0 ? Number((totalScore / review_count).toFixed(1)) : 0;
+
+      return {
+        ...shop,
+        rating,
+        review_count,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: formattedShops,
+    });
+  } catch (err: any) {
+    console.error("Get Shops Exception:", err);
     return res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };

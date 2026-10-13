@@ -1,7 +1,7 @@
 /**
- * Component: CustomerDashboardView
- * Path: src/component/customer/dashboard/CustomerDashboardView.tsx
- * หน้าที่: ควบคุม State, การกรองสถานะคำสั่งซื้อ และ Modal ทั้งหมด (ใช้ร่วมกันทั้งหน้า Dashboard และ Orders)
+- Component: CustomerDashboardView
+- Path: src/component/customer/dashboard/CustomerDashboardView.tsx
+- หน้าที่: ควบคุม State, การกรองสถานะคำสั่งซื้อ และ Modal ทั้งหมด (ใช้ร่วมกันทั้งหน้า Dashboard และ Orders)
  */
 
 "use client";
@@ -84,7 +84,7 @@ export default function CustomerDashboardView({
     return isNaN(parsed) ? null : parsed;
   };
 
-  // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์
+  // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์ (แก้ไขไม่ให้เหมารวมออเดอร์ที่ดำเนินงานไปแล้วเป็นยกเลิก)
   const getRealOrderState = (o: any) => {
     if (!o) return "รอการดำเนินงาน";
 
@@ -95,33 +95,48 @@ export default function CustomerDashboardView({
       (typeof o.status === "string" ? o.status : null) ||
       "";
 
-    if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก") {
+    // 1. ถ้าระบุชัดเจนใน DB ว่ายกเลิก ให้ยึดเป็นยกเลิกการพิมพ์ทันที
+    if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก" || dbState === "cancelled") {
       return "ยกเลิกการพิมพ์";
     }
 
+    // 2. ถ้าเป็นสถานะที่ดำเนินงานไปแล้วหรือเสร็จสิ้น ไม่ต้องเช็กเรื่องหมดเวลาชำระเงิน
+    if (
+      dbState === "รอการดำเนินงาน" ||
+      dbState === "กำลังพิมพ์" ||
+      dbState === "พิมพ์เสร็จสิ้น" ||
+      dbState === "รายการเสร็จสิ้น" ||
+      dbState === "รับงานแล้ว"
+    ) {
+      // ตรวจสอบเฉพาะกรณีเลยเวลานัดรับงาน และงานยังค้างอยู่ที่รอดำเนินงาน/กำลังพิมพ์ (S2G7 Auto-Cancel)
+      const now = Date.now();
+      const appointmentMs = parseSafeTime(o?.appointment_time);
+      if (appointmentMs && now >= appointmentMs && (dbState === "รอการดำเนินงาน" || dbState === "กำลังพิมพ์")) {
+        return "ยกเลิกการพิมพ์";
+      }
+      return dbState;
+    }
+
+    // 3. ตรวจสอบเฉพาะออเดอร์ที่ยังอยู่ในสถานะ "รอการชำระเงิน"
     const now = Date.now();
     const paymentData = Array.isArray(o?.payment) ? o.payment[0] : o?.payment;
     const isSlipRejected = paymentData?.is_verified === false || paymentData?.status === "rejected";
+    const hasPaidSlip = Boolean(paymentData?.slip_url) && !isSlipRejected;
 
+    // ถ้ามีการแนบสลิปแล้ว หรือชำระเงินแล้ว ไม่ถือว่าหมดเวลาชำระเงิน
+    if (hasPaidSlip) {
+      return dbState || "รอการดำเนินงาน";
+    }
+
+    // เช็กหมดเวลาชำระเงินเฉพาะออเดอร์ที่ยังไม่ได้ชำระเงิน
     let isExpired = false;
     const expiresAtMs = parseSafeTime(o?.expires_at);
-    const orderDateMs = parseSafeTime(o?.order_date);
-
     if (expiresAtMs) {
       isExpired = now > expiresAtMs;
-    } else if (!isSlipRejected && orderDateMs) {
-      isExpired = now > (orderDateMs + 10 * 60 * 1000);
     }
 
     if (isExpired) {
       return "ยกเลิกการพิมพ์";
-    }
-
-    const appointmentMs = parseSafeTime(o?.appointment_time);
-    if (appointmentMs && now >= appointmentMs) {
-      if (dbState === "รอการดำเนินงาน" || dbState === "กำลังพิมพ์") {
-        return "ยกเลิกการพิมพ์";
-      }
     }
 
     if (isSlipRejected) {
@@ -161,7 +176,7 @@ export default function CustomerDashboardView({
     fetchDashboardData(cid);
   }, [router, fetchDashboardData]);
 
-  // 🟢 ปรับกรอบไฮไลต์ให้เส้นบางลง (ring-2) และสีเข้มขึ้น (ring-blue-600)
+  // ปรับกรอบไฮไลต์เมื่อมี highlightOrderId เข้ามา
   useEffect(() => {
     if (!loading && highlightOrderId && orders.length > 0) {
       const targetOrder = orders.find((o) => String(o.id) === String(highlightOrderId));
@@ -171,7 +186,6 @@ export default function CustomerDashboardView({
           if (element) {
             element.scrollIntoView({ behavior: "smooth", block: "center" });
 
-            // 🟢 เปลี่ยนคลาสเป็น ring-2 (เส้นบางลง) และ ring-blue-600 (สีเข้มขึ้น)
             element.classList.add(
               "ring-2",
               "ring-blue-600",
@@ -195,7 +209,7 @@ export default function CustomerDashboardView({
     }
   }, [loading, highlightOrderId, orders]);
 
-  // คำนวณจำนวนออเดอร์ในแต่ละสถานะ
+  // คำนวณจำนวนออเดอร์ในแต่ละสถานะสำหรับตัวเลข Badge
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       ทั้งหมด: orders.length,
@@ -336,22 +350,20 @@ export default function CustomerDashboardView({
           <button
             type="button"
             onClick={() => setActiveTab("orders")}
-            className={`pb-3 transition relative cursor-pointer ${
-              activeTab === "orders"
-                ? "text-[#0F2942] border-b-2 border-[#0F2942]"
-                : "text-slate-400 hover:text-slate-600"
-            }`}
+            className={`pb-3 transition relative cursor-pointer ${activeTab === "orders"
+              ? "text-[#0F2942] border-b-2 border-[#0F2942]"
+              : "text-slate-400 hover:text-slate-600"
+              }`}
           >
             รายการสั่งซื้อของฉัน ({orders.length})
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("reports")}
-            className={`pb-3 transition relative flex items-center gap-1.5 cursor-pointer ${
-              activeTab === "reports"
-                ? "text-[#0F2942] border-b-2 border-[#0F2942]"
-                : "text-slate-400 hover:text-slate-600"
-            }`}
+            className={`pb-3 transition relative flex items-center gap-1.5 cursor-pointer ${activeTab === "reports"
+              ? "text-[#0F2942] border-b-2 border-[#0F2942]"
+              : "text-slate-400 hover:text-slate-600"
+              }`}
           >
             <span>ข้อร้องเรียน / ขอคืนเงิน</span>
             {reports.length > 0 && (
@@ -407,9 +419,9 @@ export default function CustomerDashboardView({
                         orderNo,
                       })
                     }
+                    // 🌟 เปลี่ยนเส้นทางปุ่มรายงานปัญหาให้วิ่งไปที่หน้า /customer/orders/[order_id]/report
                     onReportClick={(ord) => {
-                      setSelectedOrderForReport(ord);
-                      setIsReportModalOpen(true);
+                      router.push(`/customer/orders/${ord.id}/report`);
                     }}
                     onShowToast={showToast}
                   />

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Eye, EyeOff, ShieldCheck, Store } from "lucide-react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import { isValidEmail, EMAIL_FORMAT_ERROR } from "../auth/Validators";
+import { FieldError } from "../../component/auth/From-feedback";
 
 type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
@@ -23,6 +25,22 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
     contact: "",
     password: "",
   });
+  const [touched, setTouched] = useState({ contact: false, password: false });
+  const [submitted, setSubmitted] = useState(false);
+
+  // หน้า login ตรวจแค่รูปแบบอีเมล + ห้ามเว้นว่าง
+  // (ไม่ตรวจความซับซ้อนรหัสผ่าน เพราะบัญชีเก่าอาจตั้งรหัสไว้ก่อนมีกฎนี้)
+  const contactTrim = logindata.contact.trim();
+  const errors = {
+    contact: !contactTrim
+      ? "กรุณากรอกอีเมล"
+      : !isValidEmail(contactTrim)
+      ? EMAIL_FORMAT_ERROR
+      : "",
+    password: logindata.password ? "" : "กรุณากรอกรหัสผ่าน",
+  };
+  const showContact = touched.contact || submitted ? errors.contact : "";
+  const showPasswordErr = touched.password || submitted ? errors.password : "";
 
   async function doLogin() {
     setMessage("");
@@ -83,6 +101,8 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitted(true);
+    if (errors.contact || errors.password) return;
     doLogin();
   }
 
@@ -123,36 +143,46 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
           </p>
         )}
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <input
-            type="email"
-            placeholder="อีเมล (Email)"
-            value={logindata.contact}
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-slate-800 placeholder:text-gray-400 outline-none transition focus:border-[#001B3A] focus:ring-1 focus:ring-[#001B3A]"
-            onChange={(e) =>
-              setData({ ...logindata, contact: e.target.value })
-            }
-            required
-          />
-
-          <div className="relative">
+        <form className="space-y-4" onSubmit={handleSubmit} noValidate>
+          <div>
             <input
-              type={showPassword ? "text" : "password"}
-              placeholder="รหัสผ่าน"
-              value={logindata.password}
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-10 text-sm text-slate-800 placeholder:text-gray-400 outline-none transition focus:border-[#001B3A] focus:ring-1 focus:ring-[#001B3A]"
+              type="email"
+              placeholder="อีเมล (Email)"
+              value={logindata.contact}
+              className={`w-full rounded-xl border px-4 py-3 text-sm text-slate-800 placeholder:text-gray-400 outline-none transition focus:border-[#001B3A] focus:ring-1 focus:ring-[#001B3A] ${
+                showContact ? "border-red-400" : "border-gray-200"
+              }`}
               onChange={(e) =>
-                setData({ ...logindata, password: e.target.value })
+                setData({ ...logindata, contact: e.target.value })
               }
-              required
+              onBlur={() => setTouched((t) => ({ ...t, contact: true }))}
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
-            >
-              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-            </button>
+            <FieldError message={showContact} />
+          </div>
+
+          <div>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="รหัสผ่าน"
+                value={logindata.password}
+                className={`w-full rounded-xl border px-4 py-3 pr-10 text-sm text-slate-800 placeholder:text-gray-400 outline-none transition focus:border-[#001B3A] focus:ring-1 focus:ring-[#001B3A] ${
+                  showPasswordErr ? "border-red-400" : "border-gray-200"
+                }`}
+                onChange={(e) =>
+                  setData({ ...logindata, password: e.target.value })
+                }
+                onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+            <FieldError message={showPasswordErr} />
           </div>
 
           <div className="text-right">
