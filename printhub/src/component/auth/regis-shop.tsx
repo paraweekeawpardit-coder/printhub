@@ -5,6 +5,8 @@ import { Eye, EyeOff, FileText, X, ChevronDown, ShieldCheck } from "lucide-react
 import axios from "axios";
 import dynamic from "next/dynamic";
 import { LocationData } from "./map";
+import { isValidEmail, isPasswordValid, EMAIL_FORMAT_ERROR } from "../auth/Validators";
+import { FieldError, PasswordChecklist, scrollToFirstError } from "../../component/auth/From-feedback";
 
 type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
@@ -13,15 +15,11 @@ type RegisFormProps = {
 const MapPicker = dynamic(() => import("./map"), { ssr: false });
 
 function isValidThaiIDCard(id: string): boolean {
-  return /^\d{13}$/.test(id);
+  return /^\d{13}\$/.test(id);
 }
 
 function isValidThaiPhone(phone: string): boolean {
-  return /^0[689]\d{8}$/.test(phone);
-}
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return /^0[689]\d{8}\$/.test(phone);
 }
 
 export default function RegisFormShop({ setRegis }: RegisFormProps) {
@@ -32,6 +30,8 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
   const [agreed, setAgreed] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const bankDropdownRef = useRef<HTMLDivElement>(null);
 
   const [shopData, setShopData] = useState({
@@ -92,72 +92,82 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const touch = (key: string) =>
+    setTouched((prev) => (prev[key] ? prev : { ...prev, [key]: true }));
+
+  // ข้อความ error ของแต่ละช่อง ("" = ผ่าน)
+  const errors: Record<string, string> = {
+    shop_name: !shopData.shop_name.trim()
+      ? "กรุณากรอกชื่อร้านค้า"
+      : shopData.shop_name.length > 100
+      ? "ชื่อร้านค้าต้องไม่เกิน 100 ตัวอักษร"
+      : "",
+    id_name: !shopData.id_name.trim()
+      ? "กรุณากรอกชื่อในบัตรประชาชน"
+      : shopData.id_name.length > 100
+      ? "ชื่อในบัตรต้องไม่เกิน 100 ตัวอักษร"
+      : "",
+    id_card: !shopData.id_card
+      ? "กรุณากรอกเลขบัตรประชาชน"
+      : !isValidThaiIDCard(shopData.id_card)
+      ? `เลขบัตรประชาชนต้องเป็นตัวเลขครบ 13 หลัก (กรอกแล้ว ${shopData.id_card.length} หลัก)`
+      : "",
+    image_card: !shopData.image_card
+      ? "กรุณาอัปโหลดรูปภาพถ่ายคู่กับบัตรประชาชน"
+      : shopData.image_card.size > 5 * 1024 * 1024
+      ? "ขนาดรูปภาพบัตรประชาชนต้องไม่เกิน 5MB"
+      : "",
+    email: !shopData.email.trim()
+      ? "กรุณากรอกอีเมล"
+      : shopData.email.length > 100
+      ? "อีเมลต้องไม่เกิน 100 ตัวอักษร"
+      : !isValidEmail(shopData.email)
+      ? EMAIL_FORMAT_ERROR
+      : "",
+    contact: !shopData.contact
+      ? "กรุณากรอกเบอร์โทรศัพท์"
+      : !isValidThaiPhone(shopData.contact)
+      ? "เบอร์โทรศัพท์ต้องมี 10 หลัก และขึ้นต้นด้วย 06, 08 หรือ 09"
+      : "",
+    location:
+      shopData.latitude === 0 || shopData.longitude === 0
+        ? "กรุณาเลือกตำแหน่งร้านบนแผนที่"
+        : shopData.location.length > 250
+        ? "รายละเอียดที่อยู่ต้องไม่เกิน 250 ตัวอักษร"
+        : "",
+    bank: shopData.bank ? "" : "กรุณาเลือกธนาคาร",
+    bank_number: !shopData.bank_number
+      ? "กรุณากรอกเลขบัญชีธนาคาร"
+      : !/^\d{10,12}\$/.test(shopData.bank_number)
+      ? `เลขบัญชีธนาคารต้องเป็นตัวเลข 10-12 หลัก (กรอกแล้ว ${shopData.bank_number.length} หลัก)`
+      : "",
+    password: isPasswordValid(shopData.password) ? "" : "invalid",
+    confirmPassword: !shopData.confirmPassword
+      ? "กรุณายืนยันรหัสผ่าน"
+      : shopData.password !== shopData.confirmPassword
+      ? "รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน"
+      : "",
+    agreed: agreed
+      ? ""
+      : "กรุณายอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว",
+  };
+
+  // แสดง error เมื่อผู้ใช้กรอกเสร็จช่องนั้น (blur) หรือกดสมัครแล้ว
+  const show = (key: string) =>
+    touched[key] || submitted ? errors[key] : "";
+
+  const baseInput =
+    "w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-primary";
+  const inputCls = (hasError: boolean, extra = "") =>
+    `${baseInput} ${hasError ? "border-red-400" : "border-gray-200"} ${extra}`;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
 
-    if (!agreed) {
-      setMessage("กรุณายอมรับเงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว");
-      return;
-    }
-
-    if (!shopData.shop_name.trim()) {
-      setMessage("กรุณากรอกชื่อร้านค้า");
-      return;
-    }
-
-    if (!shopData.id_name.trim()) {
-      setMessage("กรุณากรอกชื่อในบัตรประชาชน");
-      return;
-    }
-
-    if (!isValidThaiIDCard(shopData.id_card)) {
-      setMessage("เลขบัตรประชาชนต้องเป็นตัวเลขครบ 13 หลัก");
-      return;
-    }
-
-    if (!shopData.image_card) {
-      setMessage("กรุณาอัปโหลดรูปภาพบัตรประชาชน");
-      return;
-    }
-
-    if (shopData.image_card.size > 5 * 1024 * 1024) {
-      setMessage("ขนาดรูปภาพบัตรประชาชนต้องไม่เกิน 5MB");
-      return;
-    }
-
-    if (!isValidEmail(shopData.email)) {
-      setMessage("รูปแบบอีเมลไม่ถูกต้อง");
-      return;
-    }
-
-    if (!isValidThaiPhone(shopData.contact)) {
-      setMessage("เบอร์โทรศัพท์ไม่ถูกต้อง ");
-      return;
-    }
-
-    if (shopData.latitude === 0 || shopData.longitude === 0) {
-      setMessage("กรุณาเลือกตำแหน่งร้านบนแผนที่");
-      return;
-    }
-
-    if (!shopData.bank) {
-      setMessage("กรุณาเลือกธนาคาร");
-      return;
-    }
-
-    if (!/^\d{10,12}$/.test(shopData.bank_number)) {
-      setMessage("เลขบัญชีธนาคารต้องเป็นตัวเลข 10-12 หลัก");
-      return;
-    }
-
-    if (shopData.password.length < 8) {
-      setMessage("รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร");
-      return;
-    }
-
-    if (shopData.password !== shopData.confirmPassword) {
-      setMessage("รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน");
+    setSubmitted(true);
+    if (Object.values(errors).some(Boolean)) {
+      scrollToFirstError();
       return;
     }
 
@@ -217,47 +227,59 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
           </p>
         )}
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <input
-            type="text"
-            placeholder="ชื่อร้านค้า"
-            value={shopData.shop_name}
-            onChange={(e) =>
-              setShopData({ ...shopData, shop_name: e.target.value })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-            required
-          />
+        <form className="space-y-4" onSubmit={handleSubmit} noValidate>
+          <div>
+            <input
+              type="text"
+              maxLength={100}
+              placeholder="ชื่อร้านค้า (สูงสุด 100 ตัวอักษร)"
+              value={shopData.shop_name}
+              onChange={(e) =>
+                setShopData({ ...shopData, shop_name: e.target.value })
+              }
+              onBlur={() => touch("shop_name")}
+              className={inputCls(!!show("shop_name"))}
+            />
+            <FieldError message={show("shop_name")} />
+          </div>
 
-          <input
-            type="text"
-            placeholder="ชื่อในบัตรประชาชน"
-            value={shopData.id_name}
-            onChange={(e) =>
-              setShopData({
-                ...shopData,
-                id_name: e.target.value,
-                owner_name: e.target.value,
-              })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-            required
-          />
+          <div>
+            <input
+              type="text"
+              maxLength={100}
+              placeholder="ชื่อในบัตรประชาชน (สูงสุด 100 ตัวอักษร)"
+              value={shopData.id_name}
+              onChange={(e) =>
+                setShopData({
+                  ...shopData,
+                  id_name: e.target.value,
+                  owner_name: e.target.value,
+                })
+              }
+              onBlur={() => touch("id_name")}
+              className={inputCls(!!show("id_name"))}
+            />
+            <FieldError message={show("id_name")} />
+          </div>
 
-          <input
-            type="text"
-            maxLength={13}
-            placeholder="เลขบัตรประชาชน (13 หลัก)"
-            value={shopData.id_card}
-            onChange={(e) =>
-              setShopData({
-                ...shopData,
-                id_card: e.target.value.replace(/\D/g, ""),
-              })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-            required
-          />
+          <div>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={13}
+              placeholder="เลขบัตรประชาชน (13 หลัก)"
+              value={shopData.id_card}
+              onChange={(e) =>
+                setShopData({
+                  ...shopData,
+                  id_card: e.target.value.replace(/\D/g, ""),
+                })
+              }
+              onBlur={() => touch("id_card")}
+              className={inputCls(!!show("id_card"))}
+            />
+            <FieldError message={show("id_card")} />
+          </div>
 
           <div>
             <div className="mb-1 flex items-center justify-between">
@@ -276,45 +298,56 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             <input
               type="file"
               accept="image/*"
-              onChange={(e) =>
+              onChange={(e) => {
                 setShopData({
                   ...shopData,
                   image_card: e.target.files?.[0] || null,
-                })
-              }
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm"
-              required
+                });
+                touch("image_card");
+              }}
+              className={`w-full rounded-xl border px-4 py-3 text-sm ${
+                show("image_card") ? "border-red-400" : "border-gray-200"
+              }`}
             />
             <p className="mt-1 text-xs text-gray-500">
               กรุณาแนบรูปถ่ายคู่กับบัตรประชาชนเพื่อยืนยันตัวตน (ไม่เกิน 5MB)
             </p>
+            <FieldError message={show("image_card")} />
           </div>
 
-          <input
-            type="email"
-            placeholder="Email"
-            value={shopData.email}
-            onChange={(e) =>
-              setShopData({ ...shopData, email: e.target.value })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-            required
-          />
+          <div>
+            <input
+              type="email"
+              maxLength={100}
+              placeholder="Email (สูงสุด 100 ตัวอักษร)"
+              value={shopData.email}
+              onChange={(e) =>
+                setShopData({ ...shopData, email: e.target.value })
+              }
+              onBlur={() => touch("email")}
+              className={inputCls(!!show("email"))}
+            />
+            <FieldError message={show("email")} />
+          </div>
 
-          <input
-            type="tel"
-            maxLength={10}
-            placeholder="เบอร์โทรศัพท์ (10 หลัก)"
-            value={shopData.contact}
-            onChange={(e) =>
-              setShopData({
-                ...shopData,
-                contact: e.target.value.replace(/\D/g, ""),
-              })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-            required
-          />
+          <div>
+            <input
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              placeholder="เบอร์โทรศัพท์ (10 หลัก)"
+              value={shopData.contact}
+              onChange={(e) =>
+                setShopData({
+                  ...shopData,
+                  contact: e.target.value.replace(/\D/g, ""),
+                })
+              }
+              onBlur={() => touch("contact")}
+              className={inputCls(!!show("contact"))}
+            />
+            <FieldError message={show("contact")} />
+          </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">
@@ -334,17 +367,23 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
                 }));
               }}
             />
+            <FieldError message={show("location")} />
           </div>
 
-          <input
-            type="text"
-            placeholder="รายละเอียดที่อยู่ (เช่น ชื่อซอย/ถนน/จุดสังเกต)"
-            value={shopData.location}
-            onChange={(e) =>
-              setShopData({ ...shopData, location: e.target.value })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-          />
+          <div>
+            <input
+              type="text"
+              maxLength={250}
+              placeholder="รายละเอียดที่อยู่ (เช่น ชื่อซอย/ถนน/จุดสังเกต) (สูงสุด 250 ตัวอักษร)"
+              value={shopData.location}
+              onChange={(e) =>
+                setShopData({ ...shopData, location: e.target.value })
+              }
+              onBlur={() => touch("location")}
+              className={inputCls(!!show("location"))}
+            />
+            <FieldError message={show("location")} />
+          </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -363,123 +402,150 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             />
           </div>
 
-          <div className="relative" ref={bankDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setIsBankOpen(!isBankOpen)}
-              className="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none text-left focus:border-primary transition"
-            >
-              <span
-                className={
-                  shopData.bank ? "text-gray-900 font-medium" : "text-gray-400"
-                }
-              >
-                {banks.find((b) => b.code === shopData.bank)?.name ||
-                  "เลือกธนาคาร"}
-              </span>
-              <ChevronDown
-                size={18}
-                className={`text-gray-400 transition-transform duration-200 ${
-                  isBankOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-
-            {isBankOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1.5 z-50 rounded-xl border border-gray-100 bg-white shadow-xl max-h-48 overflow-y-auto divide-y divide-gray-50">
-                {banks.map((bank) => (
-                  <div
-                    key={bank.code}
-                    onClick={() => {
-                      setShopData((prev) => ({ ...prev, bank: bank.code }));
-                      setIsBankOpen(false);
-                    }}
-                    className={`px-4 py-2.5 text-sm cursor-pointer transition-colors hover:bg-blue-50 hover:text-primary ${
-                      shopData.bank === bank.code
-                        ? "bg-blue-50/60 font-medium text-primary"
-                        : "text-gray-700"
-                    }`}
-                  >
-                    {bank.name}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <input
-            type="text"
-            maxLength={12}
-            placeholder="เลขบัญชีธนาคาร (10-12 หลัก)"
-            value={shopData.bank_number}
-            onChange={(e) =>
-              setShopData({
-                ...shopData,
-                bank_number: e.target.value.replace(/\D/g, ""),
-              })
-            }
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-primary"
-            required
-          />
-
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              placeholder="รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)"
-              value={shopData.password}
-              onChange={(e) =>
-                setShopData({ ...shopData, password: e.target.value })
-              }
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-10 text-sm outline-none focus:border-primary"
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-            >
-              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-            </button>
-          </div>
-
-          <div className="relative">
-            <input
-              type={showConfirmPassword ? "text" : "password"}
-              placeholder="ยืนยันรหัสผ่าน"
-              value={shopData.confirmPassword}
-              onChange={(e) =>
-                setShopData({ ...shopData, confirmPassword: e.target.value })
-              }
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-10 text-sm outline-none focus:border-primary"
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-            >
-              {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-            </button>
-          </div>
-
-          <div className="flex items-start gap-2.5 text-xs text-gray-500 pt-1">
-            <input
-              type="checkbox"
-              id="agree-shop"
-              checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-            />
-            <label htmlFor="agree-shop" className="leading-relaxed cursor-pointer">
-              ฉันยอมรับ{" "}
+          <div>
+            <div className="relative" ref={bankDropdownRef}>
               <button
                 type="button"
-                onClick={() => setShowTermsModal(true)}
-                className="text-primary hover:underline font-semibold"
+                onClick={() => setIsBankOpen(!isBankOpen)}
+                className={`w-full flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-sm outline-none text-left focus:border-primary transition ${
+                  show("bank") ? "border-red-400" : "border-gray-200"
+                }`}
               >
-                เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว
+                <span
+                  className={
+                    shopData.bank ? "text-gray-900 font-medium" : "text-gray-400"
+                  }
+                >
+                  {banks.find((b) => b.code === shopData.bank)?.name ||
+                    "เลือกธนาคาร"}
+                </span>
+                <ChevronDown
+                  size={18}
+                  className={`text-gray-400 transition-transform duration-200 ${
+                    isBankOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
-            </label>
+
+              {isBankOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1.5 z-50 rounded-xl border border-gray-100 bg-white shadow-xl max-h-48 overflow-y-auto divide-y divide-gray-50">
+                  {banks.map((bank) => (
+                    <div
+                      key={bank.code}
+                      onClick={() => {
+                        setShopData((prev) => ({ ...prev, bank: bank.code }));
+                        setIsBankOpen(false);
+                      }}
+                      className={`px-4 py-2.5 text-sm cursor-pointer transition-colors hover:bg-blue-50 hover:text-primary ${
+                        shopData.bank === bank.code
+                          ? "bg-blue-50/60 font-medium text-primary"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      {bank.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <FieldError message={show("bank")} />
+          </div>
+
+          <div>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={12}
+              placeholder="เลขบัญชีธนาคาร (10-12 หลัก)"
+              value={shopData.bank_number}
+              onChange={(e) =>
+                setShopData({
+                  ...shopData,
+                  bank_number: e.target.value.replace(/\D/g, ""),
+                })
+              }
+              onBlur={() => touch("bank_number")}
+              className={inputCls(!!show("bank_number"))}
+            />
+            <FieldError message={show("bank_number")} />
+          </div>
+
+          <div>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                maxLength={50}
+                placeholder="รหัสผ่าน"
+                value={shopData.password}
+                onChange={(e) =>
+                  setShopData({ ...shopData, password: e.target.value })
+                }
+                onFocus={() => touch("passwordFocus")}
+                onBlur={() => touch("password")}
+                className={inputCls(!!show("password"), "pr-10")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+            <PasswordChecklist
+              value={shopData.password}
+              visible={!!touched.passwordFocus || !!touched.password || submitted}
+            />
+          </div>
+
+          <div>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                maxLength={50}
+                placeholder="ยืนยันรหัสผ่าน"
+                value={shopData.confirmPassword}
+                onChange={(e) =>
+                  setShopData({ ...shopData, confirmPassword: e.target.value })
+                }
+                onBlur={() => touch("confirmPassword")}
+                className={inputCls(!!show("confirmPassword"), "pr-10")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+              >
+                {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
+            <FieldError message={show("confirmPassword")} />
+          </div>
+
+          <div>
+            <div className="flex items-start gap-2.5 text-xs text-gray-500 pt-1">
+              <input
+                type="checkbox"
+                id="agree-shop"
+                checked={agreed}
+                onChange={(e) => {
+                  setAgreed(e.target.checked);
+                  touch("agreed");
+                }}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+              />
+              <label htmlFor="agree-shop" className="leading-relaxed cursor-pointer">
+                ฉันยอมรับ{" "}
+                <button
+                  type="button"
+                  onClick={() => setShowTermsModal(true)}
+                  className="text-primary hover:underline font-semibold"
+                >
+                  เงื่อนไขการใช้งานและนโยบายความเป็นส่วนตัว
+                </button>
+              </label>
+            </div>
+            <FieldError message={show("agreed")} />
           </div>
 
           <button
@@ -569,9 +635,9 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
                   <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
                   1. เงื่อนไขสำหรับร้านค้าพาร์ทเนอร์
                 </h4>
-                <p className="pl-3">• ร้านค้าต้องระบุข้อมูลสถานที่ พิกัด และเอกสารยืนยันตัวตน (รูปคู่บัตรประชาชน) ที่ถูกต้องตรงตามจริง</p>
-                <p className="pl-3">• หากมีการแก้ไขข้อมูลบัญชีธนาคาร จะต้องผ่านการตรวจสอบและอนุมัติจากผู้ดูแลระบบ (Admin) ใหม่</p>
-                <p className="pl-3">• ร้านค้าต้องให้บริการงานพิมพ์ด้วยความซื่อสัตย์และรักษามาตรฐานตามที่แพลตฟอร์มกำหนด</p>
+                <p className="pl-3">• ร้านค้าต้องระบุข้อมูลสถานที่ พิกัด และเอกสารยืนยันตัวตน (รูปคู่บัตรประชาชน) ที่ถูกต้องตรงตามจริง[cite: 8]</p>
+                <p className="pl-3">• หากมีการแก้ไขข้อมูลบัญชีธนาคาร จะต้องผ่านการตรวจสอบและอนุมัติจากผู้ดูแลระบบ (Admin) ใหม่[cite: 8]</p>
+                <p className="pl-3">• ร้านค้าต้องให้บริการงานพิมพ์ด้วยความซื่อสัตย์และรักษามาตรฐานตามที่แพลตฟอร์มกำหนด[cite: 8]</p>
               </div>
 
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
@@ -579,8 +645,8 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
                   <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
                   2. นโยบายความเป็นส่วนตัว (PDPA)
                 </h4>
-                <p className="pl-3">• <strong>การจัดเก็บข้อมูล:</strong> จัดเก็บข้อมูลผู้ประกอบการ บัตรประชาชน และบัญชีธนาคารเพื่อยืนยันตัวตนและโอนเงินรายได้</p>
-                <p className="pl-3">• <strong>ความปลอดภัย:</strong> ข้อมูลบัตรประชาชนจะถูกเก็บเป็นความลับสูงสุด ใช้สำหรับตรวจสอบความถูกต้องโดยแอดมินเท่านั้น</p>
+                <p className="pl-3">• <strong>การจัดเก็บข้อมูล:</strong> จัดเก็บข้อมูลผู้ประกอบการ บัตรประชาชน และบัญชีธนาคารเพื่อยืนยันตัวตนและโอนเงินรายได้[cite: 8]</p>
+                <p className="pl-3">• <strong>ความปลอดภัย:</strong> ข้อมูลบัตรประชาชนจะถูกเก็บเป็นความลับสูงสุด ใช้สำหรับตรวจสอบความถูกต้องโดยแอดมินเท่านั้น[cite: 8]</p>
               </div>
             </div>
 

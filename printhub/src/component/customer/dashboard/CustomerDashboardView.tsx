@@ -1,7 +1,7 @@
 /**
- * Component: CustomerDashboardView
- * Path: src/component/customer/dashboard/CustomerDashboardView.tsx
- * หน้าที่: ควบคุม State, การกรองสถานะคำสั่งซื้อ และ Modal ทั้งหมด (ใช้ร่วมกันทั้งหน้า Dashboard และ Orders)
+- Component: CustomerDashboardView
+- Path: src/component/customer/dashboard/CustomerDashboardView.tsx
+- หน้าที่: ควบคุม State, การกรองสถานะคำสั่งซื้อ และ Modal ทั้งหมด (ใช้ร่วมกันทั้งหน้า Dashboard และ Orders)
  */
 
 "use client";
@@ -84,7 +84,7 @@ export default function CustomerDashboardView({
     return isNaN(parsed) ? null : parsed;
   };
 
-  // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์ให้สอดคล้องกับตาราง payment และการ์ดแสดงผล
+  // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์ (แก้ไขไม่ให้เหมารวมออเดอร์ที่ดำเนินงานไปแล้วเป็นยกเลิก)
   const getRealOrderState = (o: any) => {
     if (!o) return "รอการดำเนินงาน";
 
@@ -95,6 +95,7 @@ export default function CustomerDashboardView({
       (typeof o.status === "string" ? o.status : null) ||
       "";
 
+<<<<<<< HEAD
     if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก") {
       return "ยกเลิกการพิมพ์";
     }
@@ -129,6 +130,53 @@ export default function CustomerDashboardView({
     }
 
     if (isSlipRejected && !isPaymentExpired) {
+=======
+    // 1. ถ้าระบุชัดเจนใน DB ว่ายกเลิก ให้ยึดเป็นยกเลิกการพิมพ์ทันที
+    if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก" || dbState === "cancelled") {
+      return "ยกเลิกการพิมพ์";
+    }
+
+    // 2. ถ้าเป็นสถานะที่ดำเนินงานไปแล้วหรือเสร็จสิ้น ไม่ต้องเช็กเรื่องหมดเวลาชำระเงิน
+    if (
+      dbState === "รอการดำเนินงาน" ||
+      dbState === "กำลังพิมพ์" ||
+      dbState === "พิมพ์เสร็จสิ้น" ||
+      dbState === "รายการเสร็จสิ้น" ||
+      dbState === "รับงานแล้ว"
+    ) {
+      // ตรวจสอบเฉพาะกรณีเลยเวลานัดรับงาน และงานยังค้างอยู่ที่รอดำเนินงาน/กำลังพิมพ์ (S2G7 Auto-Cancel)
+      const now = Date.now();
+      const appointmentMs = parseSafeTime(o?.appointment_time);
+      if (appointmentMs && now >= appointmentMs && (dbState === "รอการดำเนินงาน" || dbState === "กำลังพิมพ์")) {
+        return "ยกเลิกการพิมพ์";
+      }
+      return dbState;
+    }
+
+    // 3. ตรวจสอบเฉพาะออเดอร์ที่ยังอยู่ในสถานะ "รอการชำระเงิน"
+    const now = Date.now();
+    const paymentData = Array.isArray(o?.payment) ? o.payment[0] : o?.payment;
+    const isSlipRejected = paymentData?.is_verified === false || paymentData?.status === "rejected";
+    const hasPaidSlip = Boolean(paymentData?.slip_url) && !isSlipRejected;
+
+    // ถ้ามีการแนบสลิปแล้ว หรือชำระเงินแล้ว ไม่ถือว่าหมดเวลาชำระเงิน
+    if (hasPaidSlip) {
+      return dbState || "รอการดำเนินงาน";
+    }
+
+    // เช็กหมดเวลาชำระเงินเฉพาะออเดอร์ที่ยังไม่ได้ชำระเงิน
+    let isExpired = false;
+    const expiresAtMs = parseSafeTime(o?.expires_at);
+    if (expiresAtMs) {
+      isExpired = now > expiresAtMs;
+    }
+
+    if (isExpired) {
+      return "ยกเลิกการพิมพ์";
+    }
+
+    if (isSlipRejected) {
+>>>>>>> f71358e11e3152dbf80c688dae1addf6d0084645
       return "รอการชำระเงิน";
     }
 
@@ -339,22 +387,20 @@ export default function CustomerDashboardView({
           <button
             type="button"
             onClick={() => setActiveTab("orders")}
-            className={`pb-3 transition relative cursor-pointer ${
-              activeTab === "orders"
-                ? "text-[#0F2942] border-b-2 border-[#0F2942]"
-                : "text-slate-400 hover:text-slate-600"
-            }`}
+            className={`pb-3 transition relative cursor-pointer ${activeTab === "orders"
+              ? "text-[#0F2942] border-b-2 border-[#0F2942]"
+              : "text-slate-400 hover:text-slate-600"
+              }`}
           >
             รายการสั่งซื้อของฉัน ({orders.length})
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("reports")}
-            className={`pb-3 transition relative flex items-center gap-1.5 cursor-pointer ${
-              activeTab === "reports"
-                ? "text-[#0F2942] border-b-2 border-[#0F2942]"
-                : "text-slate-400 hover:text-slate-600"
-            }`}
+            className={`pb-3 transition relative flex items-center gap-1.5 cursor-pointer ${activeTab === "reports"
+              ? "text-[#0F2942] border-b-2 border-[#0F2942]"
+              : "text-slate-400 hover:text-slate-600"
+              }`}
           >
             <span>ข้อร้องเรียน / ขอคืนเงิน</span>
             {reports.length > 0 && (
@@ -410,9 +456,9 @@ export default function CustomerDashboardView({
                         orderNo,
                       })
                     }
+                    // 🌟 เปลี่ยนเส้นทางปุ่มรายงานปัญหาให้วิ่งไปที่หน้า /customer/orders/[order_id]/report
                     onReportClick={(ord) => {
-                      setSelectedOrderForReport(ord);
-                      setIsReportModalOpen(true);
+                      router.push(`/customer/orders/${ord.id}/report`);
                     }}
                     onShowToast={showToast}
                   />

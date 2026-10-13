@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
+import PaginationBar from "./PaginationBar"; // 🟢 Import PaginationBar Component
 
 export interface PaymentDetail {
   id?: string;
@@ -54,8 +55,47 @@ interface RefundsTableProps {
   onViewSlip: (url: string) => void;
   getOrderAmount: (item: RefundItem) => number;
   getCustomerName: (item: RefundItem) => string;
-  getOrderDate: (item: RefundItem) => string;
+  getOrderDate?: (item: RefundItem) => string;
+  itemsPerPage?: number;
 }
+
+// 🟢 พาร์สวันเวลา รองรับทั้ง ค.ศ. และ พ.ศ.
+export const parseThaiDate = (dateString?: string | null): Date | null => {
+  if (!dateString) return null;
+
+  let formattedStr = String(dateString);
+  const yearMatch = formattedStr.match(/^(\d{4})/);
+  if (yearMatch && Number(yearMatch[1]) > 2400) {
+    const adYear = Number(yearMatch[1]) - 543;
+    formattedStr = formattedStr.replace(/^(\d{4})/, String(adYear));
+  }
+
+  if (formattedStr.includes("T") && !formattedStr.endsWith("Z") && !formattedStr.includes("+")) {
+    formattedStr += "Z";
+  }
+
+  let d = new Date(formattedStr);
+  if (isNaN(d.getTime())) {
+    d = new Date(formattedStr.replace(" ", "T"));
+  }
+  return isNaN(d.getTime()) ? null : d;
+};
+
+// 🟢 Helper Function แปลงเวลาเป็น Local Time ประเทศไทย (+7)
+export const formatThaiDate = (dateString?: string | null) => {
+  const date = parseThaiDate(dateString);
+  if (!date) return "-";
+
+  return date.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+};
 
 export default function RefundsTable({
   refunds,
@@ -67,38 +107,66 @@ export default function RefundsTable({
   getOrderAmount,
   getCustomerName,
   getOrderDate,
+  itemsPerPage = 10, // 🟢 กำหนดให้แสดงผลหน้าละ 10 รายการ
 }: RefundsTableProps) {
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  // 🟢 State สำหรับจัดการระบบ Pagination
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
-  const handleCopyAcc = (accNo?: string, id?: string) => {
-    if (!accNo || !id) return;
-    navigator.clipboard.writeText(accNo);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
+  // รีเซ็ตหน้ากลับไปหน้า 1 เมื่อมีการค้นหา สลับแท็บ หรือรายการข้อมูลเปลี่ยน
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [refunds.length, activeTab, searchTerm]);
 
-  // คำนวณสถานะกำหนดการคืนเงิน (SLA) ตามวันในปฏิทิน
+  const totalItems = refunds.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+
+  // 🟢 ตัดแบ่งรายการคืนเงินเฉพาะของหน้าปัจจุบัน
+  const paginatedRefunds = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return refunds.slice(startIndex, startIndex + itemsPerPage);
+  }, [refunds, currentPage, itemsPerPage]);
+
   const getRefundUrgency = (dateString?: string) => {
     if (!dateString) {
-      return { label: "อยู่ในกำหนด", color: "text-emerald-700 bg-emerald-50 border-emerald-200" };
+      return {
+        label: "อยู่ในกำหนด",
+        color: "text-emerald-700 bg-emerald-50 border-emerald-200",
+      };
     }
 
-    const cancelDateObj = new Date(dateString);
+    const cancelDateObj = parseThaiDate(dateString) || new Date(dateString);
     const todayObj = new Date();
 
-    const cancelDateOnly = new Date(cancelDateObj.getFullYear(), cancelDateObj.getMonth(), cancelDateObj.getDate());
-    const todayDateOnly = new Date(todayObj.getFullYear(), todayObj.getMonth(), todayObj.getDate());
+    const cancelDateOnly = new Date(
+      cancelDateObj.getFullYear(),
+      cancelDateObj.getMonth(),
+      cancelDateObj.getDate()
+    );
+    const todayDateOnly = new Date(
+      todayObj.getFullYear(),
+      todayObj.getMonth(),
+      todayObj.getDate()
+    );
 
     const diffTime = todayDateOnly.getTime() - cancelDateOnly.getTime();
     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays >= 2) {
-      return { label: `เกินกำหนด ${diffDays} วัน`, color: "text-rose-700 bg-rose-50 border-rose-200" };
+      return {
+        label: `เกินกำหนด ${diffDays} วัน`,
+        color: "text-rose-700 bg-rose-50 border-rose-200",
+      };
     } else if (diffDays === 1) {
-      return { label: "ครบกำหนดวันนี้", color: "text-amber-700 bg-amber-50 border-amber-200" };
+      return {
+        label: "ครบกำหนดวันนี้",
+        color: "text-amber-700 bg-amber-50 border-amber-200",
+      };
     }
 
-    return { label: "อยู่ในกำหนด", color: "text-emerald-700 bg-emerald-50 border-emerald-200" };
+    return {
+      label: "อยู่ในกำหนด",
+      color: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    };
   };
 
   const getPaymentObj = (item: RefundItem): PaymentDetail | null => {
@@ -127,161 +195,193 @@ export default function RefundsTable({
   }
 
   return (
-    <div className="overflow-x-auto font-sans">
-      <table className="w-full text-left border-collapse text-sm">
-        <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold text-xs uppercase tracking-wider">
-            <th className="py-4 px-4 whitespace-nowrap">ออเดอร์</th>
-            <th className="py-4 px-4 whitespace-nowrap min-w-[250px]">ผู้รับเงินคืน / ช่องทาง</th>
-            <th className="py-4 px-4 whitespace-nowrap">ร้านค้า</th>
-            <th className="py-4 px-4 whitespace-nowrap">ยอดเงินคืน</th>
-            <th className="py-4 px-4 whitespace-nowrap">หลักฐานการชำระ</th>
-            <th className="py-4 px-4 whitespace-nowrap">วันที่ยกเลิก</th>
-            {activeTab === "REFUNDED" ? (
-              <th className="py-4 px-4 whitespace-nowrap">วันที่โอนคืนสำเร็จ</th>
-            ) : (
-              <th className="py-4 px-4 whitespace-nowrap">สถานะกำหนดการ</th>
-            )}
-            <th className="py-4 px-4 text-center whitespace-nowrap min-w-[140px]">ดำเนินการ</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {refunds.map((item) => {
-            const payObj = getPaymentObj(item);
-            const originalSlip = item.original_slip_url || payObj?.slip_url;
-            const refundSlip = item.refund_slip_url || payObj?.refund_slip_url;
-            
-            // ใช้วันที่ยกเลิกจริงเป็นหลัก
-            const canceledDate = item.canceled_at || item.order_date || item.created_at;
-            const completedRefundDate = item.refunded_at || payObj?.payment_date || payObj?.payout_date || canceledDate;
-            const urgency = getRefundUrgency(canceledDate);
+    <div className="space-y-4 font-sans">
+      <div className="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-sm">
+        <table className="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold text-xs uppercase tracking-wider">
+              <th className="py-4 px-4 whitespace-nowrap">ออเดอร์</th>
+              <th className="py-4 px-4 whitespace-nowrap min-w-[250px]">
+                ผู้รับเงินคืน / ช่องทาง
+              </th>
+              <th className="py-4 px-4 whitespace-nowrap">ร้านค้า</th>
+              <th className="py-4 px-4 whitespace-nowrap">ยอดเงินคืน</th>
+              <th className="py-4 px-4 whitespace-nowrap">หลักฐานการชำระ</th>
+              <th className="py-4 px-4 whitespace-nowrap">วันที่ยกเลิก</th>
+              {activeTab === "REFUNDED" ? (
+                <th className="py-4 px-4 whitespace-nowrap">
+                  วันที่โอนคืนสำเร็จ
+                </th>
+              ) : (
+                <th className="py-4 px-4 whitespace-nowrap">สถานะกำหนดการ</th>
+              )}
+              <th className="py-4 px-4 text-center whitespace-nowrap min-w-[140px]">
+                ดำเนินการ
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {paginatedRefunds.map((item) => {
+              const payObj = getPaymentObj(item);
+              const originalSlip = item.original_slip_url || payObj?.slip_url;
+              const refundSlip = item.refund_slip_url || payObj?.refund_slip_url;
 
-            // ข้อมูลบัญชีรับเงินของลูกค้า
-            const accNo = item.bank_account_no || item.customer?.bank_account_no;
-            const bankName = item.bank_name || item.customer?.bank_name || "PromptPay";
-            const accName = item.bank_account_name || getCustomerName(item);
+              const canceledDate =
+                item.canceled_at || item.order_date || item.created_at;
 
-            return (
-              <tr
-                key={item.id}
-                className="hover:bg-slate-50/60 transition-colors"
-              >
-                {/* ออเดอร์ */}
-                <td className="py-4 px-4 font-mono font-bold text-blue-600 text-xs whitespace-nowrap">
-                  #{item.order_no || item.id.slice(0, 8)}
-                </td>
+              const completedRefundDate =
+                item.refunded_at || payObj?.payout_date || null;
 
-                {/* ผู้รับเงินคืน / ช่องทาง */}
-                <td className="py-4 px-4">
-                  <div className="font-bold text-slate-800 text-xs mb-1">
-                    {getCustomerName(item)}
-                  </div>
-                  {accNo ? (
-                    <div className="space-y-1 text-xs text-slate-600">
-                      <div className="flex items-center gap-2 whitespace-nowrap">
-                        <span className="font-semibold text-slate-700">{bankName}:</span>
-                        <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded font-bold text-slate-800">
-                          {accNo}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyAcc(accNo, item.id)}
-                          className="text-[10px] text-blue-600 hover:bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 transition-all cursor-pointer font-medium shrink-0"
+              const urgency = getRefundUrgency(canceledDate);
+              const customerContact = item.customer?.contact;
+
+              return (
+                <tr
+                  key={item.id}
+                  className="hover:bg-slate-50/60 transition-colors"
+                >
+                  {/* ออเดอร์ */}
+                  <td className="py-4 px-4 font-mono font-bold text-blue-600 text-xs whitespace-nowrap">
+                    #{item.order_no || item.id.slice(0, 8)}
+                  </td>
+
+                  {/* ผู้รับเงินคืน / ช่องทาง */}
+                  <td className="py-4 px-4">
+                    <div className="font-bold text-slate-800 text-xs mb-1">
+                      {getCustomerName(item)}
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                        <svg
+                          className="w-3.5 h-3.5 text-blue-600 shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          {copiedId === item.id ? "คัดลอกแล้ว!" : "คัดลอก"}
-                        </button>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <span>โอนคืนตามสลิปเดิมลูกค้า</span>
                       </div>
-                      {accName && (
-                        <div className="text-slate-500 text-[11px] whitespace-nowrap">
-                          <span className="font-medium text-slate-600">ชื่อบัญชี:</span> {accName}
-                        </div>
+                      {customerContact && (
+                        <p className="text-[11px] text-slate-500 font-mono">
+                          {customerContact}
+                        </p>
                       )}
                     </div>
-                  ) : (
-                    <div className="text-xs text-slate-500">
-                      {item.customer?.contact || "ไม่ระบุช่องทางติดต่อ"}
-                    </div>
-                  )}
-                </td>
-
-                {/* ร้านค้า */}
-                <td className="py-4 px-4 text-xs font-medium text-slate-700 whitespace-nowrap">
-                  {item.shop?.shop_name || "-"}
-                </td>
-
-                {/* ยอดเงินคืน */}
-                <td className="py-4 px-4 font-bold text-emerald-600 text-base whitespace-nowrap">
-                  ฿{getOrderAmount(item).toLocaleString("th-TH", { minimumFractionDigits: 2 })}
-                </td>
-
-                {/* หลักฐานการชำระ */}
-                <td className="py-4 px-4 whitespace-nowrap">
-                  {originalSlip ? (
-                    <button
-                      type="button"
-                      onClick={() => onViewSlip(originalSlip)}
-                      className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition-all font-medium cursor-pointer"
-                    >
-                      <svg className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      สลิปเดิมลูกค้า
-                    </button>
-                  ) : (
-                    <span className="text-xs text-slate-400 italic">ไม่มีสลิปเดิม</span>
-                  )}
-                </td>
-
-                {/* วันที่ยกเลิก (ส่ง canceledDate ไปโชว์โดยตรง) */}
-                <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-500">
-                  {getOrderDate({ ...item, order_date: canceledDate, created_at: canceledDate })}
-                </td>
-
-                {/* SLA คืนเงิน / วันที่โอนคืนสำเร็จ */}
-                {activeTab === "REFUNDED" ? (
-                  <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600 font-medium">
-                    {getOrderDate({ ...item, order_date: completedRefundDate, created_at: completedRefundDate })}
                   </td>
-                ) : (
+
+                  {/* ร้านค้า */}
+                  <td className="py-4 px-4 text-xs font-medium text-slate-700 whitespace-nowrap">
+                    {item.shop?.shop_name || "-"}
+                  </td>
+
+                  {/* ยอดเงินคืน */}
+                  <td className="py-4 px-4 font-bold text-emerald-600 text-base whitespace-nowrap">
+                    ฿
+                    {getOrderAmount(item).toLocaleString("th-TH", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </td>
+
+                  {/* หลักฐานการชำระ */}
                   <td className="py-4 px-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${urgency.color}`}>
-                      {urgency.label}
-                    </span>
-                  </td>
-                )}
-
-                {/* ดำเนินการ */}
-                <td className="py-4 px-4 text-center whitespace-nowrap">
-                  {activeTab === "PENDING" ? (
-                    <button
-                      type="button"
-                      onClick={() => onSelectRefund(item)}
-                      className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 shadow-sm transition-all active:scale-95 cursor-pointer"
-                    >
-                      โอนเงินคืน
-                    </button>
-                  ) : (
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                        คืนเงินแล้ว
-                      </span>
-                      {refundSlip && (
-                        <button
-                          type="button"
-                          onClick={() => onViewSlip(refundSlip)}
-                          className="text-xs text-blue-600 hover:underline font-medium cursor-pointer"
+                    {originalSlip ? (
+                      <button
+                        type="button"
+                        onClick={() => onViewSlip(originalSlip)}
+                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition-all font-medium cursor-pointer"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5 text-blue-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          ดูสลิปโอนคืน
-                        </button>
-                      )}
-                    </div>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                        สลิปเดิมลูกค้า
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400 italic">
+                        ไม่มีสลิปเดิม
+                      </span>
+                    )}
+                  </td>
+
+                  {/* วันที่ยกเลิก */}
+                  <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-500">
+                    {formatThaiDate(canceledDate)}
+                  </td>
+
+                  {/* SLA คืนเงิน / วันที่โอนคืนสำเร็จ */}
+                  {activeTab === "REFUNDED" ? (
+                    <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600 font-medium">
+                      {formatThaiDate(completedRefundDate)}
+                    </td>
+                  ) : (
+                    <td className="py-4 px-4 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${urgency.color}`}
+                      >
+                        {urgency.label}
+                      </span>
+                    </td>
                   )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+
+                  {/* ดำเนินการ */}
+                  <td className="py-4 px-4 text-center whitespace-nowrap">
+                    {activeTab === "PENDING" ? (
+                      <button
+                        type="button"
+                        onClick={() => onSelectRefund(item)}
+                        className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 shadow-sm transition-all active:scale-95 cursor-pointer"
+                      >
+                        โอนเงินคืน
+                      </button>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                          คืนเงินแล้ว
+                        </span>
+                        {refundSlip && (
+                          <button
+                            type="button"
+                            onClick={() => onViewSlip(refundSlip)}
+                            className="text-xs text-blue-600 hover:underline font-medium cursor-pointer"
+                          >
+                            ดูสลิปโอนคืน
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 🟢 แสดงปุ่มเปลี่ยนหน้า Pagination ด้านล่างตารางเมื่อรายการมากกว่า 1 หน้า */}
+      {totalPages > 1 && (
+        <div className="pt-2">
+          <PaginationBar
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+      )}
     </div>
   );
 }

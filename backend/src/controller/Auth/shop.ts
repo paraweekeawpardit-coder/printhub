@@ -3,6 +3,7 @@ import supabase from "../../config/supabase.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import "multer"
+import { isValidEmail, passwordPolicyError } from "./Validator.js";
 
 interface MulterRequest extends Request {
   files?: {
@@ -37,6 +38,15 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
 
     if (!/^\d{13}$/.test(String(id_card))) {
       return res.status(400).json({ error: "เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก" });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "รูปแบบอีเมลไม่ถูกต้อง" });
+    }
+
+    const passwordError = passwordPolicyError(password);
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
     }
 
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;

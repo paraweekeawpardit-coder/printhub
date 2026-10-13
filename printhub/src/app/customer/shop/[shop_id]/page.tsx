@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Loader2, Star } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import NavBar from "../../../../component/customer/NavBar";
 import ShopHeaderCard from "../../../../component/customer/shop/ShopHeaderCard";
@@ -343,19 +342,9 @@ export default function ShopMainPage() {
       />
 
       <div className="max-w-5xl mx-auto px-4 pt-6 relative">
-        {/* 💡 แถวปุ่มย้อนกลับและปุ่มลิงก์ไปหน้าดูรีวิวร้านค้า */}
+        {/* 💡 แถวปุ่มย้อนกลับ (เอาปุ่ม "ดูรีวิวร้านค้า" ออกแล้ว เหลือแค่ปุ่มย้อนกลับ) */}
         <div className="flex items-center justify-between mb-2">
           <ShopBackButton />
-
-          {shopId && (
-            <Link
-              href={`/customer/shop/${shopId}/reviews`}
-              className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs"
-            >
-              <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-              <span>ดูรีวิวร้านค้า</span>
-            </Link>
-          )}
         </div>
 
         <main className="space-y-6">
