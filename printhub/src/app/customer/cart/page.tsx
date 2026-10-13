@@ -105,15 +105,16 @@ export default function CustomerCartOverviewPage() {
       <main className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4 flex-1">
         
         {/* Header บาร์บน */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <ShopBackButton />
+        <div className="flex items-center gap-3">
+          <ShopBackButton />
+          <div>
             <h1 className="text-xl font-bold text-slate-900">ตะกร้าสินค้าของคุณ</h1>
+            {!loading && groupedCarts.length > 0 && (
+              <p className="text-xs text-slate-500 mt-0.5">
+                {groupedCarts.length} ร้านค้า · {totalItemsCount} รายการ · สั่งซื้อแยกทีละร้าน
+              </p>
+            )}
           </div>
-
-          <span className="text-xs text-slate-500 font-medium bg-white px-3 py-1.5 rounded-full border border-slate-200/90 shadow-2xs">
-            มีทั้งหมด {groupedCarts.length} ตะกร้าร้านค้า
-          </span>
         </div>
 
         {loading ? (

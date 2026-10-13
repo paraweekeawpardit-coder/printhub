@@ -47,7 +47,8 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
         receive_date, appointment_time, order_date, review_id, report_id, payment_id, expires_at, cancel_reason,
         shop:shop_id ( id, shop_name, phone ),
         current_status:current_status_id ( id, state ),
-        print_order_item ( id, category, quantity, unit_price, subtotal, page_count, describe )
+        print_order_item ( id, category, quantity, unit_price, subtotal, page_count, describe, file_url ),
+        print_file ( id, filename, file_url, item_id )
       `)
       .eq("customer_id", customer_id)
       .order("order_date", { ascending: false });
@@ -95,7 +96,17 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
       }
         
 
-      // 1. ตัดยกเลิกเมื่อเวลาหมดจริงๆ
+      // เส้นตายชำระเงินต้องไม่เกินเวลานัดรับ (ใช้กับออเดอร์ที่ยังรอชำระเงิน รวมถึงสลิปโดนปฏิเสธ)
+      // ส่งเส้นตายจริงกลับไปใน expires_at ให้หน้าเว็บนับถอยหลังถึงเวลานัดรับ (ไม่เขียนลง DB)
+      if (order.current_status?.state === "รอการชำระเงิน") {
+        const apptMs = parseBangkokTime(order.appointment_time);
+        if (apptMs && (!expiresAtMs || apptMs < expiresAtMs)) {
+          expiresAtMs = apptMs;
+          order.expires_at = new Date(apptMs).toISOString();
+        }
+      }
+
+      // 1. ตัดยกเลิกเมื่อเวลาหมดจริงๆ (รวมกรณีเลยเวลานัดรับ)
       if (order.current_status?.state === "รอการชำระเงิน" && !hasPaid && expiresAtMs && now >= expiresAtMs) {
         await supabase.from("print_order").update({ current_status_id: cancelStatusId, cancel_reason: "payment_timeout" }).eq("id", order.id);
         order.current_status_id = cancelStatusId;

@@ -330,6 +330,12 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
 
       const isCurrentWaitingPayment = order.current_status?.state === "รอการชำระเงิน" || isRejected;
 
+      // เส้นตายชำระเงินต้องไม่เกินเวลานัดรับ (ส่งค่าจริงกลับไปใน expires_at โดยไม่เขียนลง DB)
+      if (isCurrentWaitingPayment && appointmentMs && (!expiresAtMs || appointmentMs < expiresAtMs)) {
+        expiresAtMs = appointmentMs;
+        order.expires_at = new Date(appointmentMs).toISOString();
+      }
+
       if (isCurrentWaitingPayment && !hasPaidSuccess && expiresAtMs && now >= expiresAtMs) {
         await supabase.from("print_order").update({ current_status_id: CANCELLED_STATUS_ID, cancel_reason: "payment_timeout" }).eq("id", order.id);
         order.current_status_id = CANCELLED_STATUS_ID;
@@ -612,12 +618,29 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
 
     const { data: orderData, error: orderErr } = await supabase
       .from("print_order")
-      .select("id, order_no, customer_id, shop_id, total_price, expires_at, order_date")
+      .select("id, order_no, customer_id, shop_id, total_price, expires_at, order_date, appointment_time, current_status:current_status_id (state)")
       .eq("id", targetOrderId)
       .maybeSingle();
 
     if (orderErr || !orderData) {
       return res.status(404).json({ success: false, message: "ไม่พบข้อมูลคำสั่งซื้อ" });
+    }
+
+    // รับสลิปได้เฉพาะตอนรอชำระเงิน และยังไม่เลยเส้นตาย (เส้นตาย = ที่ถึงก่อนระหว่าง expires_at กับเวลานัดรับ)
+    const currentState = (orderData.current_status as any)?.state;
+    if (currentState !== "รอการชำระเงิน") {
+      return res.status(400).json({ success: false, message: "คำสั่งซื้อนี้ไม่อยู่ในสถานะรอชำระเงิน" });
+    }
+    const expMs =
+      parseSafeTime(orderData.expires_at) ??
+      ((parseSafeTime(orderData.order_date) ?? Date.now()) + 10 * 60 * 1000);
+    const apptMs = parseBangkokTime(orderData.appointment_time);
+    const paymentDeadline = Math.min(expMs, apptMs ?? Infinity);
+    if (Date.now() >= paymentDeadline) {
+      return res.status(400).json({
+        success: false,
+        message: apptMs && apptMs <= expMs ? "เลยเวลานัดรับงานแล้ว ไม่สามารถชำระเงินได้" : "หมดเวลาชำระเงินแล้ว",
+      });
     }
 
     const fileExt = file.originalname.split(".").pop();
@@ -713,13 +736,16 @@ export const cancelOrderTimeout = async (req: Request, res: Response) => {
 
     const { data: orderData } = await supabase
       .from("print_order")
-      .select("order_no, customer_id, shop_id, expires_at, current_status:current_status_id (state)")
+      .select("order_no, customer_id, shop_id, expires_at, appointment_time, current_status:current_status_id (state)")
       .eq("id", orderId)
       .maybeSingle();
 
     // กันยกเลิกผิดออเดอร์: ต้องยังรอชำระเงินอยู่ และหมดเวลาจริงตามเวลาของ server (เผื่อนาฬิกาเครื่องลูกค้าเพี้ยน 5 วิ)
     const state = (orderData?.current_status as any)?.state;
-    const expMs = parseSafeTime(orderData?.expires_at);
+    // เส้นตาย = ที่ถึงก่อนระหว่าง expires_at กับเวลานัดรับ
+    const rawExpMs = parseSafeTime(orderData?.expires_at);
+    const apptMs = parseBangkokTime(orderData?.appointment_time);
+    const expMs = rawExpMs && apptMs ? Math.min(rawExpMs, apptMs) : rawExpMs || apptMs;
     if (!orderData || state !== "รอการชำระเงิน" || (expMs && Date.now() + 5000 < expMs)) {
       return res.status(200).json({ success: false, message: "ยังไม่ถึงเงื่อนไขยกเลิกอัตโนมัติ" });
     }
