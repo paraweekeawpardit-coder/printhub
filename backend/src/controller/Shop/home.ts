@@ -279,6 +279,7 @@ export const getTopOrder = async (
         order_date,
         total_price,
         description,
+        rejecect_reason,
         appointment_time,
         receive_date,
         shop_id,
@@ -362,6 +363,7 @@ export const getTopOrder = async (
 
       return {
         ...order,
+        reject_reason: order.rejecect_reason || null,
         latest_status: state || "ไม่ทราบสถานะ",
       };
     });

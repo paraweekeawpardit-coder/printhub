@@ -1,17 +1,124 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 import crypto from "crypto";
-import nodemailer from "nodemailer";
-import bcrypt from "bcrypt"; // ใช้ตอนทำขั้นตอนรีเซ็ตรหัสผ่านใหม่
+import nodemailer, { Transporter } from "nodemailer";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+import { passwordPolicyError } from "./Validator.js";
 
-// ตั้งค่า Nodemailer สำหรับส่งอีเมล (ใช้ App Password)
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// สร้าง transporter ตอนเรียกใช้จริง (ไม่ใช่ตอน import ไฟล์)
+// เดิมสร้างตอน import: ถ้า dotenv ยังไม่ถูกโหลด ค่า user/pass จะเป็น undefined แล้วส่งเมลไม่ได้
+let cachedTransporter: Transporter | null = null;
+
+function getTransporter(): Transporter {
+  if (cachedTransporter) return cachedTransporter;
+
+  // ใช้ตัวแปรตามไฟล์ .env ของโปรเจกต์ (SMTP_*) และรองรับชื่อเก่า EMAIL_* เป็น fallback
+  const host = process.env.SMTP_HOST?.trim() || "smtp.gmail.com";
+  const port = Number(process.env.SMTP_PORT) || 465;
+  const user = (process.env.SMTP_USER || process.env.EMAIL_USER)?.trim();
+  // Gmail App Password แสดงเป็นกลุ่ม 4 ตัวคั่นด้วยช่องว่าง -> ตัดช่องว่างทิ้ง
+  const pass = (process.env.SMTP_PASS || process.env.EMAIL_PASS)?.replace(/\s+/g, "");
+
+  if (!user || !pass) {
+    throw new Error("SMTP_USER / SMTP_PASS is not defined in environment variables");
+  }
+
+  cachedTransporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465, // 465 = SSL, 587 = STARTTLS
+    auth: { user, pass },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
+  });
+
+  return cachedTransporter;
+}
+
+// escape ตัวอักษรพิเศษของ LIKE (% _ \) เพื่อใช้ ilike เทียบอีเมลแบบไม่สนตัวพิมพ์เล็ก/ใหญ่
+const escapeLike = (value: string) => value.replace(/[\\%_]/g, "\\$&");
+
+const maskEmail = (email: string) => {
+  const [name = "", domain = ""] = email.split("@");
+  return `${name.slice(0, 2)}***@${domain}`;
+};
+
+// ==========================================
+// Reset token (JWT แบบ stateless ไม่ต้องเพิ่มคอลัมน์ในฐานข้อมูล)
+// - หมดอายุใน 1 ชั่วโมง
+// - ผูกกับลายนิ้วมือของรหัสผ่านเดิม -> พอเปลี่ยนรหัสแล้ว ลิงก์เดิมใช้ซ้ำไม่ได้
+// ==========================================
+type ResetUserType = "customer" | "shop";
+
+const RESET_PURPOSE = "pwd-reset";
+
+function getResetSecret(): string {
+  if (process.env.RESET_PASSWORD_SECRET) return process.env.RESET_PASSWORD_SECRET;
+  const base = process.env.JWT_SECRET;
+  if (!base) throw new Error("JWT_SECRET is not defined");
+  // ต่อท้ายให้ต่างจาก secret ของ token ล็อกอิน เพื่อไม่ให้ token รีเซ็ตถูกเอาไปใช้เป็น token ล็อกอินได้
+  return `${base}:${RESET_PURPOSE}`;
+}
+
+const passwordFingerprint = (hash: string | null | undefined) =>
+  crypto.createHash("sha256").update(hash || "").digest("hex").slice(0, 24);
+
+function createResetToken(userId: string, type: ResetUserType, passwordHash: string | null | undefined) {
+  return jwt.sign(
+    { purpose: RESET_PURPOSE, uid: userId, type, pv: passwordFingerprint(passwordHash) },
+    getResetSecret(),
+    { expiresIn: "1h" }
+  );
+}
+
+type ResolvedReset =
+  | { ok: true; table: "customer" | "print_shop"; userId: string; passwordHash: string }
+  | { ok: false; error: string };
+
+async function resolveResetToken(token: unknown): Promise<ResolvedReset> {
+  if (typeof token !== "string" || !token) {
+    return { ok: false, error: "ลิงก์ไม่ถูกต้อง กรุณาขอลิงก์รีเซ็ตรหัสผ่านใหม่" };
+  }
+
+  let payload: any;
+  try {
+    payload = jwt.verify(token, getResetSecret());
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) {
+      return { ok: false, error: "ลิงก์หมดอายุแล้ว กรุณาขอลิงก์รีเซ็ตรหัสผ่านใหม่" };
+    }
+    return { ok: false, error: "ลิงก์ไม่ถูกต้อง กรุณาขอลิงก์รีเซ็ตรหัสผ่านใหม่" };
+  }
+
+  if (!payload || payload.purpose !== RESET_PURPOSE || !payload.uid || !payload.type) {
+    return { ok: false, error: "ลิงก์ไม่ถูกต้อง กรุณาขอลิงก์รีเซ็ตรหัสผ่านใหม่" };
+  }
+
+  const table = payload.type === "shop" ? "print_shop" : "customer";
+
+  const { data: user, error } = await supabase
+    .from(table)
+    .select("id, password")
+    .eq("id", payload.uid)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Resolve reset token error:", error);
+    throw error;
+  }
+
+  if (!user) {
+    return { ok: false, error: "ไม่พบบัญชีผู้ใช้" };
+  }
+
+  if (passwordFingerprint(user.password) !== payload.pv) {
+    return { ok: false, error: "ลิงก์นี้ถูกใช้ไปแล้ว กรุณาขอลิงก์รีเซ็ตรหัสผ่านใหม่" };
+  }
+
+  return { ok: true, table, userId: user.id, passwordHash: user.password || "" };
+}
 
 // ฟังก์ชันขอรีเซ็ตรหัสผ่าน (ตรวจสอบอีเมล + ส่งลิงก์)
 export const forgotPassword = async (req: Request, res: Response): Promise<Response> => {
@@ -22,11 +129,12 @@ export const forgotPassword = async (req: Request, res: Response): Promise<Respo
       return res.status(400).json({ error: "กรุณากรอกอีเมล" });
     }
 
-    // 1. ตรวจสอบในตาราง customer (ฟิลด์ contact)[cite: 4]
+    // 1. ตรวจสอบในตาราง customer (ฟิลด์ contact) - ไม่สนตัวพิมพ์เล็ก/ใหญ่
     const { data: customer, error: customerError } = await supabase
       .from("customer")
-      .select("id, contact")
-      .eq("contact", email)
+      .select("id, contact, password")
+      .ilike("contact", escapeLike(email))
+      .limit(1)
       .maybeSingle();
 
     if (customerError) {
@@ -35,14 +143,17 @@ export const forgotPassword = async (req: Request, res: Response): Promise<Respo
     }
 
     let userId = customer?.id;
-    let userType = "customer";
+    let userType: ResetUserType = "customer";
+    let passwordHash: string = customer?.password ?? "";
+    let targetEmail = customer?.contact || email;
 
-    // 2. ถ้าไม่เจอใน customer ให้ตรวจสอบในตาราง print_shop (ฟิลด์ email)[cite: 3]
+    // 2. ถ้าไม่เจอใน customer ให้ตรวจสอบในตาราง print_shop (ฟิลด์ email)
     if (!userId) {
       const { data: shop, error: shopError } = await supabase
         .from("print_shop")
-        .select("id, email")
-        .eq("email", email)
+        .select("id, email, password")
+        .ilike("email", escapeLike(email))
+        .limit(1)
         .maybeSingle();
 
       if (shopError) {
@@ -53,28 +164,34 @@ export const forgotPassword = async (req: Request, res: Response): Promise<Respo
       if (shop) {
         userId = shop.id;
         userType = "shop";
+        passwordHash = shop.password ?? "";
+        targetEmail = shop.email || email;
       }
     }
 
     // 3. Security Best Practice: หากไม่พบอีเมลในระบบ ให้ตอบกลับสำเร็จเสมอเพื่อป้องกันการสุ่มอีเมล
+    //    (แต่ log ฝั่งเซิร์ฟเวอร์ไว้ เพื่อให้รู้ว่าทำไมไม่มีเมลส่งออก)
     if (!userId) {
+      console.warn(`[forgotPassword] ไม่พบอีเมล ${maskEmail(email)} ในตาราง customer/print_shop -> ไม่ส่งเมล`);
       return res.status(200).json({
         message: "หากอีเมลนี้มีในระบบ เราได้ส่งลิงก์รีเซ็ตรหัสผ่านไปให้แล้ว",
       });
     }
 
-    // 4. สร้าง Reset Token (สามารถบันทึกลงฐานข้อมูลหรือใช้ JWT ชั่วคราวได้)
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    
-    // *หมายเหตุ: หากต้องการความปลอดภัยสูง แนะนำให้บันทึก token และเวลาหมดอายุลงในตารางของ user ด้วย*
+    // 4. สร้าง Reset Token (JWT อายุ 1 ชั่วโมง ผูกกับรหัสผ่านปัจจุบัน)
+    const resetToken = createResetToken(userId, userType, passwordHash);
 
     // 5. ส่งอีเมลผ่าน Nodemailer
-    const resetUrl = `http://localhost:3000/reset-password?token=${resetToken}&type=${userType}&email=${encodeURIComponent(email)}`;
+    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+    const resetUrl = `${frontendUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
-    const mailOptions = {
-      from: `"PrintHub Support" <${process.env.EMAIL_USER}>`,
-      to: email,
+    const transporter = getTransporter();
+
+    const info = await transporter.sendMail({
+      from: process.env.MAIL_FROM || `"PrintHub Support" <${process.env.SMTP_USER || process.env.EMAIL_USER}>`,
+      to: targetEmail,
       subject: "คำขอรีเซ็ตรหัสผ่านของคุณ (PrintHub)",
+      text: `คุณได้ขอรีเซ็ตรหัสผ่าน กรุณาเปิดลิงก์นี้เพื่อตั้งรหัสผ่านใหม่ (มีอายุ 1 ชั่วโมง): ${resetUrl}`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; color: #333;">
           <h2>คุณได้ขอรีเซ็ตรหัสผ่าน</h2>
@@ -83,15 +200,71 @@ export const forgotPassword = async (req: Request, res: Response): Promise<Respo
           <p style="margin-top: 25px; color: #888; font-size: 12px;">หากคุณไม่ได้เป็นผู้ขอรีเซ็ตรหัสผ่าน สามารถละเลยอีเมลฉบับนี้ได้</p>
         </div>
       `,
-    };
+    });
 
-    await transporter.sendMail(mailOptions);
+    console.log(
+      `[forgotPassword] ส่งเมลถึง ${maskEmail(targetEmail)} (${userType}) messageId=${info.messageId} accepted=${JSON.stringify(info.accepted)} rejected=${JSON.stringify(info.rejected)}`
+    );
 
     return res.status(200).json({
       message: "หากอีเมลนี้มีในระบบ เราได้ส่งลิงก์รีเซ็ตรหัสผ่านไปให้แล้ว",
     });
   } catch (err) {
     console.error("Forgot Password Error:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// ตรวจว่าลิงก์รีเซ็ตยังใช้ได้ไหม (หน้าเว็บเรียกตอนเปิดหน้า เพื่อแจ้งทันทีถ้าลิงก์หมดอายุ)
+export const verifyResetToken = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const result = await resolveResetToken(req.body?.token);
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error });
+    }
+    return res.status(200).json({ valid: true });
+  } catch (err) {
+    console.error("Verify Reset Token Error:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// ตั้งรหัสผ่านใหม่ด้วยลิงก์จากอีเมล
+export const resetPassword = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const { token, password } = req.body ?? {};
+
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      return res.status(400).json({ error: policyError });
+    }
+
+    const result = await resolveResetToken(token);
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    if (result.passwordHash && (await bcrypt.compare(password, result.passwordHash))) {
+      return res.status(400).json({ error: "รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม" });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+
+    const { error: updateError } = await supabase
+      .from(result.table)
+      .update({ password: hashed })
+      .eq("id", result.userId);
+
+    if (updateError) {
+      console.error("Reset password update error:", updateError);
+      return res.status(500).json({ error: "ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่อีกครั้ง" });
+    }
+
+    console.log(`[resetPassword] เปลี่ยนรหัสผ่านสำเร็จ (${result.table}) id=${result.userId}`);
+
+    return res.status(200).json({ message: "ตั้งรหัสผ่านใหม่สำเร็จ" });
+  } catch (err) {
+    console.error("Reset Password Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
