@@ -199,11 +199,7 @@ export default function OrderDetailPage() {
   const slipUrl: string | null = payment?.slip_url || null;
   const slipVerdict: boolean | null = payment?.is_verified ?? null;
 
-  // 🔒 กำหนดให้สามารถกด "กดตรวจสลิป" ได้เฉพาะเมื่อ:
-  // 1. สถานะออเดอร์อยู่ใน "รอการดำเนินงาน"
-  // 2. ยังไม่เคยตรวจสลิป (slipVerdict === null)
-  // 3. มี URL สลิปแนบมา
-  // 4. ร้านต้องกดดูสลิปแล้วเท่านั้น (hasViewedSlip === true)
+  // 🔒 เงื่อนไขการตรวจสอบสลิป: ต้องอยู่ในสถานะรอ, ยังไม่ตรวจ, มีสลิป และเปิดดูสลิปแล้ว
   const canVerifySlip = statusState === "รอการดำเนินงาน" && slipVerdict === null && !!slipUrl && hasViewedSlip;
 
   const renderStatusBadge = () => {
@@ -365,7 +361,7 @@ export default function OrderDetailPage() {
                   <p className="text-xs text-blue-100 flex items-center gap-1.5"><Receipt size={14} /> หลักฐานการชำระเงิน</p>
                   <p className="text-2xl font-bold mt-1">฿{Number(payment?.amount ?? order.total_amount ?? 0).toLocaleString()}</p>
                 </div>
-                {/* 🟢 เมื่อกดปุ่มจะเซ็ต hasViewedSlip = true */}
+                {/* 🟢 กดปุ่มเปิดสลิปและบันทึกว่าเปิดดูแล้ว (hasViewedSlip = true) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -382,23 +378,19 @@ export default function OrderDetailPage() {
               <div className="p-5 border-t border-gray-100">
                 <p className="text-xs font-semibold text-gray-700 mb-3">ผลการตรวจสอบสลิปโอนเงิน</p>
                 
-                {/* 🔴 หากออเดอร์ยกเลิกการพิมพ์แล้ว ล็อกทันที */}
                 {isCancelled ? (
                   <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 text-center flex items-center justify-center gap-1.5">
                     <Lock size={15} /> ออเดอร์นี้ถูกยกเลิกแล้ว ไม่สามารถตรวจสอบสลิปได้
                   </div>
                 ) : slipVerdict === true ? (
-                  /* สถานะ 1: สลิปถูกต้องแล้ว */
                   <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 text-center flex items-center justify-center gap-1.5">
                     <ShieldCheck size={16} /> สลิปถูกต้อง (ยืนยันรับออเดอร์แล้ว)
                   </div>
                 ) : slipVerdict === false ? (
-                  /* สถานะ 2: สลิปถูกปฏิเสธแล้ว (is_verified === false) */
                   <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 text-center flex items-center justify-center gap-1.5">
                     <AlertTriangle size={16} /> ปฏิเสธหลักฐานแล้ว (รอผู้ใช้อัปโหลดสลิปใหม่)
                   </div>
                 ) : (
-                  /* สถานะ 3: สลิปยังไม่ได้ตรวจ (is_verified === null) */
                   <div className="space-y-2">
                     <div className="flex items-center gap-3">
                       <button
@@ -407,7 +399,7 @@ export default function OrderDetailPage() {
                         disabled={!canVerifySlip || isUpdating}
                         className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
-                        สลิปไม่ถูกต้อง
+                        หลักฐานไม่ถูกต้อง
                       </button>
                       <button
                         type="button"
@@ -418,7 +410,7 @@ export default function OrderDetailPage() {
                         สลิปถูกต้อง
                       </button>
                     </div>
-                    {/* 🟢 แสดงคำเตือนถ้ายังมีสลิปอยู่แต่ยังไม่ได้เปิดดู */}
+                    {/* แจ้งเตือนเมื่อมีสลิปแต่ยังไม่ได้กดเปิดดู */}
                     {!!slipUrl && !hasViewedSlip && (
                       <p className="text-[11px] text-amber-600 text-center flex items-center justify-center gap-1">
                         <AlertCircle size={13} /> กรุณากดดูสลิปโอนเงินก่อนทำการตรวจสอบ
@@ -441,7 +433,7 @@ export default function OrderDetailPage() {
               <p className="text-xs text-gray-500 mt-1">{order.customer?.contact || "-"}</p>
             </div>
 
-            {/* เหตุผลที่ปฏิเสธ (แสดงเมื่อออเดอร์ถูกยกเลิกการพิมพ์) */}
+            {/* 🔴 แสดงเหตุผลที่ปฏิเสธ (เมื่อออเดอร์ถูกยกเลิกการพิมพ์) */}
             {isCancelled && (
               <div className="bg-white p-5 rounded-2xl border border-red-200 shadow-xs">
                 <h2 className="text-sm font-semibold text-red-600 mb-3 flex items-center gap-2">
@@ -489,7 +481,7 @@ export default function OrderDetailPage() {
       {/* Modals */}
       <SlipModal isOpen={showSlipModal} onClose={() => setShowSlipModal(false)} slipUrl={slipUrl} />
 
-      {/* 🔴 ใช้ RejectOrderModal ที่รองรับการเลือกเหตุผล/ระบุข้อความแทน ActionConfirmModal */}
+      {/* โมดอลปฏิเสธงาน (เลือก/พิมพ์เหตุผล) */}
       <RejectOrderModal
         isOpen={showRejectModal}
         onClose={() => setShowRejectModal(false)}

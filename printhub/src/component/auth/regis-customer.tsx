@@ -10,7 +10,7 @@ type RegisFormProps = {
   setRegis: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/+$/, "");
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/+\$/, "");
 
 export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
   const [showPassword, setShowPassword] = useState(false);
@@ -33,10 +33,20 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
 
   // ข้อความ error ของแต่ละช่อง ("" = ผ่าน)
   const errors: Record<string, string> = {
-    Fname: Regisdata.Fname.trim() ? "" : "กรุณากรอกชื่อ",
-    Lname: Regisdata.Lname.trim() ? "" : "กรุณากรอกนามสกุล",
+    Fname: !Regisdata.Fname.trim()
+      ? "กรุณากรอกชื่อ"
+      : Regisdata.Fname.length > 50
+      ? "ชื่อต้องไม่เกิน 50 ตัวอักษร"
+      : "",
+    Lname: !Regisdata.Lname.trim()
+      ? "กรุณากรอกนามสกุล"
+      : Regisdata.Lname.length > 50
+      ? "นามสกุลต้องไม่เกิน 50 ตัวอักษร"
+      : "",
     contact: !Regisdata.contact.trim()
       ? "กรุณากรอกอีเมล"
+      : Regisdata.contact.length > 100
+      ? "อีเมลต้องไม่เกิน 100 ตัวอักษร"
       : !isValidEmail(Regisdata.contact)
       ? EMAIL_FORMAT_ERROR
       : "",
@@ -104,7 +114,8 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
           <div>
             <input
               type="text"
-              placeholder="ชื่อ"
+              maxLength={50}
+              placeholder="ชื่อ (สูงสุด 50 ตัวอักษร)"
               value={Regisdata.Fname}
               className={inputCls(!!show("Fname"))}
               onChange={(e) => setData({ ...Regisdata, Fname: e.target.value })}
@@ -116,7 +127,8 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
           <div>
             <input
               type="text"
-              placeholder="นามสกุล"
+              maxLength={50}
+              placeholder="นามสกุล (สูงสุด 50 ตัวอักษร)"
               value={Regisdata.Lname}
               className={inputCls(!!show("Lname"))}
               onChange={(e) => setData({ ...Regisdata, Lname: e.target.value })}
@@ -128,7 +140,8 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
           <div>
             <input
               type="email"
-              placeholder="อีเมล"
+              maxLength={100}
+              placeholder="อีเมล (สูงสุด 100 ตัวอักษร)"
               value={Regisdata.contact}
               className={inputCls(!!show("contact"))}
               onChange={(e) => setData({ ...Regisdata, contact: e.target.value })}
@@ -141,6 +154,7 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
+                maxLength={50}
                 placeholder="รหัสผ่าน"
                 value={Regisdata.password}
                 className={inputCls(!!show("password"), "pr-10")}
@@ -166,6 +180,7 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
             <div className="relative">
               <input
                 type={showConfirmPassword ? "text" : "password"}
+                maxLength={50}
                 placeholder="ยืนยันรหัสผ่าน"
                 value={Regisdata.confirmPassword}
                 className={inputCls(!!show("confirmPassword"), "pr-10")}
