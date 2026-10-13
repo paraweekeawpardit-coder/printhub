@@ -351,8 +351,8 @@ export default function CustomerDashboardView({
             type="button"
             onClick={() => setActiveTab("orders")}
             className={`pb-3 transition relative cursor-pointer ${activeTab === "orders"
-                ? "text-[#0F2942] border-b-2 border-[#0F2942]"
-                : "text-slate-400 hover:text-slate-600"
+              ? "text-[#0F2942] border-b-2 border-[#0F2942]"
+              : "text-slate-400 hover:text-slate-600"
               }`}
           >
             รายการสั่งซื้อของฉัน ({orders.length})
@@ -361,8 +361,8 @@ export default function CustomerDashboardView({
             type="button"
             onClick={() => setActiveTab("reports")}
             className={`pb-3 transition relative flex items-center gap-1.5 cursor-pointer ${activeTab === "reports"
-                ? "text-[#0F2942] border-b-2 border-[#0F2942]"
-                : "text-slate-400 hover:text-slate-600"
+              ? "text-[#0F2942] border-b-2 border-[#0F2942]"
+              : "text-slate-400 hover:text-slate-600"
               }`}
           >
             <span>ข้อร้องเรียน / ขอคืนเงิน</span>
@@ -419,9 +419,9 @@ export default function CustomerDashboardView({
                         orderNo,
                       })
                     }
+                    // 🌟 เปลี่ยนเส้นทางปุ่มรายงานปัญหาให้วิ่งไปที่หน้า /customer/orders/[order_id]/report
                     onReportClick={(ord) => {
-                      setSelectedOrderForReport(ord);
-                      setIsReportModalOpen(true);
+                      router.push(`/customer/orders/${ord.id}/report`);
                     }}
                     onShowToast={showToast}
                   />

@@ -2,15 +2,15 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  Store, 
-  Calendar, 
-  Clock, 
-  ChevronDown, 
-  ChevronUp, 
-  Ban, 
-  MessageCircle, 
-  Star, 
+import {
+  Store,
+  Calendar,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Ban,
+  MessageCircle,
+  Star,
   AlertTriangle,
   CheckCircle2,
   CalendarDays
@@ -50,15 +50,15 @@ export default function CustomerOrderCard({
   // 1. ตรวจสอบข้อมูล payment ให้รอบด้าน
   const rawPayment = order?.payment || order?.payment_detail || order?.payments;
   const paymentData = Array.isArray(rawPayment) ? rawPayment[0] : rawPayment;
-  
+
   const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
   const refundSlipUrl = paymentData?.refund_slip_url || null;
 
   // ตรวจจับว่ามีการจ่ายเงิน/แนบสลิปแล้วหรือไม่
   const hasPaidSlip = Boolean(
-    paymentData?.slip_url || 
-    paymentStatus === "paid" || 
-    paymentStatus === "refunded" || 
+    paymentData?.slip_url ||
+    paymentStatus === "paid" ||
+    paymentStatus === "refunded" ||
     paymentStatus === "pending_payout" ||
     order?.payment_id
   );
@@ -78,9 +78,9 @@ export default function CustomerOrderCard({
 
   const now = Date.now();
 
-  let state = 
-    order?.current_status?.state || 
-    order?.status?.state || 
+  let state =
+    order?.current_status?.state ||
+    order?.status?.state ||
     (typeof order?.status === "string" ? order.status : "รอการชำระเงิน");
 
   if (isSlipRejected && state !== "ยกเลิกการพิมพ์") {
@@ -121,14 +121,14 @@ export default function CustomerOrderCard({
     isPendingPayment
       ? "bg-amber-50 text-amber-700 border-amber-200/80"
       : isReady
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-      : isReceived
-      ? "bg-slate-100 text-slate-600 border-slate-200"
-      : isCanceled
-      ? "bg-rose-50 text-rose-600 border-rose-200/80"
-      : isPrinting
-      ? "bg-blue-50 text-blue-700 border-blue-200/80"
-      : "bg-slate-50 text-slate-600 border-slate-200";
+        ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+        : isReceived
+          ? "bg-slate-100 text-slate-600 border-slate-200"
+          : isCanceled
+            ? "bg-rose-50 text-rose-600 border-rose-200/80"
+            : isPrinting
+              ? "bg-blue-50 text-blue-700 border-blue-200/80"
+              : "bg-slate-50 text-slate-600 border-slate-200";
 
   const formatThaiDateTime = (dateStr?: string | null) => {
     if (!dateStr) return { date: "-", time: "" };
@@ -156,7 +156,7 @@ export default function CustomerOrderCard({
   const { date: formattedDate, time: formattedTime } = formatThaiDateTime(order?.appointment_time || order?.receive_date);
 
   const items = order?.print_order_item || order?.order_items || order?.items || [];
-  
+
   const itemCategorySummary = (() => {
     if (!items || items.length === 0) return "เอกสาร x1 ชุด";
 
@@ -181,14 +181,14 @@ export default function CustomerOrderCard({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all overflow-hidden">
-      
+
       {/* 1. Header บาร์บน */}
       <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="font-extrabold text-slate-900 text-sm sm:text-base tracking-tight shrink-0">
             {orderNumberStr}
           </span>
-          
+
           <span className="text-slate-300">|</span>
 
           <div className="flex items-center gap-1.5 font-bold text-slate-800 text-sm sm:text-base truncate">
@@ -221,7 +221,7 @@ export default function CustomerOrderCard({
 
       {/* 2. เนื้อหาการ์ด */}
       <div className="p-4 sm:px-5 space-y-3">
-        
+
         <div className="flex items-center gap-2.5 flex-wrap text-xs text-slate-500">
           {showOrderDate && order?.order_date && (
             <>
@@ -259,7 +259,7 @@ export default function CustomerOrderCard({
         </div>
 
         {/* 🌟 แสดงกล่องแจ้งเตือนยกเลิก / คืนเงิน จุดเดียวเท่านั้น */}
-        <OrderCancellationAlert 
+        <OrderCancellationAlert
           isCanceled={isCanceled}
           hasPaidSlip={hasPaidSlip}
           paymentStatus={paymentStatus}
@@ -273,11 +273,10 @@ export default function CustomerOrderCard({
             <button
               type="button"
               onClick={toggleExpand}
-              className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer border ${
-                isExpanded
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer border ${isExpanded
                   ? "bg-blue-50 text-blue-700 border-blue-200"
                   : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-              }`}
+                }`}
             >
               <span>{isExpanded ? "ซ่อนรายละเอียด" : "รายละเอียด"}</span>
               {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -290,7 +289,7 @@ export default function CustomerOrderCard({
 
           <div className="flex items-center justify-between md:justify-end gap-3.5">
             <div className="flex items-center gap-2 flex-wrap">
-              
+
               {isSlipRejected && !isCanceled && (
                 <span className="text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 px-2 py-1 rounded-xl flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 text-rose-500" />
@@ -327,18 +326,20 @@ export default function CustomerOrderCard({
 
               {!isCanceled && isReceived && (
                 <div className="flex items-center gap-1.5">
+                  {/* 🌟 1. ปุ่มรีวิว: เปลี่ยนเส้นทางไปที่ /customer/orders/[order_id]/review */}
                   <button
                     type="button"
-                    onClick={() => router.push(`/customer/review?order_id=${order.id}&shop_id=${shopId}`)}
+                    onClick={() => router.push(`/customer/orders/${order.id}/review`)}
                     className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
                   >
                     <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                     <span>รีวิว</span>
                   </button>
 
+                  {/* 🌟 2. ปุ่มขอคืนเงิน: เปลี่ยนเส้นทางไปที่ /customer/orders/[order_id]/report */}
                   <button
                     type="button"
-                    onClick={() => onReportClick?.(order)}
+                    onClick={() => router.push(`/customer/orders/${order.id}/report`)}
                     className="px-2.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer"
                   >
                     <AlertTriangle className="w-3.5 h-3.5" />
