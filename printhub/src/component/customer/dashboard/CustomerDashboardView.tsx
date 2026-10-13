@@ -84,6 +84,16 @@ export default function CustomerDashboardView({
     return isNaN(parsed) ? null : parsed;
   };
 
+  // เวลานัดรับเก็บเป็นเวลาไทยแบบไม่มี timezone -> ตีความเป็น +07:00
+  const parseBangkokTime = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    let cleaned = String(dateStr).trim().replace(" ", "T");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) cleaned += "T00:00:00";
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(cleaned)) cleaned += "+07:00";
+    const parsed = new Date(cleaned).getTime();
+    return isNaN(parsed) ? null : parsed;
+  };
+
   // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์ (แก้ไขไม่ให้เหมารวมออเดอร์ที่ดำเนินงานไปแล้วเป็นยกเลิก)
   const getRealOrderState = (o: any) => {
     if (!o) return "รอการดำเนินงาน";
@@ -95,42 +105,6 @@ export default function CustomerDashboardView({
       (typeof o.status === "string" ? o.status : null) ||
       "";
 
-<<<<<<< HEAD
-    if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก") {
-      return "ยกเลิกการพิมพ์";
-    }
-
-    const now = Date.now();
-    const rawPayment = o?.payment || o?.payment_detail || o?.payments;
-    const paymentData = Array.isArray(rawPayment) ? rawPayment[0] : rawPayment;
-    const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
-    
-    const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
-
-    // 🌟 ดักให้ถ้าโดน reject ถือว่ายังไม่จ่าย
-    const hasPaidSlip = Boolean(
-      (!isSlipRejected && paymentData?.slip_url) || 
-      paymentStatus === "paid" || 
-      paymentStatus === "refunded"
-    );
-
-    const expiresAtMs = parseSafeTime(o?.expires_at);
-    const orderDateMs = parseSafeTime(o?.order_date);
-
-    let isPaymentExpired = false;
-    if (expiresAtMs) {
-      isPaymentExpired = now >= expiresAtMs;
-    } else if (orderDateMs) {
-      isPaymentExpired = now >= (orderDateMs + 10 * 60 * 1000);
-    }
-
-    // 🌟 หมดเวลา -> ยกเลิกการพิมพ์
-    if ((dbState === "รอการชำระเงิน" || isSlipRejected) && isPaymentExpired) {
-      return "ยกเลิกการพิมพ์";
-    }
-
-    if (isSlipRejected && !isPaymentExpired) {
-=======
     // 1. ถ้าระบุชัดเจนใน DB ว่ายกเลิก ให้ยึดเป็นยกเลิกการพิมพ์ทันที
     if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก" || dbState === "cancelled") {
       return "ยกเลิกการพิมพ์";
@@ -146,7 +120,7 @@ export default function CustomerDashboardView({
     ) {
       // ตรวจสอบเฉพาะกรณีเลยเวลานัดรับงาน และงานยังค้างอยู่ที่รอดำเนินงาน/กำลังพิมพ์ (S2G7 Auto-Cancel)
       const now = Date.now();
-      const appointmentMs = parseSafeTime(o?.appointment_time);
+      const appointmentMs = parseBangkokTime(o?.appointment_time);
       if (appointmentMs && now >= appointmentMs && (dbState === "รอการดำเนินงาน" || dbState === "กำลังพิมพ์")) {
         return "ยกเลิกการพิมพ์";
       }
@@ -176,7 +150,6 @@ export default function CustomerDashboardView({
     }
 
     if (isSlipRejected) {
->>>>>>> f71358e11e3152dbf80c688dae1addf6d0084645
       return "รอการชำระเงิน";
     }
 

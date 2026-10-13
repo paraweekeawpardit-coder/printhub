@@ -80,7 +80,7 @@ export default function OrderPage() {
       });
       setOrders(response.data.orders ?? []);
     } catch (error) {
-      console.error("Get order error:", error);
+      console.error("Get order error:", (error as any)?.response?.data || error);
       setOrders([]);
     } finally {
       setLoading(false);

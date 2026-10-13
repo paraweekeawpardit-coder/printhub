@@ -44,7 +44,7 @@ interface SupabaseOrderQueryResult {
   total_amount: number | null;
   total_price: number | null;
   payment_id: string | null;
-  rejecect_reason?: string | null;
+  reject_reason?: string | null;
   customer: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
   current_status: { state: string } | { state: string }[] | null;
   payment: { id: string; slip_url: string | null; is_verified: boolean | null } | { id: string; slip_url: string | null; is_verified: boolean | null }[] | null;
@@ -93,7 +93,7 @@ export const getOrdersByStatus = async (
         total_amount,
         payment_id,
         description,
-        rejecect_reason,
+        reject_reason,
         customer:customer_id (
           first_name,
           last_name
@@ -187,7 +187,7 @@ export const getOrdersByStatus = async (
           order_no: order.order_no,
           date: order.order_date,
           description: (order as any).description || null, // เพิ่มฟิลด์หมายเหตุที่นี่
-          reject_reason: order.rejecect_reason || null,
+          reject_reason: order.reject_reason || null,
           customer_name: `${customer?.first_name ?? ""} ${customer?.last_name ?? ""
             }`.trim() || "ลูกค้าทั่วไป",
           status: computedStatus,
@@ -341,7 +341,7 @@ export const getOrderById = async (
         total_price,
         total_amount,
         payment_id,
-        rejecect_reason,
+        reject_reason,
 
         customer:customer_id (
           first_name,
@@ -414,7 +414,7 @@ export const getOrderById = async (
       order_no: order.order_no,
       date: order.order_date,
       appointment_time: order.appointment_time || order.receive_date,
-      reject_reason: (order as any).rejecect_reason || null,
+      reject_reason: (order as any).reject_reason || null,
       customer_name: `${customer?.first_name ?? ""} ${customer?.last_name ?? ""
         }`.trim(),
       customer_contact: customer?.contact || "",

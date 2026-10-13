@@ -11,7 +11,7 @@ type Order = {
   customer_id: string;
   shop_id: string;
   description: string | null;
-  reject_reason?: string | null; // เหตุผลที่ร้านปฏิเสธ (print_order.rejecect_reason)
+  reject_reason?: string | null; // เหตุผลที่ร้านปฏิเสธ (print_order.reject_reason)
   order_date: string;
   appointment_time?: string | null;
   receive_date?: string | null;
