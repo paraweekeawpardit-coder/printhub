@@ -191,7 +191,7 @@ export default function AdminHomePage() {
         />
       </section>
 
-      {/* 🟢 สถิติคำสั่งซื้อในระบบ (แยก รอดำเนินการ และ กำลังพิมพ์ ชัดเจน) */}
+      {/* 🟢 สถิติคำสั่งซื้อในระบบ (Order Status Overview) */}
       <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3 font-sans">
         <div className="flex justify-between items-center border-b border-slate-100 pb-3">
           <div>
@@ -235,7 +235,7 @@ export default function AdminHomePage() {
             </div>
           </div>
 
-          {/* 3. รายการเสร็จสิ้น */}
+          {/* 3. พิมพ์เสร็จสิ้น */}
           <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200/80 space-y-1">
             <span className="text-[11px] font-semibold text-emerald-800">
               3. พิมพ์เสร็จสิ้น
@@ -490,9 +490,10 @@ export default function AdminHomePage() {
               <span className="text-emerald-700 font-bold">✓ Connected</span>
             </div>
 
+            {/* 🟢 ปรับเปลี่ยนจาก Payment Service เป็น Storage Service (Files/Slips) */}
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
               <span className="text-slate-600 font-sans font-medium">
-                Payment Service
+                Storage Service (Files/Slips)
               </span>
               <span className="text-emerald-700 font-bold">✓ Active</span>
             </div>
