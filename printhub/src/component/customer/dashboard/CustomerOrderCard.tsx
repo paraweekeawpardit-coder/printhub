@@ -47,25 +47,22 @@ export default function CustomerOrderCard({
 
   if (!order) return null;
 
-  // 1. ตรวจสอบข้อมูล payment ให้รอบด้าน
+  // 1. ตรวจสอบข้อมูล payment
   const rawPayment = order?.payment || order?.payment_detail || order?.payments;
   const paymentData = Array.isArray(rawPayment) ? rawPayment[0] : rawPayment;
-  
   const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
   const refundSlipUrl = paymentData?.refund_slip_url || null;
 
-  // ตรวจจับว่ามีการจ่ายเงิน/แนบสลิปแล้วหรือไม่
-  const hasPaidSlip = Boolean(
-    paymentData?.slip_url || 
-    paymentStatus === "paid" || 
-    paymentStatus === "refunded" || 
-    paymentStatus === "pending_payout" ||
-    order?.payment_id
-  );
-
   const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
 
-  // 2. ฟังก์ชันแปลงเวลา Timezone
+  // 🌟 จุดแก้สำคัญ: ถ้าสลิปโดนปฏิเสธ (isSlipRejected) ต้องถือว่า "ยังไม่มีสลิปที่ถูกต้อง" (hasPaidSlip = false)
+  const hasPaidSlip = Boolean(
+    (!isSlipRejected && paymentData?.slip_url) || 
+    paymentStatus === "paid" || 
+    paymentStatus === "refunded" || 
+    paymentStatus === "pending_payout"
+  );
+
   const parseSafeTime = (dateStr?: string | null) => {
     if (!dateStr) return null;
     let cleaned = String(dateStr).trim();
@@ -83,39 +80,34 @@ export default function CustomerOrderCard({
     order?.status?.state || 
     (typeof order?.status === "string" ? order.status : "รอการชำระเงิน");
 
-  if (isSlipRejected && state !== "ยกเลิกการพิมพ์") {
+  // ใน CustomerOrderCard.tsx
+  // ใน CustomerOrderCard.tsx
+  let targetExpiryMs: number | null = null;
+  if (order?.expires_at) {
+    const exp = parseSafeTime(order.expires_at); // 👈 ต้องครอบ parseSafeTime
+    if (exp) targetExpiryMs = exp;
+  } else if (order?.order_date) {
+    const oTime = parseSafeTime(order.order_date); // 👈 ต้องครอบ parseSafeTime
+    if (oTime) targetExpiryMs = oTime + 10 * 60 * 1000;
+  }
+
+  const isPaymentExpired = targetExpiryMs ? now >= targetExpiryMs : false;
+
+  // 🌟 ถ้าหมดเวลาแล้ว (ไม่ว่าจะรอชำระเงิน หรือโดนปฏิเสธสลิป) -> ตัดเป็นยกเลิกการพิมพ์ทันที
+  if ((state === "รอการชำระเงิน" || isSlipRejected) && isPaymentExpired) {
+    state = "ยกเลิกการพิมพ์";
+  } else if (isSlipRejected && state !== "ยกเลิกการพิมพ์") {
+    // ถ้ายังไม่หมดเวลา ค่อยให้แสดงเป็นรอการชำระเงิน
     state = "รอการชำระเงิน";
   }
 
-  const expiresAtMs = parseSafeTime(order?.expires_at);
-  const orderDateMs = parseSafeTime(order?.order_date);
-
-  let isPaymentExpired = false;
-  if (expiresAtMs) {
-    isPaymentExpired = now > expiresAtMs;
-  } else if (!isSlipRejected && orderDateMs) {
-    isPaymentExpired = now > (orderDateMs + 10 * 60 * 1000);
-  }
-
-  if (state === "รอการชำระเงิน" && isPaymentExpired && !hasPaidSlip && !isSlipRejected) {
-    state = "ยกเลิกการพิมพ์";
-  }
-
-  const appointmentMs = parseSafeTime(order?.appointment_time || order?.receive_date);
-  const isOverdue = appointmentMs ? now >= appointmentMs : false;
-
-  if (isOverdue && (state === "รอการดำเนินงาน" || state === "กำลังพิมพ์")) {
-    state = "ยกเลิกการพิมพ์";
-  }
-
-  const isPendingPayment = state === "รอการชำระเงิน" && (!isPaymentExpired || isSlipRejected);
-  const isPending = state === "รอการดำเนินงาน" && !isSlipRejected;
-  const isPrinting = state === "กำลังพิมพ์";
-  const isReady = state === "พิมพ์เสร็จสิ้น";
-  const isReceived = state === "รับงานแล้ว" || state === "รายการเสร็จสิ้น";
   const isCanceled = state === "ยกเลิกการพิมพ์";
-
-  const isTimeoutCancelled = isCanceled && isPaymentExpired && !hasPaidSlip;
+  const isPendingPayment = (state === "รอการชำระเงิน" || isSlipRejected) && !isPaymentExpired && !isCanceled;
+  
+  const isPending = state === "รอการดำเนินงาน" && !isSlipRejected && !isCanceled;
+  const isPrinting = state === "กำลังพิมพ์" && !isCanceled;
+  const isReady = state === "พิมพ์เสร็จสิ้น" && !isCanceled;
+  const isReceived = (state === "รับงานแล้ว" || state === "รายการเสร็จสิ้น") && !isCanceled;
 
   const stateBadgeStyle =
     isPendingPayment
@@ -130,9 +122,22 @@ export default function CustomerOrderCard({
       ? "bg-blue-50 text-blue-700 border-blue-200/80"
       : "bg-slate-50 text-slate-600 border-slate-200";
 
-  const formatThaiDateTime = (dateStr?: string | null) => {
+  // เวลานัดรับเก็บเป็นเวลาไทยแบบไม่มี timezone -> ตีความเป็น +07:00
+  const parseBangkokTime = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    let cleaned = String(dateStr).trim().replace(" ", "T");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) cleaned += "T00:00:00";
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(cleaned)) cleaned += "+07:00";
+    const parsed = new Date(cleaned).getTime();
+    return isNaN(parsed) ? null : parsed;
+  };
+
+  const formatThaiDateTime = (
+    dateStr?: string | null,
+    parser: (s?: string | null) => number | null = parseSafeTime
+  ) => {
     if (!dateStr) return { date: "-", time: "" };
-    const ts = parseSafeTime(dateStr);
+    const ts = parser(dateStr);
     if (!ts) return { date: "-", time: "" };
 
     const d = new Date(ts);
@@ -153,7 +158,7 @@ export default function CustomerOrderCard({
   };
 
   const { date: formattedOrderDate, time: formattedOrderTime } = formatThaiDateTime(order?.order_date);
-  const { date: formattedDate, time: formattedTime } = formatThaiDateTime(order?.appointment_time || order?.receive_date);
+  const { date: formattedDate, time: formattedTime } = formatThaiDateTime(order?.appointment_time || order?.receive_date, parseBangkokTime);
 
   const items = order?.print_order_item || order?.order_items || order?.items || [];
   
@@ -261,10 +266,10 @@ export default function CustomerOrderCard({
         {/* 🌟 แสดงกล่องแจ้งเตือนยกเลิก / คืนเงิน จุดเดียวเท่านั้น */}
         <OrderCancellationAlert 
           isCanceled={isCanceled}
+          cancelReason={order?.cancel_reason}
           hasPaidSlip={hasPaidSlip}
           paymentStatus={paymentStatus}
           refundSlipUrl={refundSlipUrl}
-          isTimeoutCancelled={isTimeoutCancelled}
         />
 
         {/* แถวล่าง: ปุ่มรายละเอียด และปุ่ม Action */}
@@ -291,19 +296,21 @@ export default function CustomerOrderCard({
           <div className="flex items-center justify-between md:justify-end gap-3.5">
             <div className="flex items-center gap-2 flex-wrap">
               
-              {isSlipRejected && !isCanceled && (
+              {/* 🌟 1. แสดงป้ายสลิปไม่ถูกต้อง "เฉพาะตอนที่ยังไม่หมดเวลา" เท่านั้น */}
+              {isSlipRejected && !isCanceled && !isPaymentExpired && (
                 <span className="text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 px-2 py-1 rounded-xl flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 text-rose-500" />
                   สลิปไม่ถูกต้อง แนบใหม่ก่อนหมดเวลา
                 </span>
               )}
 
-              {!isCanceled && (isPendingPayment || isSlipRejected) && (
+              {/* 🌟 2. ปุ่มชำระเงินนับถอยหลัง: แสดงเฉพาะตอนยังไม่ยกเลิก */}
+              {!isCanceled && (isPendingPayment || (isSlipRejected && !isPaymentExpired)) && (
                 <PaymentActionButton order={order} />
               )}
 
-              {/* ปุ่มยกเลิก: แสดงเฉพาะตอนรอดำเนินงาน หรือ รอชำระเงิน และยังไม่ยกเลิก */}
-              {!isCanceled && (isPending || isPendingPayment) && (
+              {/* 🌟 3. ปุ่มยกเลิก: ซ่อนทันทีถ้าหมดเวลาแล้ว (เพราะสถานะกลายเป็นยกเลิกไปแล้ว) */}
+              {!isCanceled && !isPaymentExpired && (isPending || isPendingPayment) && (
                 <button
                   type="button"
                   onClick={() => onCancelClick?.(order.id, orderNumberStr)}

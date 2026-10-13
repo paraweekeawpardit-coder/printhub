@@ -95,7 +95,6 @@ export default function CustomerDashboardView({
       (typeof o.status === "string" ? o.status : null) ||
       "";
 
-    // 1. ถ้าใน DB บันทึกว่ายกเลิกแล้ว ให้เป็น "ยกเลิกการพิมพ์" ทันที
     if (dbState === "ยกเลิกการพิมพ์" || dbState === "ยกเลิก") {
       return "ยกเลิกการพิมพ์";
     }
@@ -105,42 +104,31 @@ export default function CustomerDashboardView({
     const paymentData = Array.isArray(rawPayment) ? rawPayment[0] : rawPayment;
     const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
     
-    // ตรวจสอบสถานะการจ่ายเงิน
     const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
+
+    // 🌟 ดักให้ถ้าโดน reject ถือว่ายังไม่จ่าย
     const hasPaidSlip = Boolean(
-      paymentData?.slip_url || 
+      (!isSlipRejected && paymentData?.slip_url) || 
       paymentStatus === "paid" || 
-      paymentStatus === "refunded" || 
-      paymentStatus === "pending_payout" ||
-      o?.payment_id
+      paymentStatus === "refunded"
     );
 
     const expiresAtMs = parseSafeTime(o?.expires_at);
     const orderDateMs = parseSafeTime(o?.order_date);
 
-    // คำนวณการหมดเวลาชำระเงิน (10 นาที หรือตาม expires_at)
     let isPaymentExpired = false;
     if (expiresAtMs) {
-      isPaymentExpired = now > expiresAtMs;
-    } else if (!isSlipRejected && orderDateMs) {
-      isPaymentExpired = now > (orderDateMs + 10 * 60 * 1000);
+      isPaymentExpired = now >= expiresAtMs;
+    } else if (orderDateMs) {
+      isPaymentExpired = now >= (orderDateMs + 10 * 60 * 1000);
     }
 
-    // 🌟 2. ดักยกเลิกอัตโนมัติ: ถ้าหมดเวลาชำระเงิน และไม่มีการชำระเงินเข้ามา
-    if ((dbState === "รอการชำระเงิน" || isSlipRejected) && isPaymentExpired && !hasPaidSlip) {
+    // 🌟 หมดเวลา -> ยกเลิกการพิมพ์
+    if ((dbState === "รอการชำระเงิน" || isSlipRejected) && isPaymentExpired) {
       return "ยกเลิกการพิมพ์";
     }
 
-    // 🌟 3. ดักยกเลิกอัตโนมัติ: เลยเวลานัดรับงานแล้วร้านยังทำไม่เสร็จ (S2G7 Auto-Cancel)
-    const appointmentMs = parseSafeTime(o?.appointment_time || o?.receive_date);
-    if (appointmentMs && now >= appointmentMs) {
-      if (dbState === "รอการดำเนินงาน" || dbState === "กำลังพิมพ์") {
-        return "ยกเลิกการพิมพ์";
-      }
-    }
-
-    // 🌟 4. ถ้าสลิปโดนปฏิเสธ แต่ยังไม่หมดเวลา ให้ดีดกลับมารอชำระเงินเพื่อให้ส่งสลิปใหม่
-    if (isSlipRejected && dbState !== "ยกเลิกการพิมพ์") {
+    if (isSlipRejected && !isPaymentExpired) {
       return "รอการชำระเงิน";
     }
 
@@ -260,7 +248,7 @@ export default function CustomerDashboardView({
           showToast("ยกเลิกคำสั่งซื้อเรียบร้อยแล้ว");
           if (cid) fetchDashboardData(cid);
         } else {
-          showToast(data.error || "ไม่สามารถยกเลิกได้");
+          showToast(data.message || data.error || "ไม่สามารถยกเลิกได้");
         }
       } else if (type === "received") {
         const res = await fetch(`http://localhost:5000/api/customer/order/${orderId}/confirm-received`, {
@@ -271,7 +259,7 @@ export default function CustomerDashboardView({
           showToast("ยืนยันรับงานสำเร็จ คุณสามารถรีวิวร้านค้าได้แล้ว");
           if (cid) fetchDashboardData(cid);
         } else {
-          showToast(data.error || "เกิดข้อผิดพลาดในการยืนยันรับงาน");
+          showToast(data.message || data.error || "เกิดข้อผิดพลาดในการยืนยันรับงาน");
         }
       }
     } catch (err) {
@@ -309,7 +297,7 @@ export default function CustomerDashboardView({
         setReportImageUrl("");
         if (cid) fetchDashboardData(cid);
       } else {
-        showToast(data.error || "ไม่สามารถส่งคำขอได้");
+        showToast(data.message || data.error || "ไม่สามารถส่งคำขอได้");
       }
     } catch (err) {
       console.error(err);
