@@ -95,7 +95,62 @@ export const getSupportRoomsForAdmin = async (req: Request, res: Response): Prom
   }
 };
 
-// 4. [FR-6.3] บันทึกข้อความลง DB (ตรวจจำนวนรูปภาพไม่เกิน 10 รูป) - ฟังก์ชันรองรับฝั่ง Socket/Server
+// 4. 🟢 [เพิ่มใหม่] ดึงรายการห้องแชตสำหรับร้านค้า (กรองตาม shop_id ป้องกันข้อมูลหลุดไปร้านอื่น)
+export const getShopChatRooms = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const shopId = (req.params.shopId || req.query.shop_id || req.query.shopId) as string;
+
+    if (!shopId) {
+      res.status(400).json({ error: 'shopId is required' });
+      return;
+    }
+
+    const rooms = await Message.aggregate([
+      {
+        $match: {
+          shop_id: shopId, // 👈 กรองเฉพาะข้อมูลที่ตรงกับ shop_id ของร้านนี้เท่านั้น
+          chat_type: { $in: ['order', 'support_shop'] }
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: '$room_id',
+          chatType: { $first: '$chat_type' },
+          orderNo: { $first: '$order_no' },
+          customerId: { $first: '$customer_id' },
+          shopId: { $first: '$shop_id' },
+          lastMessage: { $first: '$message' },
+          lastSenderRole: { $first: '$sender_role' },
+          lastSenderId: { $first: '$sender_id' },
+          updatedAt: { $first: '$createdAt' },
+          unreadCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$is_read', false] },
+                    { $ne: ['$sender_role', 'shop'] }
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      },
+      { $sort: { updatedAt: -1 } }
+    ]);
+
+    res.status(200).json({ success: true, count: rooms.length, data: rooms });
+  } catch (err: any) {
+    console.error('Error fetching shop chat rooms:', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+};
+
+// 5. [FR-6.3] บันทึกข้อความลง DB (ตรวจจำนวนรูปภาพไม่เกิน 10 รูป) - ฟังก์ชันรองรับฝั่ง Socket/Server
 export const saveMessage = async (data: {
   room_id?: string;
   roomId?: string;
@@ -158,7 +213,7 @@ export const saveMessage = async (data: {
   }
 };
 
-// 5. [เพิ่มใหม่] Express HTTP Controller สำหรับ POST /api/chat (Fallback เวลา Socket หลุด)
+// 6. Express HTTP Controller สำหรับ POST /api/chat (Fallback เวลา Socket หลุด)
 export const sendMessage = async (req: Request, res: Response): Promise<void> => {
   try {
     const savedMsg = await saveMessage(req.body);
@@ -173,6 +228,7 @@ export default {
   getChatHistory,
   markMessagesAsRead,
   getSupportRoomsForAdmin,
+  getShopChatRooms,
   saveMessage,
   sendMessage,
 };
