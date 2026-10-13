@@ -22,7 +22,7 @@ const formatDateKey = (date: Date): string => {
 
 export const getPlatformStats = async (
   req: Request,
-  res: Response,
+  res: Response
 ): Promise<Response> => {
   try {
     const now = new Date();
@@ -30,19 +30,28 @@ export const getPlatformStats = async (
     sevenDaysAgo.setDate(now.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    // 1. ดึง status_id ของสถานะ "ยกเลิกการพิมพ์" จากตาราง status (แบบเดียวกับ refundController)
-    const { data: cancelStatusObj } = await supabase
+    // 1. ดึง Master Data สถานะทั้งหมดจากตาราง status
+    const { data: statusList } = await supabase
       .from("status")
-      .select("id")
-      .eq("state", "ยกเลิกการพิมพ์")
-      .maybeSingle();
+      .select("id, state");
 
+    const statusMap: Record<string, string> = {};
+    if (statusList) {
+      statusList.forEach((s) => {
+        statusMap[s.state] = s.id;
+      });
+    }
+
+    const cancelStatusId = statusMap["ยกเลิกการพิมพ์"];
+
+    // 2. Query ข้อมูลพื้นฐานและ Order ทั้งหมดพร้อม Relation แบบครบถ้วน
     const [
       customerRes,
       shopRes,
       reportRes,
       paymentRes,
       appealsRes,
+      ordersRes,
     ] = await Promise.all([
       // (1) จำนวนลูกค้าทั้งหมด
       supabase.from("customer").select("*", { count: "exact", head: true }),
@@ -71,18 +80,73 @@ export const getPlatformStats = async (
         .from("shop_appeals")
         .select("id, created_at, status")
         .eq("status", "pending"),
+
+      // (6) 🟢 Query print_order ดึงทั้ง current_status และ work_status (ORDER BY updated_at DESC เพื่อเอาล่าสุด)
+      supabase
+        .from("print_order")
+        .select(`
+          id,
+          current_status_id,
+          work_state_id,
+          current_status:status!fk_order_current_status(id, state),
+          work_status:work_status!print_order_work_state_id_fkey(
+            status:status!fk_work_status_status(id, state)
+          )
+        `),
     ]);
 
-    // 2. 📌 คำนวณรายการรอโอนเงินคืนลูกค้า (Pending Refunds) ถอดแบบ logic จาก refundController
+    // 3. 🟢 คำนวณสถิติออเดอร์เลียนแบบ Logic ฝั่งร้านค้า 100%
+    const allOrders = ordersRes.data || [];
+
+    let pendingActionCount = 0;
+    let inProductionCount = 0;
+    let completedOrdersCount = 0;
+    let cancelledOrdersCount = 0;
+
+    allOrders.forEach((o: any) => {
+      const currentStatusName = o.current_status?.state || "";
+      const workStatusName = o.work_status?.status?.state || "";
+      const activeState = currentStatusName || workStatusName;
+
+      // 1. ยกเลิกการพิมพ์
+      if (
+        activeState === "ยกเลิกการพิมพ์" ||
+        o.current_status_id === statusMap["ยกเลิกการพิมพ์"]
+      ) {
+        cancelledOrdersCount++;
+      }
+      // 2. รายการเสร็จสิ้น / พิมพ์เสร็จสิ้น
+      else if (
+        activeState === "รายการเสร็จสิ้น" ||
+        activeState === "พิมพ์เสร็จสิ้น" ||
+        o.current_status_id === statusMap["รายการเสร็จสิ้น"] ||
+        o.current_status_id === statusMap["พิมพ์เสร็จสิ้น"]
+      ) {
+        completedOrdersCount++;
+      }
+      // 3. กำลังพิมพ์ (เช็คเฉพาะสถานะที่กำลังพิมพ์จริงๆ)
+      else if (
+        activeState === "กำลังพิมพ์" ||
+        o.current_status_id === statusMap["กำลังพิมพ์"]
+      ) {
+        inProductionCount++;
+      }
+      // 4. 🟢 รอดำเนินการ (กวาดรายการที่เหลือทั้งหมดที่ไม่ใช่อีก 3 สถานะข้างต้น)
+      else {
+        pendingActionCount++;
+      }
+    });
+
+    // 4. 📌 คำนวณรายการรอโอนเงินคืนลูกค้า (Pending Refunds)
     let pendingRefunds = 0;
-    if (cancelStatusObj) {
+    if (cancelStatusId) {
       const { data: cancelOrders } = await supabase
         .from("print_order")
         .select(`
           id,
           payment:payment!order_id ( id, status, refund_slip_url )
         `)
-        .eq("current_status_id", cancelStatusObj.id);
+        .eq("current_status_id", cancelStatusId);
 
       pendingRefunds = (cancelOrders || []).filter((item: any) => {
         const payList = Array.isArray(item.payment)
@@ -91,7 +155,6 @@ export const getPlatformStats = async (
           ? [item.payment]
           : [];
 
-        // กรองรายการที่เป็น REJECTED หรือ REFUNDED ออก
         const isRejected = payList.some((p: any) => p.status === "REJECTED");
         const isRefunded = payList.some(
           (p: any) => p.status === "REFUNDED" || Boolean(p.refund_slip_url)
@@ -101,7 +164,7 @@ export const getPlatformStats = async (
       }).length;
     }
 
-    // 3. 📌 คำนวณรายการรอโอนให้ร้านค้า (Pending Payouts) ถอดแบบ logic จาก payoutController
+    // 5. 📌 คำนวณรายการรอโอนให้ร้านค้า (Pending Payouts)
     let pendingPayouts = 0;
     const { data: allPayments } = await supabase
       .from("payment")
@@ -109,7 +172,6 @@ export const getPlatformStats = async (
 
     if (allPayments) {
       pendingPayouts = allPayments.filter((item: any) => {
-        // กรองรายการ PAYOUT_REJECTED หรือ รายการที่ PAID / completed / มี payout_slip_url ออก
         if (item.status === "PAYOUT_REJECTED") return false;
 
         const isPaid =
@@ -176,6 +238,12 @@ export const getPlatformStats = async (
       pendingPayouts,
       overdueAppeals,
       dailyIncome,
+      orderStats: {
+        pendingAction: pendingActionCount,
+        inProduction: inProductionCount,
+        completed: completedOrdersCount,
+        cancelled: cancelledOrdersCount,
+      },
     });
   } catch (err: any) {
     console.error("Dashboard Stats Error:", err.message || err);

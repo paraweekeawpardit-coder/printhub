@@ -739,8 +739,6 @@ export const getOrderStatusBreakdown = async (
 // ==========================================
 // Get Complaints & Reviews
 // ==========================================
-const HIDDEN_REPORT_STATUSES = ["pending"];
-
 // ดึง print_order + print_order_item แล้วทำเป็น Map ตาม order_id
 async function fetchOrderMap(orderIds: string[]) {
   const map = new Map<string, any>();
@@ -820,11 +818,12 @@ export const getComplaintsAndReviews = async (
 
     if (repErr) console.error("Report Fetch Error:", repErr.message);
 
-    // ไม่แสดง report ที่ยัง pending (หรือยังไม่มี status)
-    const visibleReports = (reports ?? []).filter((r) => {
-      const st = (r.status ?? "").toLowerCase().trim();
-      return st !== "" && !HIDDEN_REPORT_STATUSES.includes(st);
-    });
+    // แสดง report ทุกสถานะ รวมถึง pending (ยังไม่ได้รับการตรวจสอบ)
+    // report ที่ยังไม่มี status ถือว่าเป็น pending
+    const visibleReports = (reports ?? []).map((r) => ({
+      ...r,
+      status: (r.status ?? "").toLowerCase().trim() || "pending",
+    }));
 
     const rawReviews = reviews ?? [];
 

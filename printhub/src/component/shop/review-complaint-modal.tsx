@@ -63,6 +63,11 @@ type ReportStatusConfig = {
 };
 
 const REPORT_STATUS_MAP: Record<string, ReportStatusConfig> = {
+  pending: {
+    label: "ยังไม่ได้รับการตรวจสอบ",
+    className: "bg-slate-100 text-slate-600 border-slate-200",
+    showDisputeNote: true,
+  },
   investigating: {
     label: "กำลังตรวจสอบ",
     className: "bg-amber-100 text-amber-700 border-amber-200",
@@ -82,9 +87,10 @@ const REPORT_STATUS_MAP: Record<string, ReportStatusConfig> = {
   },
 };
 
-// pending / null / ค่าที่ไม่รู้จัก => คืน null (ไม่แสดง)
+// ค่าว่าง/null ถือเป็น pending, ค่าที่ไม่รู้จัก => คืน null (ไม่แสดง)
 const getReportStatus = (status?: string | null): ReportStatusConfig | null => {
   const key = (status ?? "").toLowerCase().trim();
+  if (key === "") return REPORT_STATUS_MAP.pending;
   if (key === "investigation") return REPORT_STATUS_MAP.investigating;
   return REPORT_STATUS_MAP[key] ?? null;
 };

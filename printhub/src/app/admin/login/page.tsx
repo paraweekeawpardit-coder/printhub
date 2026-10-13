@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 
 export default function AdminLoginPage() {
   const [username, setUsername] = useState("");
@@ -70,65 +70,89 @@ export default function AdminLoginPage() {
 
   return (
     <div className="flex min-h-[calc(100vh-80px)] items-center justify-center bg-gray-50 px-4">
-      <form
-        onSubmit={handleLogin}
-        className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg border border-gray-100"
-      >
-        <h1 className="text-2xl font-bold mb-6 text-center text-slate-800">
-          Admin System Access
-        </h1>
+      <div className="w-full max-w-md">
+        {/* 📌 ปุ่มย้อนกลับอยู่นอกการ์ด (ด้านบนซ้าย) */}
+        <button
+          type="button"
+          onClick={() => router.push("/auth")}
+          className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition mb-3 cursor-pointer"
+        >
+          <ArrowLeft size={16} />
+          <span>ย้อนกลับหน้าเข้าสู่ระบบหลัก</span>
+        </button>
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm font-medium text-center border border-red-200">
-            {error}
-          </div>
-        )}
+        {/* 📌 ตัวการ์ดฟอร์ม Login */}
+        <form
+          onSubmit={handleLogin}
+          className="w-full bg-white p-8 rounded-xl shadow-lg border border-gray-100"
+        >
+          <h1 className="text-2xl font-bold mb-6 text-center text-slate-800">
+            Admin System Access
+          </h1>
 
-        <div className="mb-4">
-          <label className="block mb-2 text-sm font-medium text-gray-700">
-            Username / Email
-          </label>
-          <input
-            type="text"
-            className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-black outline-none transition text-slate-800"
-            placeholder="admin@printhub.com"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-        </div>
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm font-medium text-center border border-red-200">
+              {error}
+            </div>
+          )}
 
-        <div className="mb-6">
-          <label className="block mb-2 text-sm font-medium text-gray-700">
-            Password
-          </label>
-          <div className="relative">
+          <div className="mb-4">
+            <label className="block mb-2 text-sm font-medium text-gray-700">
+              Username / Email
+            </label>
             <input
-              type={showPassword ? "text" : "password"}
-              className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-black outline-none transition pr-10 text-slate-800"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              type="text"
+              className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-black outline-none transition text-slate-800"
+              placeholder="admin@printhub.com"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               required
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
-            >
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-            </button>
           </div>
-        </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-slate-900 hover:bg-black disabled:bg-slate-500 text-white py-3 rounded-lg font-semibold transition shadow-md cursor-pointer"
-        >
-          {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ Admin"}
-        </button>
-      </form>
+          <div className="mb-6">
+            <label className="block mb-2 text-sm font-medium text-gray-700">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-black outline-none transition pr-10 text-slate-800"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none cursor-pointer"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-slate-900 hover:bg-black disabled:bg-slate-500 text-white py-3 rounded-lg font-semibold transition shadow-md cursor-pointer"
+          >
+            {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ Admin"}
+          </button>
+        </form>
+
+        {/* 📌 ลิงก์ย้อนกลับเพิ่มเติมอยู่นอกการ์ด (ด้านล่าง) */}
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => router.push("/auth")}
+            className="text-xs text-slate-500 hover:underline cursor-pointer"
+          >
+            ไม่ใช่ผู้ดูแลระบบ? เข้าสู่ระบบร้านค้าหรือลูกค้า
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

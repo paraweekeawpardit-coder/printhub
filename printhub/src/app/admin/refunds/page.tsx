@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, ChangeEvent, FormEvent, useMemo } from "react";
-import RefundsTable, { RefundItem } from "@/component/admin/RefundsTable";
+import RefundsTable, { RefundItem, formatThaiDate } from "@/component/admin/RefundsTable";
 import ProcessRefundModal from "@/component/admin/ProcessRefundModal";
+import ViewSlipModal from "@/component/admin/ViewSlipModal";
 
 export default function RefundsAdminPage() {
   const [refunds, setRefunds] = useState<RefundItem[]>([]);
@@ -49,16 +50,11 @@ export default function RefundsAdminPage() {
     return fullName || "ลูกค้าทั่วไป";
   }, []);
 
+  // 🟢 ปรับปรุงให้แปลงเวลา +7 ผ่าน formatThaiDate
   const getOrderDate = (item: RefundItem) => {
     const rawDate = item.canceled_at || item.order_date || item.created_at;
     if (!rawDate) return "-";
-    return new Date(rawDate).toLocaleDateString("th-TH", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatThaiDate(rawDate);
   };
 
   const isRefundCompleted = useCallback((item: RefundItem) => {
@@ -247,28 +243,12 @@ export default function RefundsAdminPage() {
         </div>
       </div>
 
-      {/* Modal ดูสลิปการโอนคืน/สลิปเดิม */}
+      {/* ViewSlipModal Component */}
       {viewSlipUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl space-y-4 text-center">
-            <h3 className="text-md font-bold text-slate-900">
-              หลักฐานสลิปโอนเงิน
-            </h3>
-            <div className="border rounded-xl p-2 bg-slate-50 max-h-[60vh] overflow-y-auto">
-              <img
-                src={viewSlipUrl}
-                alt="Slip"
-                className="w-full h-auto rounded-lg object-contain mx-auto"
-              />
-            </div>
-            <button
-              onClick={() => setViewSlipUrl(null)}
-              className="w-full py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-900 cursor-pointer"
-            >
-              ปิดหน้าต่าง
-            </button>
-          </div>
-        </div>
+        <ViewSlipModal
+          viewSlipUrl={viewSlipUrl}
+          onClose={() => setViewSlipUrl(null)}
+        />
       )}
 
       {/* Modal ดำเนินการโอนเงินคืน / ปฏิเสธคืนเงิน */}

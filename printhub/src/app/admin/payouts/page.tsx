@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, ChangeEvent, FormEvent } from "react";
-import PayoutsTable, { PayoutItem } from "@/component/admin/PayoutsTable";
+import PayoutsTable, { PayoutItem, formatThaiDate } from "@/component/admin/PayoutsTable";
 import ProcessPayoutModal from "@/component/admin/ProcessPayoutModal";
 import ViewSlipModal from "@/component/admin/ViewSlipModal";
 
@@ -50,16 +50,11 @@ export default function PayoutsAdminPage() {
     return item.shop?.shop_name || "ไม่ระบุชื่อร้านค้า";
   };
 
+  // 🟢 ปรับปรุงให้แปลงเวลา +7 ผ่าน formatThaiDate
   const getPayoutDate = (item?: PayoutItem | string) => {
     const rawDate = typeof item === "string" ? item : item?.payment_date || item?.created_at;
     if (!rawDate) return "-";
-    return new Date(rawDate).toLocaleDateString("th-TH", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatThaiDate(rawDate);
   };
 
   const handleCopy = (text: string, type: "account" | "amount") => {

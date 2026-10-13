@@ -19,6 +19,7 @@ interface ProcessRefundModalProps {
   feedbackMessage: { type: "success" | "error"; text: string } | null;
   getOrderAmount: (item: RefundItem) => number;
   getCustomerName: (item: RefundItem) => string;
+  onViewSlip?: (url: string) => void;
 }
 
 export default function ProcessRefundModal({
@@ -37,8 +38,8 @@ export default function ProcessRefundModal({
   feedbackMessage,
   getOrderAmount,
   getCustomerName,
+  onViewSlip,
 }: ProcessRefundModalProps) {
-  // State สำหรับจัดการโหมดปฏิเสธการคืนเงิน
   const [isRejectMode, setIsRejectMode] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
@@ -46,7 +47,6 @@ export default function ProcessRefundModal({
   const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
   const API_URL = rawApiUrl.replace(/\/+$/, "");
 
-  // รองรับทั้งชื่อตัวแปรที่ขึ้นต้นด้วย handle... หรือ on...
   const triggerCopy = onCopy || handleCopy;
   const triggerFileUpload = onFileUpload || handleFileUpload;
   const triggerUrlChange = (url: string) => {
@@ -54,7 +54,13 @@ export default function ProcessRefundModal({
     if (onRefundSlipUrlChange) onRefundSlipUrlChange(url);
   };
 
-  // ฟังก์ชันยิง API ปฏิเสธคำขอคืนเงิน
+  // ดึงสลิปเดิมของลูกค้า
+  const originalSlip =
+    selectedRefund.original_slip_url ||
+    (Array.isArray(selectedRefund.payment)
+      ? selectedRefund.payment[0]?.slip_url
+      : selectedRefund.payment?.slip_url);
+
   const handleRejectSubmit = async () => {
     try {
       setRejecting(true);
@@ -71,7 +77,6 @@ export default function ProcessRefundModal({
 
       console.log("Refund rejected successfully");
       onClose();
-      // รีโหลดข้อมูลหน้าเว็บหลังจากปฏิเสธสำเร็จ
       window.location.reload();
     } catch (err) {
       console.error("Error rejecting refund:", err);
@@ -95,27 +100,38 @@ export default function ProcessRefundModal({
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer transition-colors"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {/* รายละเอียดการเงิน */}
+        {/* แถบคำแนะนำการโอนคืน */}
+        <div className="flex items-center gap-2 p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 font-medium">
+          <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>โปรดโอนเงินคืนเข้า PromptPay / บัญชีเดิมตามสลิปชำระเงินของลูกค้า</span>
+        </div>
+
+        {/* รายละเอียดคำขอคืนเงิน */}
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-3">
-          <p className="font-semibold text-slate-800 text-sm border-b border-slate-200 pb-2">
-            รายละเอียดคำขอคืนเงิน
-          </p>
+          <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+            <span className="font-semibold text-slate-800 text-sm">รายละเอียดคำขอคืนเงิน</span>
+            {originalSlip && onViewSlip && (
+              <button
+                type="button"
+                onClick={() => onViewSlip(originalSlip)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-800 bg-blue-100/60 hover:bg-blue-100 px-2 py-0.5 rounded-lg transition-colors cursor-pointer"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                เปิดดูสลิปเดิมลูกค้า
+              </button>
+            )}
+          </div>
 
           <div className="flex justify-between items-center">
             <span className="text-slate-500">เลขที่ออเดอร์:</span>
@@ -192,7 +208,6 @@ export default function ProcessRefundModal({
           </div>
         )}
 
-        {/* ฟอร์มสลับโหมด: โหมดแนบสลิปปกติ VS โหมดระบุเหตุผลที่ปฏิเสธ */}
         {isRejectMode ? (
           <div className="space-y-4 pt-1">
             <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2">
@@ -249,12 +264,23 @@ export default function ProcessRefundModal({
                 placeholder="https://..."
                 value={refundSlipUrl}
                 onChange={(e) => triggerUrlChange(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
               />
             </div>
 
+            {/* พรีวิวสลิปโอนคืน */}
+            {refundSlipUrl && (
+              <div className="p-2 border border-slate-200 rounded-xl bg-slate-50">
+                <p className="text-[11px] text-slate-500 font-medium mb-1">พรีวิวสลิปโอนคืน:</p>
+                <img
+                  src={refundSlipUrl}
+                  alt="Refund Slip Preview"
+                  className="max-h-36 mx-auto object-contain rounded-lg border border-slate-200"
+                />
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100">
-              {/* ปุ่มสลับไปโหมดปฏิเสธคำขอคืนเงิน */}
               <button
                 type="button"
                 onClick={() => setIsRejectMode(true)}

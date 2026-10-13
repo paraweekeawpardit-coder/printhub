@@ -218,7 +218,9 @@ export const getShopServices = async (
           category,
           group_type,
           detail,
-          price
+          price,
+          is_required,
+          price_type
         )
       `
       )
@@ -238,6 +240,9 @@ export const getShopServices = async (
         group_type: d.group_type ?? "",
         detail: d.detail ?? "",
         price: d.price != null ? String(d.price) : "",
+        is_required: d.is_required === true,
+        // per_page | per_set (ว่าง = ยังไม่เคยระบุ ร้านต้องเลือกก่อนบันทึกครั้งถัดไป)
+        price_type: d.price_type ?? "",
       })),
     }));
 
@@ -323,7 +328,12 @@ type DetailRow = {
   detail: string;
   category: string;
   price: number | null;
+  is_required: boolean | null;
+  price_type: string | null;
 };
+
+// วิธีคิดราคา: per_page = คิดต่อหน้า, per_set = คิดรวมทั้งไฟล์/ชุด (บวกครั้งเดียว)
+const PRICE_TYPES = ["per_page", "per_set"];
 
 const detailKey = (group_type: string, detail: string) =>
   `${group_type}\u0000${detail}`;
@@ -346,7 +356,17 @@ export const saveShopServices = async (
 
     const merged = new Map<
       string,
-      Map<string, { category: string; group_type: string; detail: string; price: number }>
+      Map<
+        string,
+        {
+          category: string;
+          group_type: string;
+          detail: string;
+          price: number;
+          is_required: boolean;
+          price_type: string;
+        }
+      >
     >();
 
     for (const s of services) {
@@ -364,11 +384,22 @@ export const saveShopServices = async (
         const detail = String(d?.detail ?? "").trim();
         if (!detail) continue;
         const group_type = String(d?.group_type ?? "").trim();
+
+        // ร้านต้องเลือกวิธีคิดราคาทุกรายการ ไม่มีค่าเริ่มต้น
+        const price_type = String(d?.price_type ?? "").trim();
+        if (!PRICE_TYPES.includes(price_type)) {
+          return res.status(400).json({
+            error: `กรุณาเลือกวิธีคิดราคา (ต่อหน้า / ต่อชุด) ของรายการ "${detail}"`,
+          });
+        }
+
         detailMap.set(detailKey(group_type, detail), {
           category: d?.category || type,
           group_type,
           detail,
           price: Number(d?.price) || 0,
+          is_required: d?.is_required === true, // ไม่ส่งมา = ไม่จำเป็น (default false)
+          price_type,
         });
       }
     }
@@ -395,7 +426,7 @@ export const saveShopServices = async (
     if (oldTypeIds.length > 0) {
       const { data: rows, error: rowsErr } = await supabase
         .from("service_detail")
-        .select("id, type_id, group_type, detail, category, price")
+        .select("id, type_id, group_type, detail, category, price, is_required, price_type")
         .in("type_id", oldTypeIds);
 
       if (rowsErr) {
@@ -437,7 +468,7 @@ export const saveShopServices = async (
 
             const { data: rows, error: rowsErr } = await supabase
               .from("service_detail")
-              .select("id, type_id, group_type, detail, category, price")
+              .select("id, type_id, group_type, detail, category, price, is_required, price_type")
               .eq("type_id", typeId);
             if (rowsErr) throw rowsErr;
             existingDetailsByType.set(typeId, (rows ?? []) as DetailRow[]);
@@ -457,7 +488,13 @@ export const saveShopServices = async (
 
         const incomingKeys = new Set<string>();
         const toInsert: any[] = [];
-        const toUpdate: { row: DetailRow; category: string; price: number }[] = [];
+        const toUpdate: {
+          row: DetailRow;
+          category: string;
+          price: number;
+          is_required: boolean;
+          price_type: string;
+        }[] = [];
 
         for (const d of s.details) {
           const key = detailKey(d.group_type, d.detail);
@@ -466,8 +503,19 @@ export const saveShopServices = async (
           const ex = existingByKey.get(key);
           if (!ex) {
             toInsert.push({ ...d, type_id: typeId });
-          } else if (Number(ex.price) !== d.price || ex.category !== d.category) {
-            toUpdate.push({ row: ex, category: d.category, price: d.price });
+          } else if (
+            Number(ex.price) !== d.price ||
+            ex.category !== d.category ||
+            Boolean(ex.is_required) !== d.is_required ||
+            (ex.price_type ?? "") !== d.price_type
+          ) {
+            toUpdate.push({
+              row: ex,
+              category: d.category,
+              price: d.price,
+              is_required: d.is_required,
+              price_type: d.price_type,
+            });
           }
         }
 
@@ -490,7 +538,12 @@ export const saveShopServices = async (
         for (const u of toUpdate) {
           const { error: updErr } = await supabase
             .from("service_detail")
-            .update({ category: u.category, price: u.price })
+            .update({
+              category: u.category,
+              price: u.price,
+              is_required: u.is_required,
+              price_type: u.price_type,
+            })
             .eq("id", u.row.id);
 
           if (updErr) throw updErr;
@@ -503,7 +556,12 @@ export const saveShopServices = async (
       for (const b of updatedBackups) {
         await supabase
           .from("service_detail")
-          .update({ category: b.category, price: b.price })
+          .update({
+            category: b.category,
+            price: b.price,
+            is_required: Boolean(b.is_required),
+            price_type: b.price_type,
+          })
           .eq("id", b.id);
       }
       if (createdDetailIds.length > 0) {

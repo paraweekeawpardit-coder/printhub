@@ -4,9 +4,23 @@ import supabase from "../../config/supabase.js";
 /**
  * GET /api/admin/payouts
  * ดึงรายการโอนเงินให้ร้านค้า (Shop Payouts)
+ * กรองออเดอร์ที่ติดรายงานปัญหา (pending, investigating) และออเดอร์ที่ถูกอนุมัติคืนเงิน (resolved_refund) ออกจากรายการ
  */
 export const getPayouts = async (req: Request, res: Response): Promise<Response> => {
   try {
+    // 1. ดึง order_id ทั้งหมดที่ไม่ควรโอนเงินให้ร้านค้า:
+    // - ติดรายงานปัญหาอยู่ (pending, investigating)
+    // - ได้รับการตัดสินอนุมัติคืนเงินให้ลูกค้าไปแล้ว (resolved_refund)
+    const { data: blockedReports } = await supabase
+      .from("report")
+      .select("order_id")
+      .in("status", ["pending", "investigating", "resolved_refund"]);
+
+    const blockedOrderIds = new Set(
+      (blockedReports || []).map((r: any) => String(r.order_id)).filter(Boolean)
+    );
+
+    // 2. ดึงรายการ Payment
     const { data: payments, error } = await supabase
       .from("payment")
       .select(`
@@ -39,8 +53,15 @@ export const getPayouts = async (req: Request, res: Response): Promise<Response>
 
     const formattedPayouts = (payments || [])
       .map((item: any) => {
-        // หากสถานะ Payout เป็น REJECTED ให้กรองออก หรือแยกแท็บตามต้องการ
+        // หากสถานะ Payout เป็น REJECTED ให้กรองออก
         if (item.status === "PAYOUT_REJECTED") return null;
+
+        const orderIdStr = String(item.order_id || item.order?.id || "");
+
+        // 🔴 กรองออกทันที หาก Order นี้อยู่ในตาราง report ด้วยสถานะ pending, investigating หรือ resolved_refund
+        if (blockedOrderIds.has(orderIdStr)) {
+          return null;
+        }
 
         const amount = Number(item.amount || item.order?.total_amount || item.order?.total_price || 0);
         const dbSmallFee = Number(item.order?.small_order_fee || 0);

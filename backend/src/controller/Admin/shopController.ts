@@ -10,6 +10,7 @@ export const getPendingShops = async (
   res: Response
 ): Promise<Response> => {
   try {
+    // 🟢 กรองเฉพาะร้านค้าที่สถานะเป็น 'pending' จริงๆ
     // 🟢 แก้ไข: กรองเฉพาะร้านค้าที่สถานะเป็น 'pending' จริงๆ (ไม่ดึงร้านที่โดนแบน suspended)
     const { data: shops, error: shopError } = await supabase
       .from("print_shop")
@@ -65,11 +66,7 @@ export const getPendingShops = async (
 
 /**
  * GET /api/admin/shops/all
-<<<<<<< HEAD
- * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่เคยผ่านการอนุมัติแล้ว (is_verify = true)
-=======
  * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่เคยผ่านการอนุมัติแล้ว (is_verify = true รวมถึงร้านที่โดนระงับ suspended)
->>>>>>> feature/admin
  */
 export const getAllShops = async (
   _req: Request,
@@ -210,11 +207,7 @@ export const toggleSuspendShop = async (
       .update({
         is_verify: true,
         status: newStatus,
-<<<<<<< HEAD
-        is_open: !isSuspend, // ถ้าโดนแบนให้ปิดร้านอัตโนมัติ
-=======
         is_open: !isSuspend,
->>>>>>> feature/admin
         suspend_reason: isSuspend ? reason : null,
       })
       .eq("id", shop_id)
@@ -376,31 +369,18 @@ export const approveOrRejectBankAccount = async (
 
     if (action === "approve") {
       if (targetShopId) {
-<<<<<<< HEAD
-        // 1. เปลี่ยนสถานะบัญชีเดิมของร้านที่เป็น 'approved' ให้กลายเป็น 'rejected'
-=======
->>>>>>> feature/admin
         await supabase
           .from("bank_account")
           .update({ status: "rejected" })
           .eq("shop_id", targetShopId)
           .eq("status", "approved");
 
-<<<<<<< HEAD
-        // 🟢 แก้ไข: ยกเลิกการอัปเดต status = 'approved' ของร้านค้าออก เพื่อป้องกันไม่ให้แบนหลุด
-        // ถ้าผู้ใช้เคยผ่านการยืนยันตัวตนแล้ว แค่ยืนยัน is_verify = true พอ
-=======
->>>>>>> feature/admin
         await supabase
           .from("print_shop")
           .update({ is_verify: true })
           .eq("id", targetShopId);
       }
 
-<<<<<<< HEAD
-      // 2. เปลี่ยนบัญชีใหม่ที่ยื่นมาให้กลายเป็น 'approved'
-=======
->>>>>>> feature/admin
       const { data: approvedData, error: approveError } = await supabase
         .from("bank_account")
         .update({ status: "approved" })
@@ -479,7 +459,6 @@ export const createContactAdmin = async (
       });
     }
 
-    // 📌 บันทึกข้อมูลคำร้องพร้อม attachment_urls ลงในตาราง shop_appeals
     const { data, error } = await supabase
       .from("shop_appeals")
       .insert([
@@ -499,7 +478,6 @@ export const createContactAdmin = async (
       return res.status(400).json({ error: error.message });
     }
 
-    // 🟢 กระจายแจ้งเตือนยื่นเรื่องปลดระงับไปยังแอดมินทุกคน
     try {
       const { data: admins } = await supabase.from("admin").select("id");
       if (admins && admins.length > 0) {
@@ -562,14 +540,19 @@ export const getShopAppealStatus = async (
   }
 };
 
+/**
+ * GET /api/admin/appeals
+ * ดึงรายการคำขอปลดระงับทั้งหมด (พร้อมข้อมูล phone และ suspend_reason จาก print_shop)
+ */
 export const getShopAppeals = async (
   _req: Request,
   res: Response
 ): Promise<Response> => {
   try {
+    // 🟢 แก้ไข: ระบุ phone และ suspend_reason เข้าไปใน select query ของร้านค้า
     const { data: appeals, error } = await supabase
       .from("shop_appeals")
-      .select("*, shop:shop_id(shop_name, profile_image, email)")
+      .select("*, shop:shop_id(shop_name, profile_image, email, phone, suspend_reason)")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -581,6 +564,47 @@ export const getShopAppeals = async (
   } catch (err: any) {
     console.error("GetShopAppeals Exception:", err.message || err);
     return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+/**
+ * PATCH /api/admin/appeals/reject
+ * ปฏิเสธคำขอปลดระงับร้านค้า
+ */
+export const rejectShopAppeal = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const appealId = req.body.appeal_id || req.body.appealId || req.body.id;
+
+    if (!appealId) {
+      return res.status(400).json({ error: "appeal_id is required" });
+    }
+
+    const { data, error } = await supabase
+      .from("shop_appeals")
+      .update({
+        status: "rejected",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", appealId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("RejectShopAppeal DB Error:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ปฏิเสธคำขอปลดระงับเรียบร้อยแล้ว",
+      data,
+    });
+  } catch (err: any) {
+    console.error("RejectShopAppeal Exception:", err.message || err);
+    return res.status(500).json({ error: "Server Error" });
   }
 };
 
@@ -622,7 +646,6 @@ export const nudgeShopAppeal = async (
       });
     }
 
-    // 🟢 กระจายแจ้งเตือนเร่งติดตามคำร้อง (ผ่านไป 3 วัน) ไปยังแอดมินทุกคน
     try {
       const { data: admins } = await supabase.from("admin").select("id");
       if (admins && admins.length > 0) {

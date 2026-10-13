@@ -1,5 +1,8 @@
 "use client";
 
+import { useRef } from "react";
+import { Image as ImageIcon } from "lucide-react";
+
 export interface ReportItem {
   id: string;
   customer_id?: string;
@@ -31,6 +34,37 @@ export default function ReportTable({
   onAcceptReport,
   onOpenImage,
 }: ReportTableProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // 🟢 ฟังก์ชันคำนวณการเลื่อนแนวนอนแบบ Smooth และลื่นไหล
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!scrollContainerRef.current) return;
+
+    const container = scrollContainerRef.current;
+    const { scrollLeft, scrollWidth, clientWidth } = container;
+    const maxScrollLeft = scrollWidth - clientWidth;
+
+    // ถ้าตารางกว้างจนสามารถเลื่อนแนวนอนได้
+    if (maxScrollLeft > 0) {
+      // ตรวจสอบว่าตารางยังไม่ชนขอบซ้ายสุดหรือขวาสุด
+      const isScrollable =
+        (e.deltaY > 0 && scrollLeft < maxScrollLeft) ||
+        (e.deltaY < 0 && scrollLeft > 0);
+
+      if (isScrollable) {
+        // ป้องกันไม่ให้หน้าต่างหลักเลื่อนขึ้น-ลงขณะหมุนเมาส์บนตาราง
+        e.preventDefault();
+
+        // ปรับความเร็วและใช้ scrollTo แบบ behavior: "smooth" เพื่อความนุ่มนวล
+        const scrollAmount = e.deltaY * 1.5;
+        container.scrollTo({
+          left: container.scrollLeft + scrollAmount,
+          behavior: "smooth",
+        });
+      }
+    }
+  };
+
   // พาร์สวันเวลา รองรับทั้ง ค.ศ. และ พ.ศ. ป้องกันปีเพี้ยน
   const parseDate = (dateString?: string): Date | null => {
     if (!dateString) return null;
@@ -42,9 +76,13 @@ export default function ReportTable({
       formattedStr = dateString.replace(/^(\d{4})/, String(adYear));
     }
 
+    if (formattedStr.includes("T") && !formattedStr.endsWith("Z") && !formattedStr.includes("+")) {
+      formattedStr += "Z";
+    }
+
     let d = new Date(formattedStr);
     if (isNaN(d.getTime())) {
-      d = new Date(formattedStr.replace(" ", "T") + "Z");
+      d = new Date(formattedStr.replace(" ", "T"));
     }
     return isNaN(d.getTime()) ? null : d;
   };
@@ -53,6 +91,7 @@ export default function ReportTable({
     const date = parseDate(dateString);
     if (!date) return "-";
     return date.toLocaleString("th-TH", {
+      timeZone: "Asia/Bangkok",
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -61,19 +100,18 @@ export default function ReportTable({
     });
   };
 
-  // คำนวณเวลานับถอยหลัง 48 ชม. จากเวลาที่กดรับเรื่อง (updated_at)
+  // คำนวณเวลานับถอยหลัง 48 ชม.
   const getRemainingCountdown = (updatedAt?: string) => {
-    const targetDate = parseDate(updatedAt);
-    if (!targetDate) return null;
+    const acceptedDate = parseDate(updatedAt);
+    if (!acceptedDate) return null;
 
-    const startTime = targetDate.getTime();
-    const now = Date.now();
+    const targetDeadlineMs = acceptedDate.getTime() + (48 * 60 * 60 * 1000);
+    const nowMs = Date.now();
 
-    const elapsedMs = now - startTime;
-    const limitMs = 48 * 60 * 60 * 1000; // 48 ชั่วโมง
+    const diffMs = targetDeadlineMs - nowMs;
 
-    if (elapsedMs >= limitMs) {
-      const overdueMs = elapsedMs - limitMs;
+    if (diffMs <= 0) {
+      const overdueMs = Math.abs(diffMs);
       const overdueHours = Math.floor(overdueMs / (1000 * 60 * 60));
       const overdueMinutes = Math.floor((overdueMs % (1000 * 60 * 60)) / (1000 * 60));
 
@@ -83,9 +121,8 @@ export default function ReportTable({
       };
     }
 
-    const remainingMs = limitMs - elapsedMs;
-    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
-    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
     return {
       text: `เหลือเวลา ${hours} ชม. ${minutes} นาที`,
@@ -95,17 +132,21 @@ export default function ReportTable({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden font-sans">
-      <div className="overflow-x-auto">
+      <div 
+        ref={scrollContainerRef}
+        onWheel={handleWheel}
+        className="overflow-x-auto scroll-smooth"
+      >
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              <th className="py-4 px-4">สถานะ</th>
-              <th className="py-4 px-4">ข้อมูลออเดอร์และผู้เกี่ยวข้อง</th>
-              <th className="py-4 px-4">รายละเอียดปัญหา</th>
-              <th className="py-4 px-4">หลักฐาน</th>
-              <th className="py-4 px-4">วันที่ยื่นเรื่อง</th>
-              <th className="py-4 px-4">วันที่รับเรื่อง</th>
-              <th className="py-4 px-4 text-center">การจัดการ</th>
+              <th className="py-4 px-4 whitespace-nowrap">สถานะ</th>
+              <th className="py-4 px-4 whitespace-nowrap">ข้อมูลออเดอร์และผู้เกี่ยวข้อง</th>
+              <th className="py-4 px-4 whitespace-nowrap">รายละเอียดปัญหา</th>
+              <th className="py-4 px-4 whitespace-nowrap">หลักฐาน</th>
+              <th className="py-4 px-4 whitespace-nowrap">วันที่ยื่นเรื่อง</th>
+              <th className="py-4 px-4 whitespace-nowrap">วันที่รับเรื่อง</th>
+              <th className="py-4 px-4 text-center whitespace-nowrap">การจัดการ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm">
@@ -122,7 +163,6 @@ export default function ReportTable({
                   item.order_id_display ||
                   (item.order_id ? `#${item.order_id.slice(0, 8)}` : "-");
 
-                // ตรวจสอบว่าแอดมินกดรับเรื่องแล้วหรือยัง (ต้องไม่ใช่สถานะ pending)
                 const isAccepted = item.status !== "pending" && Boolean(item.updated_at);
                 const countdown = isAccepted ? getRemainingCountdown(item.updated_at) : null;
 
@@ -171,7 +211,7 @@ export default function ReportTable({
                     </td>
 
                     {/* รายละเอียดปัญหา */}
-                    <td className="py-4 px-4 max-w-xs">
+                    <td className="py-4 px-4 min-w-[220px] max-w-xs">
                       <p className="font-medium text-slate-800 truncate text-xs" title={item.description}>
                         {item.description || "-"}
                       </p>
@@ -184,9 +224,7 @@ export default function ReportTable({
                           onClick={() => onOpenImage(item)}
                           className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
+                          <ImageIcon className="w-3.5 h-3.5" />
                           ดูรูปถ่าย
                         </button>
                       ) : (
@@ -194,12 +232,12 @@ export default function ReportTable({
                       )}
                     </td>
 
-                    {/* วันที่ยื่นเรื่อง (created_at) */}
+                    {/* วันที่ยื่นเรื่อง */}
                     <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600">
                       <div>{formatDate(item.created_at)}</div>
                     </td>
 
-                    {/* วันที่รับเรื่อง (updated_at) / นับถอยหลัง 48 ชม. */}
+                    {/* วันที่รับเรื่อง / นับถอยหลัง 48 ชม. */}
                     <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600">
                       {isAccepted ? (
                         <div>
