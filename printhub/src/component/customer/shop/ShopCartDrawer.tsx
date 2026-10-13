@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ShoppingBag, Trash2, X, Loader2 } from "lucide-react";
+import { ShoppingBag, Trash2, X, Loader2, CalendarCheck, ArrowRight } from "lucide-react";
 import CartItemCard from "./CartItemCard";
 import CartScheduleForm from "./CartScheduleForm";
 
@@ -94,6 +94,10 @@ export default function ShopCartDrawer({
     (sum, item) => sum + getItemSubtotal(item),
     0
   );
+
+  // ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (เหมือน backend: ยอดต่ำกว่า 50 บาท +20 บาท)
+  const smallOrderFee = totalCartPrice > 0 && totalCartPrice < 50 ? 20 : 0;
+  const netTotal = totalCartPrice + smallOrderFee;
 
   const getNowInfo = () => {
     const now = new Date();
@@ -191,15 +195,20 @@ export default function ShopCartDrawer({
           onClick={handleClose}
         >
           <div
-            className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[88vh] overflow-hidden"
+            className="bg-white w-full max-w-lg md:max-w-5xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-base text-slate-900">
-                  ตะกร้าสินค้า ({shop?.shop_name || shop?.name || "ร้านค้า"})
-                </h3>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl shrink-0">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-base text-slate-900 leading-tight">ตะกร้าสินค้า</h3>
+                  <p className="text-xs text-slate-500 truncate">
+                    ร้าน {shop?.shop_name || shop?.name || "ร้านค้า"} · {cartItems.length} รายการ
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {cartItems.length > 0 && (
@@ -224,12 +233,12 @@ export default function ShopCartDrawer({
               </div>
             </div>
 
-            <div className="p-5 overflow-y-auto space-y-4 flex-1">
-              <div className="space-y-2.5">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+            <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden md:grid md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
+              {/* ซ้าย: รายการงานพิมพ์ */}
+              <div className="p-5 bg-slate-50/60 space-y-2.5 md:overflow-y-auto">
+                <span className="text-sm font-bold text-slate-900 block">
                   รายการงานพิมพ์ ({cartItems.length})
                 </span>
-
                 {cartItems.map((item, idx) => (
                   <CartItemCard
                     key={item.id || idx}
@@ -250,56 +259,106 @@ export default function ShopCartDrawer({
                 ))}
               </div>
 
-              <CartScheduleForm
-                todayStr={todayStr}
-                shopOpen={shopOpen}
-                shopClose={shopClose}
-                isOpenOvernight={isOpenOvernight}
-                appointmentDate={appointmentDate}
-                appointmentTime={appointmentTime}
-                orderNote={orderNote}
-                timeError={timeError}
-                onDateChange={(d) => {
-                  setAppointmentDate(d);
-                  setTimeError("");
-                }}
-                onTimeChange={(t) => {
-                  setAppointmentTime(t);
-                  setTimeError("");
-                }}
-                onNoteChange={setOrderNote}
-              />
-            </div>
+              {/* ขวา: นัดรับ + หมายเหตุ + สรุปยอด */}
+              <div className="flex flex-col md:min-h-0 md:border-l md:border-slate-100">
+                <div className="p-5 md:flex-1 md:overflow-y-auto">
+                  <CartScheduleForm
+                    todayStr={todayStr}
+                    shopOpen={shopOpen}
+                    shopClose={shopClose}
+                    isOpenOvernight={isOpenOvernight}
+                    appointmentDate={appointmentDate}
+                    appointmentTime={appointmentTime}
+                    orderNote={orderNote}
+                    timeError={timeError}
+                    onDateChange={(d) => {
+                      setAppointmentDate(d);
+                      setTimeError("");
+                    }}
+                    onTimeChange={(t) => {
+                      setAppointmentTime(t);
+                      setTimeError("");
+                    }}
+                    onNoteChange={setOrderNote}
+                  />
+                </div>
 
-            <div className="p-4 border-t border-slate-100 bg-white space-y-3 shrink-0">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500 font-medium">ยอดรวมทั้งหมด</span>
-                <span className="text-xl font-extrabold text-blue-600">
-                  ฿{totalCartPrice.toFixed(2)}
-                </span>
+                <div className="p-5 border-t border-slate-100 bg-white space-y-4 shrink-0 sticky bottom-0 md:static">
+                  {/* การ์ดสรุปนัดรับ */}
+                  {appointmentDate && appointmentTime ? (
+                    <div className="flex items-center gap-3 rounded-2xl bg-blue-50 border border-blue-100 px-4 py-3">
+                      <div className="w-10 h-10 rounded-xl bg-white text-blue-600 flex items-center justify-center shadow-xs shrink-0">
+                        <CalendarCheck className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-medium text-blue-600">นัดรับงาน</p>
+                        <p className="text-sm font-bold text-slate-900 truncate">
+                          {(() => {
+                            const [y, m, d] = appointmentDate.split("-").map(Number);
+                            return new Date(y, m - 1, d).toLocaleDateString("th-TH", {
+                              weekday: "long",
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            });
+                          })()}{" "}
+                          · {appointmentTime.slice(0, 5)} น.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-2xl border border-dashed border-slate-300 px-4 py-3 text-xs text-slate-500">
+                      <CalendarCheck className="w-4 h-4 text-slate-400 shrink-0" />
+                      เลือกวันและเวลานัดรับก่อนไปชำระเงิน
+                    </div>
+                  )}
+
+                  {/* สรุปยอด */}
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex justify-between text-slate-500">
+                      <span>ค่างานพิมพ์ ({cartItems.length} รายการ)</span>
+                      <span className="text-slate-700 font-medium">฿{totalCartPrice.toFixed(2)}</span>
+                    </div>
+                    {smallOrderFee > 0 && (
+                      <div className="flex justify-between text-orange-600">
+                        <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (&lt;50 บาท)</span>
+                        <span className="font-medium">+฿{smallOrderFee.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-end justify-between pt-2 border-t border-slate-100">
+                      <span className="font-semibold text-slate-900">ยอดชำระสุทธิ</span>
+                      <span className="text-2xl font-extrabold text-blue-600 leading-none">
+                        ฿{netTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={shop?.is_open === false || isSubmitting}
+                    onClick={handleConfirmCheckout}
+                    className={`w-full py-3.5 rounded-2xl text-sm font-bold transition shadow-lg flex items-center justify-center gap-2 ${
+                      shop?.is_open === false || isSubmitting
+                        ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
+                        : "bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white shadow-blue-500/30 cursor-pointer"
+                    }`}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>กำลังสร้างคำสั่งซื้อ...</span>
+                      </>
+                    ) : shop?.is_open === false ? (
+                      "ร้านปิดทำการ (ไม่สามารถสั่งได้)"
+                    ) : (
+                      <>
+                        <span>ไปที่หน้าชำระเงิน</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-
-              <button
-                type="button"
-                disabled={shop?.is_open === false || isSubmitting}
-                onClick={handleConfirmCheckout}
-                className={`w-full py-3 rounded-xl text-xs sm:text-sm font-bold transition shadow-md flex items-center justify-center gap-2 ${
-                  shop?.is_open === false || isSubmitting
-                    ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
-                    : "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25 cursor-pointer"
-                }`}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>กำลังสร้างคำสั่งซื้อ...</span>
-                  </>
-                ) : shop?.is_open === false ? (
-                  "ร้านปิดทำการ (ไม่สามารถสั่งได้)"
-                ) : (
-                  "ไปที่หน้าชำระเงิน →"
-                )}
-              </button>
             </div>
           </div>
         </div>

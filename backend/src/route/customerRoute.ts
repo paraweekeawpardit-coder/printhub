@@ -41,7 +41,7 @@ import {
   checkOrderStatusReported
 } from '../controller/customerController.js';
 
-import { getCustomerProfile, updateCustomerProfile } from '../controller/settingController.js';
+import { getCustomerProfile, updateCustomerProfile, changeCustomerPassword, uploadCustomerAvatar } from '../controller/settingController.js';
 
 const router = express.Router();
 
@@ -140,5 +140,7 @@ router.post("/upload-file", upload.single("file"), async (req, res) => {
 
 router.get('/profile', getCustomerProfile);
 router.put('/profile', updateCustomerProfile);
+router.put('/profile/password', changeCustomerPassword);
+router.put('/profile/avatar', upload.single('avatar'), uploadCustomerAvatar);
 
 export default router;

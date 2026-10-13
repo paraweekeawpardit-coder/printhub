@@ -436,6 +436,7 @@ export default function CustomerOrderCard({
       <OrderItemsAccordion
         isExpanded={isExpanded}
         items={items}
+        files={order?.print_file || []}
         description={order?.description}
         subtotalPrice={subtotalPrice}
         smallOrderFee={smallOrderFee}
