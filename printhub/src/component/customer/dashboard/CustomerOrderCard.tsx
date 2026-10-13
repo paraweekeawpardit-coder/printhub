@@ -50,6 +50,11 @@ export default function CustomerOrderCard({
   // 1. ตรวจสอบข้อมูล payment
   const rawPayment = order?.payment || order?.payment_detail || order?.payments;
   const paymentData = Array.isArray(rawPayment) ? rawPayment[0] : rawPayment;
+<<<<<<< HEAD
+  const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
+  const refundSlipUrl = paymentData?.refund_slip_url || null;
+
+=======
 
   const paymentStatus = paymentData?.status ? String(paymentData.status).toLowerCase().trim() : "";
   const refundSlipUrl = paymentData?.refund_slip_url || null;
@@ -63,6 +68,7 @@ export default function CustomerOrderCard({
   //   order?.payment_id
   // );
 
+>>>>>>> 2f8199bdb04046dec777a50699cd90ca3aade69c
   const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
 
   // 🌟 จุดแก้สำคัญ: ถ้าสลิปโดนปฏิเสธ (isSlipRejected) ต้องถือว่า "ยังไม่มีสลิปที่ถูกต้อง" (hasPaidSlip = false)
@@ -304,8 +310,14 @@ export default function CustomerOrderCard({
 
           <div className="flex items-center justify-between md:justify-end gap-3.5">
             <div className="flex items-center gap-2 flex-wrap">
+<<<<<<< HEAD
+              
+              {/* 🌟 1. แสดงป้ายสลิปไม่ถูกต้อง "เฉพาะตอนที่ยังไม่หมดเวลา" เท่านั้น */}
+              {isSlipRejected && !isCanceled && !isPaymentExpired && (
+=======
 
               {isSlipRejected && !isCanceled && (
+>>>>>>> 2f8199bdb04046dec777a50699cd90ca3aade69c
                 <span className="text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 px-2 py-1 rounded-xl flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 text-rose-500" />
                   สลิปไม่ถูกต้อง แนบใหม่ก่อนหมดเวลา

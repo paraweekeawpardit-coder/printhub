@@ -84,6 +84,16 @@ export default function CustomerDashboardView({
     return isNaN(parsed) ? null : parsed;
   };
 
+  // เวลานัดรับเก็บเป็นเวลาไทยแบบไม่มี timezone -> ตีความเป็น +07:00
+  const parseBangkokTime = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    let cleaned = String(dateStr).trim().replace(" ", "T");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) cleaned += "T00:00:00";
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(cleaned)) cleaned += "+07:00";
+    const parsed = new Date(cleaned).getTime();
+    return isNaN(parsed) ? null : parsed;
+  };
+
   // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์ (แก้ไขไม่ให้เหมารวมออเดอร์ที่ดำเนินงานไปแล้วเป็นยกเลิก)
   const getRealOrderState = (o: any) => {
     if (!o) return "รอการดำเนินงาน";
@@ -110,7 +120,7 @@ export default function CustomerDashboardView({
     ) {
       // ตรวจสอบเฉพาะกรณีเลยเวลานัดรับงาน และงานยังค้างอยู่ที่รอดำเนินงาน/กำลังพิมพ์ (S2G7 Auto-Cancel)
       const now = Date.now();
-      const appointmentMs = parseSafeTime(o?.appointment_time);
+      const appointmentMs = parseBangkokTime(o?.appointment_time);
       if (appointmentMs && now >= appointmentMs && (dbState === "รอการดำเนินงาน" || dbState === "กำลังพิมพ์")) {
         return "ยกเลิกการพิมพ์";
       }

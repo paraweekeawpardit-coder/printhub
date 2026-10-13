@@ -56,7 +56,7 @@ export const getOrder = async (
         `
         id, order_no, description, subtotal_price, small_order_fee, platform_fee,
         total_amount, order_date, receive_date, appointment_time, current_status_id,
-        payment_id, review_id, rejecect_reason,
+        payment_id, review_id, reject_reason,
         customer (
           id, first_name, last_name, contact,
           address ( detail, subdistrict, district, province, postcode )
@@ -100,7 +100,7 @@ export const getOrder = async (
         order_date: order.order_date,
         receive_date: resolveReceiveDate(order.receive_date, order.appointment_time),
         description: order.description,
-        reject_reason: (order as any).rejecect_reason || null,
+        reject_reason: (order as any).reject_reason || null,
         subtotal_price: Number(order.subtotal_price || 0),
         small_order_fee: Number(order.small_order_fee || 0),
         platform_fee: Number(order.platform_fee || 0),
@@ -185,9 +185,9 @@ export const updateOrderStatus = async (
       updatePayload.work_state_id = newWorkStatus.id;
     }
 
-    // เก็บเหตุผลที่ปฏิเสธลงคอลัมน์ rejecect_reason (ชื่อคอลัมน์ตามที่มีใน DB)
+    // เก็บเหตุผลที่ปฏิเสธลงคอลัมน์ reject_reason (ชื่อคอลัมน์ตามที่มีใน DB)
     if (status_name === ORDER_CANCELLED_STATE) {
-      updatePayload.rejecect_reason = rejectReason;
+      updatePayload.reject_reason = rejectReason;
     }
 
     const { error: updateError } = await supabase
