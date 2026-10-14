@@ -33,7 +33,7 @@ interface ShopCartDrawerProps {
     appointment_time: string;
     description: string;
     total_price: number;
-  }) => void;
+  }) => void | string | Promise<void | string>;
   isSubmitting?: boolean;
 }
 
@@ -107,7 +107,7 @@ export default function ShopCartDrawer({
     return { todayStr, minAllowedTimeStr };
   };
 
-  const handleConfirmCheckout = () => {
+  const handleConfirmCheckout = async () => {
     const { todayStr, minAllowedTimeStr } = getNowInfo();
 
     if (!appointmentDate || !appointmentTime) {
@@ -145,12 +145,15 @@ export default function ShopCartDrawer({
     }
 
     setTimeError("");
-    onProceedToPayment({
+    const errorMessage = await onProceedToPayment({
       receive_date: appointmentDate,
       appointment_time: `${appointmentDate}T${selectedTime}:00`,
       description: orderNote,
       total_price: totalCartPrice,
     });
+    if (typeof errorMessage === "string" && errorMessage) {
+      setTimeError(errorMessage);
+    }
   };
 
   const { todayStr } = getNowInfo();
