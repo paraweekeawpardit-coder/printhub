@@ -233,8 +233,9 @@ export default function ShopMainPage() {
     }
   };
 
-  const handleProceedToPayment = async (appointmentData: any) => {
-    if (!shopId || !cartItems || cartItems.length === 0) return;
+  // คืนค่าเป็นข้อความ error (ถ้ามี) เพื่อให้ตะกร้าแสดงให้ลูกค้าเห็น
+  const handleProceedToPayment = async (appointmentData: any): Promise<string | void> => {
+    if (!shopId || !cartItems || cartItems.length === 0) return "ไม่มีรายการในตะกร้า";
 
     const formattedItems = cartItems.map((item: any) => {
       const itemSubtotal =
@@ -283,7 +284,7 @@ export default function ShopMainPage() {
 
       if (!res.ok || !result.success) {
         console.warn("Order creation notice:", result.message || "ไม่สามารถสร้างคำสั่งซื้อได้");
-        return;
+        return result.message || result.error || "ไม่สามารถสร้างคำสั่งซื้อได้ กรุณาลองใหม่อีกครั้ง";
       }
 
       const realOrderId = result.data?.order_id || result.data?.id || fallbackOrderId;
@@ -312,6 +313,7 @@ export default function ShopMainPage() {
       router.push(`/customer/order/payment/${realOrderId}?${queryParams.toString()}`);
     } catch (err: any) {
       console.error("Order API exception:", err);
+      return "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง";
     } finally {
       setIsSubmittingOrder(false);
     }

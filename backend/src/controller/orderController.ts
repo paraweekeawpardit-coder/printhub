@@ -122,7 +122,11 @@ export const createOrder = async (req: Request, res: Response) => {
       const nowMs = Date.now();
       const appointmentMs = parseBangkokTime(appointment_time) ?? NaN;
 
-      if (appointmentMs < nowMs + 30 * 60 * 1000) {
+      // เผื่อ 60 วินาที เพราะหน้าเว็บเลือกเวลาได้ละเอียดแค่ระดับนาที
+      if (isNaN(appointmentMs)) {
+        return res.status(400).json({ success: false, message: "รูปแบบเวลานัดรับไม่ถูกต้อง" });
+      }
+      if (appointmentMs < nowMs + 30 * 60 * 1000 - 60 * 1000) {
         return res.status(400).json({
           success: false,
           message: "เวลานัดรับงานต้องล่วงหน้าอย่างน้อย 30 นาที",
