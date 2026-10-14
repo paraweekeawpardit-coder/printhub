@@ -39,6 +39,8 @@ type Props = {
   setOpenTime: (v: string) => void;
   closeTime: string;
   setCloseTime: (v: string) => void;
+  openDays: number[];
+  setOpenDays: (v: number[]) => void;
   address: AddressData;
   setAddress: React.Dispatch<React.SetStateAction<AddressData>>;
   onSave: () => void;
@@ -47,6 +49,9 @@ type Props = {
   isEditing: boolean;
   onToggleEdit: () => void;
 };
+
+// index = ค่าใน open_days (0=อาทิตย์ ... 6=เสาร์)
+const DAY_LABELS = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
 
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_MB = 5;
@@ -316,6 +321,8 @@ export default function ShopProfileTab({
   setOpenTime,
   closeTime,
   setCloseTime,
+  openDays,
+  setOpenDays,
   address,
   setAddress,
   onSave,
@@ -339,6 +346,7 @@ export default function ShopProfileTab({
     phone: string;
     openTime: string;
     closeTime: string;
+    openDays: number[];
     address: AddressData;
   } | null>(null);
 
@@ -349,6 +357,7 @@ export default function ShopProfileTab({
       phone,
       openTime,
       closeTime,
+      openDays: [...openDays],
       address: { ...address },
     };
     setPhoneError("");
@@ -363,12 +372,21 @@ export default function ShopProfileTab({
       setPhone(snapshotRef.current.phone);
       setOpenTime(snapshotRef.current.openTime);
       setCloseTime(snapshotRef.current.closeTime);
+      setOpenDays([...snapshotRef.current.openDays]);
       setAddress({ ...snapshotRef.current.address });
       snapshotRef.current = null;
     }
     setPhoneError("");
     setAddressErrors({});
     onToggleEdit();
+  };
+
+  const toggleDay = (d: number) => {
+    setOpenDays(
+      openDays.includes(d)
+        ? openDays.filter((x) => x !== d)
+        : [...openDays, d].sort((a, b) => a - b)
+    );
   };
 
   const addressText = [
@@ -429,6 +447,10 @@ export default function ShopProfileTab({
 
     if (phone.length > 0 && phone.length < 10) {
       setPhoneError("เบอร์โทรศัพท์ต้องมี 10 หลัก");
+      hasError = true;
+    }
+
+    if (openDays.length === 0) {
       hasError = true;
     }
 
@@ -568,6 +590,11 @@ export default function ShopProfileTab({
                   <Clock size={14} className="text-slate-400" />
                   {openTime} — {closeTime} น.
                 </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {openDays.length === 0
+                    ? "-"
+                    : openDays.map((d) => DAY_LABELS[d]).join(" ")}
+                </p>
               </div>
             </div>
 
@@ -665,6 +692,31 @@ export default function ShopProfileTab({
                   align="right"
                 />
               </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {DAY_LABELS.map((label, d) => {
+                  const active = openDays.includes(d);
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => toggleDay(d)}
+                      aria-pressed={active}
+                      className={`h-9 min-w-11 rounded-xl border px-3 text-xs font-semibold transition-colors ${
+                        active
+                          ? "border-[#2F6FED] bg-[#2F6FED] text-white"
+                          : "border-slate-200 text-slate-500 hover:border-[#2F6FED]"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              {openDays.length === 0 && (
+                <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-500">
+                  <AlertCircle size={12} /> เลือกอย่างน้อย 1 วัน
+                </p>
+              )}
             </div>
 
             <div>

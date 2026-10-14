@@ -5,6 +5,10 @@ import jwt from "jsonwebtoken";
 import "multer"
 import { isValidEmail, passwordPolicyError } from "./Validator.js";
 
+const DEFAULT_OPEN_TIME = "09:00";
+const DEFAULT_CLOSE_TIME = "18:00";
+const DEFAULT_OPEN_DAYS = [1, 2, 3, 4, 5]; // 0=อาทิตย์ ... 6=เสาร์ (จันทร์-ศุกร์)
+
 interface MulterRequest extends Request {
   files?: {
     [fieldname: string]: Express.Multer.File[];
@@ -27,6 +31,7 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
       subdistrict,
       zipcode,
       bank,
+      bank_account_name,
       bank_number,
       password,
     } = req.body;
@@ -138,6 +143,9 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
           profile_image: shopImagePath,
           address_id: newAddress.id,
           is_verify: false,
+          open_time: DEFAULT_OPEN_TIME,
+          close_time: DEFAULT_CLOSE_TIME,
+          open_days: DEFAULT_OPEN_DAYS,
         },
       ])
       .select("id")
@@ -166,11 +174,16 @@ export const registerShop = async (req: MulterRequest, res: Response): Promise<R
     }
 
     if (bank && bank_number) {
+      const accountHolderName =
+        typeof bank_account_name === "string" && bank_account_name.trim()
+          ? bank_account_name.trim()
+          : owner_name;
+
       const { error: bankError } = await supabase.from("bank_account").insert([
         {
           shop_id: newShop.id,
           bank_name: bank,
-          account_name: owner_name,
+          account_name: accountHolderName,
           account_number: bank_number,
         },
       ]);
