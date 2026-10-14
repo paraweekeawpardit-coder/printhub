@@ -349,7 +349,8 @@ export default function CustomerOrderCard({
               )}
 
               {/* 🌟 3. ปุ่มยกเลิก: ซ่อนทันทีถ้าหมดเวลาแล้ว (เพราะสถานะกลายเป็นยกเลิกไปแล้ว) */}
-              {!isCanceled && !isPaymentExpired && (isPending || isPendingPayment) && (
+              {/* ยกเลิกได้: รอชำระเงิน (ยังไม่หมดเวลา) หรือ รอการดำเนินงาน (ไม่ว่าร้านตรวจสลิปแล้วหรือยัง) */}
+              {!isCanceled && (isPending || isPendingPayment) && (
                 <button
                   type="button"
                   onClick={() => onCancelClick?.(order.id, orderNumberStr)}
