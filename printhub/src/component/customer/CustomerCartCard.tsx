@@ -9,7 +9,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Store, Clock, ChevronDown, Trash2, ArrowRight, Paperclip } from "lucide-react";
+import { Store, Clock, ChevronDown, Trash2, ArrowRight, Paperclip, Loader2 } from "lucide-react";
 import { formatOpenDays, isEveryDay } from "./shopOpenDays";
 
 interface CartGroupedShop {
@@ -28,11 +28,11 @@ interface CustomerCartCardProps {
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   onClearCart?: (shopId: string) => void;
+  onRemoveItem?: (itemId: string) => void | Promise<void>;
 }
 
 const SMALL_ORDER_LIMIT = 50; // เหมือน backend: ยอดต่ำกว่า 50 บาท
 const SMALL_ORDER_FEE = 20; // +20 บาท
-const SIDE_LABEL: Record<string, string> = { SINGLE: "หน้าเดียว", DOUBLE: "สองหน้า" };
 
 const baht = (n: number) =>
   `฿${n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -51,10 +51,24 @@ export default function CustomerCartCard({
   isExpanded: controlledExpanded,
   onToggleExpand: controlledToggle,
   onClearCart,
+  onRemoveItem,
 }: CustomerCartCardProps) {
   const router = useRouter();
   const [internalExpanded, setInternalExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmItemId, setConfirmItemId] = useState<string | null>(null);
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null);
+
+  const handleRemoveItem = async (itemId: string) => {
+    if (!onRemoveItem) return;
+    setRemovingItemId(itemId);
+    try {
+      await onRemoveItem(itemId);
+    } finally {
+      setRemovingItemId(null);
+      setConfirmItemId(null);
+    }
+  };
 
   const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
   const toggleExpand = controlledToggle || (() => setInternalExpanded(!internalExpanded));
@@ -194,13 +208,13 @@ export default function CustomerCartCard({
             const quantity = Number(item?.quantity) || 1;
             const pageCount = Number(item?.page_count || item?.total_pages) || 1;
             const unitPrice = Number(item?.price_per_page) || Number(item?.unit_price) || 0;
-            const itemSubtotal = Number(item?.subtotal) || unitPrice * pageCount * quantity;
+            // unit_price = ราคาต่อชุด
+            const itemSubtotal = Number(item?.subtotal) || unitPrice * quantity;
 
             const specs = [
               item?.selected_size,
               item?.color_type,
               item?.paper_type,
-              item?.side_type ? SIDE_LABEL[String(item.side_type).toUpperCase()] || item.side_type : null,
               item?.finishing_option,
             ].filter((s) => s && String(s).trim());
 
@@ -219,11 +233,45 @@ export default function CustomerCartCard({
                     <div className="min-w-0">
                       <p className="font-bold text-slate-900 text-sm">{item?.category || "เอกสาร"}</p>
                       <p className="text-xs text-slate-500">
-                        {pageCount} หน้า × {quantity} ชุด · {baht(unitPrice)}/หน้า
+                        {pageCount} หน้า × {quantity} ชุด
                       </p>
                     </div>
                   </div>
-                  <span className="font-bold text-slate-900 text-sm shrink-0">{baht(itemSubtotal)}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-bold text-slate-900 text-sm">{baht(itemSubtotal)}</span>
+                    {onRemoveItem && item?.id && (
+                      removingItemId === item.id ? (
+                        <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                      ) : confirmItemId === item.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmItemId(null)}
+                            className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                          >
+                            ยกเลิก
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="px-2 py-1 text-[11px] font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-lg transition cursor-pointer"
+                          >
+                            ลบรายการ
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmItemId(item.id)}
+                          title="ลบรายการนี้"
+                          aria-label="ลบรายการนี้"
+                          className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )
+                    )}
+                  </div>
                 </div>
 
                 {(specs.length > 0 || fileUrls.length > 0) && (

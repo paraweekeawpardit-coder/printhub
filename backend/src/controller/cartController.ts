@@ -47,8 +47,7 @@ export const getCart = async (req: Request, res: Response) => {
           unit_price,
           subtotal,
           file_url,
-          page_count,
-          side_type
+          page_count
         )
       `)
       .eq("customer_id", customerId);
@@ -176,7 +175,6 @@ export const addToCart = async (req: Request, res: Response) => {
       file_url,
       total_pages,
       page_count,
-      side_type,
     } = req.body;
 
     const actualCustomerId = (req as any).user?.id || customer_id;
@@ -242,7 +240,6 @@ export const addToCart = async (req: Request, res: Response) => {
       unit_price: parsedUnitPrice,
       // subtotal: calculatedSubtotal,
       page_count: calculatedPages,
-      side_type: side_type || "SINGLE",
       total_pages: calculatedPages,
     };
 

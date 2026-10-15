@@ -37,9 +37,10 @@ export default function CustomerCartOverviewPage() {
     });
   };
 
-  const loadAllCarts = useCallback(async (cid: string) => {
+  // silent = โหลดใหม่เบื้องหลัง (ไม่แสดงหน้าโหลดทั้งหน้า) ใช้หลังลบรายการ
+  const loadAllCarts = useCallback(async (cid: string, silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetch(`http://localhost:5000/api/customer/cart?customer_id=${cid}`, {
         cache: "no-store",
       });
@@ -96,6 +97,18 @@ export default function CustomerCartOverviewPage() {
     }
   };
 
+  // ลบทีละรายการ
+  const handleRemoveItem = async (itemId: string) => {
+    try {
+      await fetch(`http://localhost:5000/api/customer/cart/item/${itemId}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.error("Delete cart item error:", err);
+    }
+    await loadAllCarts(customerId, true);
+  };
+
   const totalItemsCount = groupedCarts.reduce((sum, g) => sum + g.items.length, 0);
 
   return (
@@ -105,16 +118,28 @@ export default function CustomerCartOverviewPage() {
       <main className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4 flex-1">
         
         {/* Header บาร์บน */}
-        <div className="flex items-center gap-3">
-          <ShopBackButton />
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">ตะกร้าสินค้าของคุณ</h1>
-            {!loading && groupedCarts.length > 0 && (
-              <p className="text-xs text-slate-500 mt-0.5">
-                {groupedCarts.length} ร้านค้า · {totalItemsCount} รายการ · สั่งซื้อแยกทีละร้าน
-              </p>
-            )}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <ShopBackButton />
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-slate-900">ตะกร้าสินค้าของคุณ</h1>
+              {!loading && groupedCarts.length > 0 && (
+                <p className="text-xs text-slate-500 mt-0.5">
+                  สั่งซื้อแยกทีละร้าน (1 ร้าน = 1 คำสั่งซื้อ)
+                </p>
+              )}
+            </div>
           </div>
+
+          {/* สรุปจำนวนในตะกร้า (ขวาบน) */}
+          {!loading && groupedCarts.length > 0 && (
+            <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-xs font-semibold text-blue-700">
+              <ShoppingBag className="w-3.5 h-3.5" />
+              {totalItemsCount} รายการ
+              <span className="text-blue-300">·</span>
+              {groupedCarts.length} ร้าน
+            </span>
+          )}
         </div>
 
         {loading ? (
@@ -146,6 +171,7 @@ export default function CustomerCartOverviewPage() {
                 isExpanded={expandedShopIds.has(group.shop_id)}
                 onToggleExpand={() => toggleExpand(group.shop_id)}
                 onClearCart={handleClearShopCart}
+                onRemoveItem={handleRemoveItem}
               />
             ))}
           </div>
