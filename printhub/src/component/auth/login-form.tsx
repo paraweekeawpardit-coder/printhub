@@ -5,6 +5,11 @@ import Link from "next/link";
 import { Eye, EyeOff, ShieldCheck, Store } from "lucide-react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import {
+  GoogleOAuthProvider,
+  GoogleLogin,
+  CredentialResponse,
+} from "@react-oauth/google";
 import { isValidEmail, EMAIL_FORMAT_ERROR } from "../auth/Validators";
 import { FieldError } from "../../component/auth/From-feedback";
 
@@ -13,7 +18,8 @@ type RegisFormProps = {
 };
 
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const API_URL = rawApiUrl.replace(/\/+\$/, "");
+const API_URL = rawApiUrl.replace(/\/+$/, "");
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 export default function LoginForm({ setRegis }: RegisFormProps) {
   const router = useRouter();
@@ -88,6 +94,45 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
       console.error(err);
       setMessage(
         err.response?.data?.error || "เกิดข้อผิดพลาด ไม่สามารถเข้าสู่ระบบได้"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleSuccess(cred: CredentialResponse) {
+    if (!cred.credential) {
+      setMessage("ไม่สามารถเข้าสู่ระบบด้วย Google ได้");
+      return;
+    }
+
+    setMessage("");
+    setLoading(true);
+
+    try {
+      const res = await axios.post(`${API_URL}/auth/google`, {
+        credential: cred.credential,
+      });
+
+      if (!res.data.token) {
+        setMessage(res.data.error || "ไม่สามารถเข้าสู่ระบบด้วย Google ได้");
+        return;
+      }
+
+      ["token", "id", "customer_id", "shop_id", "shop_name", "user_email", "username"].forEach(
+        (k) => localStorage.removeItem(k)
+      );
+
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("id", res.data.id);
+      localStorage.setItem("customer_id", res.data.id);
+      localStorage.setItem("user_email", res.data.email);
+      localStorage.setItem("username", res.data.name || "");
+      router.push("/customer");
+    } catch (err: any) {
+      console.error(err);
+      setMessage(
+        err.response?.data?.error || "เกิดข้อผิดพลาด ไม่สามารถเข้าสู่ระบบด้วย Google ได้"
       );
     } finally {
       setLoading(false);
@@ -199,6 +244,27 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
             {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </button>
         </form>
+
+        {GOOGLE_CLIENT_ID && (
+          <>
+            <div className="my-5 flex items-center gap-3 text-xs text-gray-400">
+              <div className="h-px flex-1 bg-gray-200" />
+              หรือ
+              <div className="h-px flex-1 bg-gray-200" />
+            </div>
+
+            <div className="flex justify-center">
+              <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setMessage("เข้าสู่ระบบด้วย Google ไม่สำเร็จ")}
+                  text="signin_with"
+                  shape="pill"
+                />
+              </GoogleOAuthProvider>
+            </div>
+          </>
+        )}
 
         <p className="mt-8 text-center text-sm text-gray-400">
           ยังไม่มีบัญชี?{" "}

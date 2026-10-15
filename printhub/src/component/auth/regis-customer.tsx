@@ -115,7 +115,7 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
             <input
               type="text"
               maxLength={50}
-              placeholder="ชื่อ (สูงสุด 50 ตัวอักษร)"
+              placeholder="ชื่อ"
               value={Regisdata.Fname}
               className={inputCls(!!show("Fname"))}
               onChange={(e) => setData({ ...Regisdata, Fname: e.target.value })}
@@ -128,7 +128,7 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
             <input
               type="text"
               maxLength={50}
-              placeholder="นามสกุล (สูงสุด 50 ตัวอักษร)"
+              placeholder="นามสกุล"
               value={Regisdata.Lname}
               className={inputCls(!!show("Lname"))}
               onChange={(e) => setData({ ...Regisdata, Lname: e.target.value })}
@@ -141,7 +141,7 @@ export default function RegisFormCustomer({ setRegis }: RegisFormProps) {
             <input
               type="email"
               maxLength={100}
-              placeholder="อีเมล (สูงสุด 100 ตัวอักษร)"
+              placeholder="อีเมล"
               value={Regisdata.contact}
               className={inputCls(!!show("contact"))}
               onChange={(e) => setData({ ...Regisdata, contact: e.target.value })}
