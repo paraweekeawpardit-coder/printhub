@@ -89,9 +89,13 @@ export default function FilterPillsBar({
     const min = tempMinPrice !== "" && tempMinPrice !== undefined && tempMinPrice !== null ? Number(tempMinPrice) : undefined;
     const max = tempMaxPrice !== "" && tempMaxPrice !== undefined && tempMaxPrice !== null ? Number(tempMaxPrice) : undefined;
 
-    // 1. ตรวจสอบหากกรอกราคา <= 0
-    if ((min !== undefined && min <= 0) || (max !== undefined && max <= 0)) {
-      setPriceError("กรุณาระบุงบประมาณราคาที่มากกว่า 0 บาท");
+    // 1. ราคาต่ำสุดเริ่มที่ 0 บาทได้ แต่ห้ามติดลบ / ราคาสูงสุดต้องมากกว่า 0 บาท
+    if (min !== undefined && min < 0) {
+      setPriceError("ราคาต่ำสุดต้องไม่ติดลบ (เริ่มที่ 0 บาทได้)");
+      return;
+    }
+    if (max !== undefined && max <= 0) {
+      setPriceError("ราคาสูงสุดต้องมากกว่า 0 บาท");
       return;
     }
 

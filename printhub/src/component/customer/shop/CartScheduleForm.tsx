@@ -2,12 +2,14 @@
 
 import React from "react";
 import { AlertCircle, CalendarDays, Clock, Store, Info } from "lucide-react";
+import { formatOpenDays, isEveryDay, isOpenOnWeekday, weekdayOfDateStr, weekdayFullName } from "../shopOpenDays";
 
 interface CartScheduleFormProps {
   todayStr: string;
   shopOpen: string;
   shopClose: string;
   isOpenOvernight: boolean;
+  openDays?: unknown;
   appointmentDate: string;
   appointmentTime: string;
   orderNote: string;
@@ -40,6 +42,7 @@ export default function CartScheduleForm({
   shopOpen,
   shopClose,
   isOpenOvernight,
+  openDays,
   appointmentDate,
   appointmentTime,
   orderNote,
@@ -50,6 +53,11 @@ export default function CartScheduleForm({
 }: CartScheduleFormProps) {
   const isToday = appointmentDate === todayStr;
   const isOpenAllDay = shopOpen === "00:00" && (shopClose === "23:59" || shopClose === "24:00");
+  const everyDay = isEveryDay(openDays);
+  const hoursText = isOpenAllDay ? "24 ชม." : `${shopOpen} - ${shopClose} น.`;
+  const shopHoursLabel = everyDay ? (isOpenAllDay ? "เปิด 24 ชม." : `เปิด ${hoursText}`) : `เปิด ${formatOpenDays(openDays)} · ${hoursText}`;
+  const isClosedOnSelectedDate =
+    Boolean(appointmentDate) && !isOpenOnWeekday(openDays, weekdayOfDateStr(appointmentDate));
 
   const fieldClass =
     "w-full mt-1 px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 bg-white transition";
@@ -62,7 +70,7 @@ export default function CartScheduleForm({
           <StepTitle no={1} title="นัดรับงาน" />
           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full shrink-0">
             <Store className="w-3 h-3" />
-            {isOpenAllDay ? "เปิด 24 ชม." : `เปิด ${shopOpen} - ${shopClose} น.`}
+            {shopHoursLabel}
           </span>
         </div>
 
@@ -108,6 +116,13 @@ export default function CartScheduleForm({
             </span>
           </p>
         </div>
+
+        {isClosedOnSelectedDate && !timeError && (
+          <p className="text-xs text-rose-600 flex items-start gap-1.5 bg-rose-50 p-2.5 rounded-xl border border-rose-100">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            ร้านปิดวัน{weekdayFullName(weekdayOfDateStr(appointmentDate))} กรุณาเลือกวันอื่น (ร้านเปิด {formatOpenDays(openDays)})
+          </p>
+        )}
 
         {timeError && (
           <p className="text-xs text-rose-600 flex items-start gap-1.5 bg-rose-50 p-2.5 rounded-xl border border-rose-100">

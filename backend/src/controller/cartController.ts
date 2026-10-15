@@ -1,6 +1,21 @@
 import { Request, Response } from 'express';
 import supabase from '../config/supabase.js';
 
+// วันเปิดร้าน (print_shop.open_days: 0=อาทิตย์ ... 6=เสาร์) ถ้าไม่มีข้อมูล = เปิดทุกวัน
+const isShopOpenOnWeekday = (raw: any, weekday: number) => {
+  let list: any[] = [];
+  if (Array.isArray(raw)) list = raw;
+  else if (typeof raw === "string") list = raw.replace(/[{}\[\]"\s]/g, "").split(",").filter(Boolean);
+  const days = list.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  return days.length === 0 || days.includes(weekday);
+};
+
+// วันในสัปดาห์ของ "ตอนนี้" ตามเวลาไทย (0=อาทิตย์ ... 6=เสาร์)
+const todayWeekdayBangkok = () =>
+  ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
+    new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Bangkok", weekday: "short" }).format(new Date())
+  );
+
 // ==========================================
 // 1. ดึงข้อมูลตะกร้าสินค้า (GET)
 // ==========================================
@@ -63,6 +78,7 @@ export const getCart = async (req: Request, res: Response) => {
         is_open,
         open_time,
         close_time,
+        open_days,
         address:address_id (
           latitude,
           longitude
@@ -74,6 +90,7 @@ export const getCart = async (req: Request, res: Response) => {
 
     const now = new Date();
     const currentTime = now.toTimeString().slice(0, 8);
+    const todayWeekday = todayWeekdayBangkok();
     let totalItemsAllCarts = 0;
     const allCartItems: any[] = [];
 
@@ -83,7 +100,8 @@ export const getCart = async (req: Request, res: Response) => {
       totalItemsAllCarts += items.length;
       allCartItems.push(...items);
 
-      let isOpenNow = shop?.is_open !== false;
+      // ปิดถ้าร้านกดปิดเอง หรือวันนี้ไม่ใช่วันเปิดร้าน
+      let isOpenNow = shop?.is_open !== false && isShopOpenOnWeekday(shop?.open_days, todayWeekday);
       if (isOpenNow && shop?.open_time && shop?.close_time) {
         if (shop.open_time <= shop.close_time) {
           isOpenNow = currentTime >= shop.open_time && currentTime <= shop.close_time;
@@ -113,8 +131,10 @@ export const getCart = async (req: Request, res: Response) => {
         shop_name: shop?.shop_name || "ร้านค้างานพิมพ์",
         profile_image: shop?.profile_image || null,
         is_open: isOpenNow,
+        is_temporarily_closed: shop?.is_open === false, // ร้านกดปิดร้านชั่วคราวเอง
         open_time: shop?.open_time || null,
         close_time: shop?.close_time || null,
+        open_days: shop?.open_days ?? null,
         distance: distance,
         items: items,
         total_price: items.reduce((sum: number, it: any) => sum + Number(it.subtotal || it.unit_price * it.quantity || 0), 0)

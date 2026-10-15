@@ -2,6 +2,21 @@ import { Request, Response } from 'express';
 import multer from 'multer';
 import supabase from '../config/supabase.js';
 
+// วันเปิดร้าน (print_shop.open_days: 0=อาทิตย์ ... 6=เสาร์) ถ้าไม่มีข้อมูล = เปิดทุกวัน
+const isShopOpenOnWeekday = (raw: any, weekday: number) => {
+  let list: any[] = [];
+  if (Array.isArray(raw)) list = raw;
+  else if (typeof raw === "string") list = raw.replace(/[{}\[\]"\s]/g, "").split(",").filter(Boolean);
+  const days = list.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  return days.length === 0 || days.includes(weekday);
+};
+
+// วันในสัปดาห์ของ "ตอนนี้" ตามเวลาไทย (0=อาทิตย์ ... 6=เสาร์)
+const todayWeekdayBangkok = () =>
+  ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
+    new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Bangkok", weekday: "short" }).format(new Date())
+  );
+
 export const upload = multer({ storage: multer.memoryStorage() });
 
 // Helper Function คำนวณราคา
@@ -110,7 +125,7 @@ export const createOrder = async (req: Request, res: Response) => {
 
     const { data: shop, error: shopError } = await supabase
       .from("print_shop")
-      .select("open_time, close_time")
+      .select("open_time, close_time, open_days")
       .eq("id", targetShopId)
       .maybeSingle();
 
@@ -130,6 +145,18 @@ export const createOrder = async (req: Request, res: Response) => {
         return res.status(400).json({
           success: false,
           message: "เวลานัดรับงานต้องล่วงหน้าอย่างน้อย 30 นาที",
+        });
+      }
+
+      // วันนัดรับต้องเป็นวันที่ร้านเปิด
+      const apptDateStr = String(appointment_time).replace(" ", "T").slice(0, 10);
+      const [ay, am, ad] = apptDateStr.split("-").map(Number);
+      const apptWeekday = new Date(ay, (am || 1) - 1, ad || 1).getDay();
+      if (!isShopOpenOnWeekday((shop as any).open_days, apptWeekday)) {
+        const dayName = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"][apptWeekday];
+        return res.status(400).json({
+          success: false,
+          message: `ร้านไม่เปิดทำการวัน${dayName} กรุณาเลือกวันนัดรับอื่น`,
         });
       }
 
