@@ -5,6 +5,14 @@ import supabase from "../../config/supabase.js";
 const DEFAULT_BANK_STATUS = "pending";
 const CHANGED_BANK_STATUS = "pending";
 
+// open_days: 0=อาทิตย์ ... 6=เสาร์
+const normalizeOpenDays = (value: unknown): number[] | null => {
+  if (!Array.isArray(value)) return null;
+  const days = [...new Set(value.map(Number))];
+  if (days.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) return null;
+  return days.sort((a, b) => a - b);
+};
+
 /**
  * Helper Check สถานะการยืนยันตัวตนของร้าน
  */
@@ -41,6 +49,7 @@ export const getShopProfile = async (
         profile_image,
         open_time,
         close_time,
+        open_days,
         is_verify,
         is_open,
         status,
@@ -618,10 +627,19 @@ export const updateShopProfile = async (
 ): Promise<Response> => {
   try {
     const { shop_id } = req.params;
-    const { shop_name, owner_name, phone, open_time, close_time, address } = req.body;
+    const { shop_name, owner_name, phone, open_time, close_time, open_days, address } = req.body;
 
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    let openDaysValue: number[] | undefined;
+    if (open_days !== undefined) {
+      const normalized = normalizeOpenDays(open_days);
+      if (!normalized || normalized.length === 0) {
+        return res.status(400).json({ error: "กรุณาเลือกวันเปิดร้านอย่างน้อย 1 วัน" });
+      }
+      openDaysValue = normalized;
     }
 
     let address_id = address?.id;
@@ -675,6 +693,7 @@ export const updateShopProfile = async (
         phone,
         open_time,
         close_time,
+        ...(openDaysValue && { open_days: openDaysValue }),
         ...(address_id && { address_id }),
       })
       .eq("id", shop_id);

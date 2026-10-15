@@ -15,11 +15,11 @@ type RegisFormProps = {
 const MapPicker = dynamic(() => import("./map"), { ssr: false });
 
 function isValidThaiIDCard(id: string): boolean {
-  return /^\d{13}\$/.test(id);
+  return /^\d{13}$/.test(id);
 }
 
 function isValidThaiPhone(phone: string): boolean {
-  return /^0[689]\d{8}\$/.test(phone);
+  return /^0\d{9}$/.test(phone);
 }
 
 export default function RegisFormShop({ setRegis }: RegisFormProps) {
@@ -51,6 +51,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
     zipcode: "",
     image: null as File | null,
     bank: "",
+    bank_account_name: "",
     bank_number: "",
     password: "",
     confirmPassword: "",
@@ -127,7 +128,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
     contact: !shopData.contact
       ? "กรุณากรอกเบอร์โทรศัพท์"
       : !isValidThaiPhone(shopData.contact)
-      ? "เบอร์โทรศัพท์ต้องมี 10 หลัก และขึ้นต้นด้วย 06, 08 หรือ 09"
+      ? "เบอร์โทรศัพท์ต้องมี 10 หลัก และขึ้นต้นด้วย 0"
       : "",
     location:
       shopData.latitude === 0 || shopData.longitude === 0
@@ -136,9 +137,14 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
         ? "รายละเอียดที่อยู่ต้องไม่เกิน 250 ตัวอักษร"
         : "",
     bank: shopData.bank ? "" : "กรุณาเลือกธนาคาร",
+    bank_account_name: !shopData.bank_account_name.trim()
+      ? "กรุณากรอกชื่อบัญชีธนาคาร"
+      : shopData.bank_account_name.length > 100
+      ? "ชื่อบัญชีต้องไม่เกิน 100 ตัวอักษร"
+      : "",
     bank_number: !shopData.bank_number
       ? "กรุณากรอกเลขบัญชีธนาคาร"
-      : !/^\d{10,12}\$/.test(shopData.bank_number)
+      : !/^\d{10,12}$/.test(shopData.bank_number)
       ? `เลขบัญชีธนาคารต้องเป็นตัวเลข 10-12 หลัก (กรอกแล้ว ${shopData.bank_number.length} หลัก)`
       : "",
     password: isPasswordValid(shopData.password) ? "" : "invalid",
@@ -186,6 +192,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
     formData.append("subdistrict", shopData.subdistrict);
     formData.append("zipcode", shopData.zipcode);
     formData.append("bank", shopData.bank);
+    formData.append("bank_account_name", shopData.bank_account_name.trim());
     formData.append("bank_number", shopData.bank_number);
     formData.append("password", shopData.password);
 
@@ -449,6 +456,21 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
               )}
             </div>
             <FieldError message={show("bank")} />
+          </div>
+
+          <div>
+            <input
+              type="text"
+              maxLength={100}
+              placeholder="ชื่อบัญชีธนาคาร (ชื่อ-นามสกุลเจ้าของบัญชี)"
+              value={shopData.bank_account_name}
+              onChange={(e) =>
+                setShopData({ ...shopData, bank_account_name: e.target.value })
+              }
+              onBlur={() => touch("bank_account_name")}
+              className={inputCls(!!show("bank_account_name"))}
+            />
+            <FieldError message={show("bank_account_name")} />
           </div>
 
           <div>
