@@ -7,7 +7,7 @@
 "use client";
 
 import React from "react";
-import { Info } from "lucide-react";
+import { Info, AlertCircle } from "lucide-react";
 
 interface FilterModalPriceStepProps {
   tempMinPrice: number | string | undefined;
@@ -56,7 +56,7 @@ export default function FilterModalPriceStep({
           <span className="absolute left-2.5 top-2 text-xs text-slate-400">฿</span>
           <input
             type="number"
-            min="1"
+            min="0"
             placeholder="ราคาต่ำสุด"
             value={tempMinPrice ?? ""}
             onChange={(e) => onMinPriceChange(e.target.value)}
@@ -82,8 +82,9 @@ export default function FilterModalPriceStep({
       </div>
 
       {priceError && (
-        <p className="text-red-500 text-[11px] font-semibold mt-1 animate-in fade-in duration-150">
-          ⚠️ {priceError}
+        <p className="text-red-500 text-[11px] font-semibold mt-1 flex items-center gap-1.5 animate-in fade-in duration-150">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          {priceError}
         </p>
       )}
     </div>

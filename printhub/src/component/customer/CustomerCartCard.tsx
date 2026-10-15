@@ -10,12 +10,14 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Store, Clock, ChevronDown, Trash2, ArrowRight, Paperclip } from "lucide-react";
+import { formatOpenDays, isEveryDay } from "./shopOpenDays";
 
 interface CartGroupedShop {
   shop_id: string;
   shop_name: string;
   is_open?: boolean;
   open_time?: string;
+  open_days?: unknown;
   close_time?: string;
   items: any[];
   total_price: number;
@@ -67,12 +69,15 @@ export default function CustomerCartCard({
 
   const openTime = group.open_time?.slice(0, 5);
   const closeTime = group.close_time?.slice(0, 5);
-  const hoursLabel =
+  const timeLabel =
     openTime === "00:00" && (closeTime === "23:59" || closeTime === "24:00")
       ? "เปิด 24 ชม."
       : openTime && closeTime
       ? `${openTime} - ${closeTime} น.`
       : null;
+  const hoursLabel = isEveryDay(group.open_days)
+    ? timeLabel
+    : `${formatOpenDays(group.open_days)}${timeLabel ? ` · ${timeLabel.replace("เปิด ", "")}` : ""}`;
 
   // สรุปรายการ เช่น "เอกสาร x1, นามบัตร x1"
   const summary = (() => {

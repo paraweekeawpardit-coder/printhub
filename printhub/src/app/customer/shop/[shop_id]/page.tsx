@@ -319,7 +319,9 @@ export default function ShopMainPage() {
     }
   };
 
-  const updatedShop = shop ? { ...shop, is_open: isShopOpen } : null;
+  const updatedShop = shop
+    ? { ...shop, is_open: isShopOpen, is_temporarily_closed: shop.is_open === false }
+    : null;
   const totalCartPrice = cartItems.reduce(
     (sum, item) => sum + (Number(item.subtotal) || Number(item.unit_price * item.quantity) || 0),
     0

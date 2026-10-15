@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { ShoppingBag, Trash2, X, Loader2, CalendarCheck, ArrowRight } from "lucide-react";
 import CartItemCard from "./CartItemCard";
 import CartScheduleForm from "./CartScheduleForm";
+import { formatOpenDays, isOpenOnWeekday, weekdayOfDateStr, weekdayFullName } from "../shopOpenDays";
 
 export interface CartItem {
   id: string;
@@ -107,8 +108,45 @@ export default function ShopCartDrawer({
     return { todayStr, minAllowedTimeStr };
   };
 
-  const handleConfirmCheckout = async () => {
+  // ตรวจวัน/เวลานัดรับ (ใช้ทั้งตอนเลือก และตอนกดชำระเงิน) ถ้าผ่านคืนค่า ""
+  const validateSchedule = (date: string, time: string) => {
     const { todayStr, minAllowedTimeStr } = getNowInfo();
+
+    if (date) {
+      if (date < todayStr) {
+        return "วันที่นัดรับต้องเป็นวันปัจจุบันหรือวันข้างหน้าเท่านั้น";
+      }
+      // วันนัดรับต้องเป็นวันที่ร้านเปิด
+      const selectedWeekday = weekdayOfDateStr(date);
+      if (!isOpenOnWeekday(shop?.open_days, selectedWeekday)) {
+        return `ร้านปิดวัน${weekdayFullName(selectedWeekday)} กรุณาเลือกวันอื่น (ร้านเปิด ${formatOpenDays(shop?.open_days)})`;
+      }
+    }
+
+    if (time) {
+      const shopOpen = shop?.open_time ? shop.open_time.slice(0, 5) : "08:00";
+      const shopClose = shop?.close_time ? shop.close_time.slice(0, 5) : "18:00";
+      const selectedTime = time.slice(0, 5);
+
+      if (!isWithinShopHours(selectedTime, shopOpen, shopClose)) {
+        return `เวลานัดรับต้องอยู่ระหว่างเวลาทำการ (${shopOpen} - ${shopClose} น.)`;
+      }
+
+      if (date) {
+        const selectedDateTime = new Date(`${date}T${selectedTime}:00`);
+        const now = new Date();
+        const nowWithoutSeconds = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), 0);
+        const diffInMinutes = Math.round((selectedDateTime.getTime() - nowWithoutSeconds.getTime()) / (1000 * 60));
+        if (diffInMinutes < 30) {
+          return `กรุณาเลือกเวลานัดรับตั้งแต่ ${minAllowedTimeStr} น. เป็นต้นไป (ล่วงหน้าอย่างน้อย 30 นาที)`;
+        }
+      }
+    }
+
+    return "";
+  };
+
+  const handleConfirmCheckout = async () => {
 
     if (!appointmentDate || !appointmentTime) {
       setTimeError("กรุณาระบุวันและเวลานัดหมายให้ครบถ้วน");
@@ -116,34 +154,21 @@ export default function ShopCartDrawer({
     }
 
     if (shop?.is_open === false) {
-      setTimeError("ขณะนี้ร้านค้าปิดให้บริการชั่วคราว ไม่สามารถทำการสั่งซื้อได้");
+      setTimeError(
+        shop?.is_temporarily_closed
+          ? "ขณะนี้ร้านค้าปิดให้บริการชั่วคราว ไม่สามารถทำการสั่งซื้อได้"
+          : "ขณะนี้ร้านค้าปิดทำการ ไม่สามารถทำการสั่งซื้อได้"
+      );
       return;
     }
 
-    if (appointmentDate < todayStr) {
-      setTimeError("วันที่นัดรับต้องเป็นวันปัจจุบันหรือวันข้างหน้าเท่านั้น");
+    const scheduleError = validateSchedule(appointmentDate, appointmentTime);
+    if (scheduleError) {
+      setTimeError(scheduleError);
       return;
     }
 
-    const shopOpen = shop?.open_time ? shop.open_time.slice(0, 5) : "08:00";
-    const shopClose = shop?.close_time ? shop.close_time.slice(0, 5) : "18:00";
     const selectedTime = appointmentTime.slice(0, 5);
-
-    if (!isWithinShopHours(selectedTime, shopOpen, shopClose)) {
-      setTimeError(`เวลานัดรับต้องอยู่ระหว่างเวลาทำการ (${shopOpen} - ${shopClose} น.)`);
-      return;
-    }
-
-    const selectedDateTime = new Date(`${appointmentDate}T${selectedTime}:00`);
-    const now = new Date();
-    const nowWithoutSeconds = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), 0);
-    const diffInMinutes = Math.round((selectedDateTime.getTime() - nowWithoutSeconds.getTime()) / (1000 * 60));
-
-    if (diffInMinutes < 30) {
-      setTimeError(`กรุณาเลือกเวลานัดรับตั้งแต่ ${minAllowedTimeStr} น. เป็นต้นไป (ล่วงหน้าอย่างน้อย 30 นาที)`);
-      return;
-    }
-
     setTimeError("");
     const errorMessage = await onProceedToPayment({
       receive_date: appointmentDate,
@@ -270,17 +295,18 @@ export default function ShopCartDrawer({
                     shopOpen={shopOpen}
                     shopClose={shopClose}
                     isOpenOvernight={isOpenOvernight}
+                    openDays={shop?.open_days}
                     appointmentDate={appointmentDate}
                     appointmentTime={appointmentTime}
                     orderNote={orderNote}
                     timeError={timeError}
                     onDateChange={(d) => {
                       setAppointmentDate(d);
-                      setTimeError("");
+                      setTimeError(validateSchedule(d, appointmentTime));
                     }}
                     onTimeChange={(t) => {
                       setAppointmentTime(t);
-                      setTimeError("");
+                      setTimeError(validateSchedule(appointmentDate, t));
                     }}
                     onNoteChange={setOrderNote}
                   />
