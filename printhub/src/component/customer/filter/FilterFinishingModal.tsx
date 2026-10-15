@@ -7,6 +7,7 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 import FilterModalHeader from "./FilterModalHeader";
 import FilterModalCategoryStep from "./FilterModalCategoryStep";
 import FilterModalFinishingStep from "./FilterModalFinishingStep";
@@ -46,16 +47,17 @@ export default function FilterFinishingModal({
   onClearPrice,
   onConfirm,
 }: FilterFinishingModalProps) {
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
-  return (
+  // render ที่ body โดยตรง เพื่อให้อยู่เหนือ NavBar (ไม่โดนบังหัว popup)
+  return createPortal(
     <div 
       onClick={onClose}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 pt-24 sm:pt-28 pb-6 bg-slate-900/60 backdrop-blur-xs cursor-pointer"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs cursor-pointer"
     >
       <div 
         onClick={(e) => e.stopPropagation()} 
-        className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[80vh] relative animate-in fade-in zoom-in-95 duration-150 cursor-default"
+        className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh] relative animate-in fade-in zoom-in-95 duration-150 cursor-default"
       >
         {/* Header */}
         <FilterModalHeader onClose={onClose} />
@@ -93,6 +95,7 @@ export default function FilterFinishingModal({
           onConfirm={onConfirm}
         />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

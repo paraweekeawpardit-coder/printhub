@@ -15,7 +15,6 @@ interface CartItem {
   colorType?: string;
   color_type?: string;
   printSide?: string;
-  side_type?: string;
   pagesPerSet?: number;
   page_count?: number;
   pricePerPage?: number;

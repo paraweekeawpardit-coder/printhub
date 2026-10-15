@@ -152,7 +152,6 @@ export default function ShopMainPage() {
         subtotal: itemPayload.subtotal || unitPrice * qty,
         total_pages: extractedPages,
         page_count: extractedPages,
-        side_type: itemPayload.finishing_option?.includes("หน้า-หลัง") ? "DOUBLE" : "SINGLE",
       };
 
       // หากเป็นการแก้ไข ให้ลบรายการเดิมออกก่อนแล้วเพิ่มตัวใหม่

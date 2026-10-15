@@ -6,8 +6,7 @@ import {
   Store,
   Calendar,
   Clock,
-  ChevronDown,
-  ChevronUp,
+  ChevronRight,
   Ban,
   MessageCircle,
   Star,
@@ -318,13 +317,10 @@ export default function CustomerOrderCard({
             <button
               type="button"
               onClick={toggleExpand}
-              className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer border ${isExpanded
-                  ? "bg-blue-50 text-blue-700 border-blue-200"
-                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                }`}
+              className="px-2.5 py-1 rounded-xl text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
             >
-              <span>{isExpanded ? "ซ่อนรายละเอียด" : "รายละเอียด"}</span>
-              {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              <span>ดูรายละเอียด</span>
+              <ChevronRight className="w-3 h-3" />
             </button>
 
             <span className="text-[11px] font-normal text-slate-500">
@@ -436,6 +432,12 @@ export default function CustomerOrderCard({
 
       <OrderItemsAccordion
         isExpanded={isExpanded}
+        onClose={toggleExpand}
+        orderNo={orderNumberStr}
+        shopName={shopName}
+        stateLabel={state}
+        stateBadgeStyle={stateBadgeStyle}
+        appointmentText={formattedDate && formattedDate !== "-" ? `${formattedDate}${formattedTime ? ` · ${formattedTime}` : ""}` : undefined}
         items={items}
         files={order?.print_file || []}
         description={order?.description}

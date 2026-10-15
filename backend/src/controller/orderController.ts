@@ -246,7 +246,6 @@ export const createOrder = async (req: Request, res: Response) => {
         item.color_type,
         item.paper_type,
         item.finishing_option,
-        item.side_type
       ].filter(Boolean).join(" | ") || null,
     }));
 
