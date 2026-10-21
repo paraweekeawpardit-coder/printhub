@@ -239,7 +239,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             <input
               type="text"
               maxLength={100}
-              placeholder="ชื่อร้านค้า (สูงสุด 100 ตัวอักษร)"
+              placeholder="ชื่อร้านค้า"
               value={shopData.shop_name}
               onChange={(e) =>
                 setShopData({ ...shopData, shop_name: e.target.value })
@@ -254,7 +254,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             <input
               type="text"
               maxLength={100}
-              placeholder="ชื่อในบัตรประชาชน (สูงสุด 100 ตัวอักษร)"
+              placeholder="ชื่อในบัตรประชาชน"
               value={shopData.id_name}
               onChange={(e) =>
                 setShopData({
@@ -326,7 +326,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             <input
               type="email"
               maxLength={100}
-              placeholder="Email (สูงสุด 100 ตัวอักษร)"
+              placeholder="Email "
               value={shopData.email}
               onChange={(e) =>
                 setShopData({ ...shopData, email: e.target.value })
@@ -462,7 +462,7 @@ export default function RegisFormShop({ setRegis }: RegisFormProps) {
             <input
               type="text"
               maxLength={100}
-              placeholder="ชื่อบัญชีธนาคาร (ชื่อ-นามสกุลเจ้าของบัญชี)"
+              placeholder="ชื่อบัญชีธนาคาร"
               value={shopData.bank_account_name}
               onChange={(e) =>
                 setShopData({ ...shopData, bank_account_name: e.target.value })
