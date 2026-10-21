@@ -188,7 +188,7 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
             <input
               type="email"
               maxLength={100}
-              placeholder="อีเมล (Email) (สูงสุด 100 ตัวอักษร)"
+              placeholder="อีเมล (Email)"
               value={logindata.contact}
               className={`w-full rounded-xl border px-4 py-3 text-sm text-slate-800 placeholder:text-gray-400 outline-none transition focus:border-[#001B3A] focus:ring-1 focus:ring-[#001B3A] ${
                 showContact ? "border-red-400" : "border-gray-200"
@@ -206,7 +206,7 @@ export default function LoginForm({ setRegis }: RegisFormProps) {
               <input
                 type={showPassword ? "text" : "password"}
                 maxLength={50}
-                placeholder="รหัสผ่าน (สูงสุด 50 ตัวอักษร)"
+                placeholder="รหัสผ่าน"
                 value={logindata.password}
                 className={`w-full rounded-xl border px-4 py-3 pr-10 text-sm text-slate-800 placeholder:text-gray-400 outline-none transition focus:border-[#001B3A] focus:ring-1 focus:ring-[#001B3A] ${
                   showPasswordErr ? "border-red-400" : "border-gray-200"
