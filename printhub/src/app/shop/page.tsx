@@ -246,6 +246,33 @@ export default function ShopPage() {
     fetchDashboardData({ silent: true });
   };
 
+  // ปฏิเสธออเดอร์จากตารางสัดส่วนคำสั่งพิมพ์
+  const handleRejectOrder = async (orderId: string, reason: string) => {
+    if (isSuspended) throw new Error("บัญชีนี้ถูกระงับการใช้งาน");
+
+    const token = localStorage.getItem("token");
+    try {
+      await axios.patch(
+        `${API_URL}/shop/orders/${orderId}/status`,
+        { status_name: "ยกเลิกการพิมพ์", reject_reason: reason },
+        {
+          params: { shop_id: shopId },
+          headers: {
+            shop_id: shopId,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+    } catch (err: any) {
+      throw new Error(
+        err?.response?.data?.error || "ปฏิเสธออเดอร์ไม่สำเร็จ กรุณาลองใหม่"
+      );
+    }
+
+    // โหลดข้อมูลใหม่ให้ตาราง/การ์ดอัปเดตตามสถานะล่าสุด
+    await fetchDashboardData({ silent: true });
+  };
+
   return (
     <div className="min-h-screen bg-slate-50/50 font-['Prompt',sans-serif]">
       <ShopNavbar />
@@ -309,6 +336,7 @@ export default function ShopPage() {
               orders={breakdownData.orders}
               trendData={breakdownData.trendData}
               onOrderClick={handleOrderClick}
+              onRejectOrder={handleRejectOrder}
             />
           </div>
         )}

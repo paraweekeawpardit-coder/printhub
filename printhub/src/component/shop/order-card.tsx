@@ -3,7 +3,7 @@
 import { Check, X, Printer, Loader2, Eye, Clock, Calendar } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { RejectOrderModal } from "./OrderModals";
+import { RejectOrderModal, SlipRequiredModal } from "./OrderModals";
 
 type Order = {
   id: string;
@@ -104,6 +104,7 @@ export default function OrderCard({
   );
   const [verifyingSlip, setVerifyingSlip] = useState<boolean>(false);
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
+  const [showSlipRequiredModal, setShowSlipRequiredModal] = useState<boolean>(false);
 
   const updating = pendingAction !== null;
 
@@ -158,14 +159,16 @@ export default function OrderCard({
     setErrorMsg(null);
 
     try {
-      // เรียกใช้ API ตรวจสอบสลิปอย่างเดียว (Backend อัปเดตสถานะให้อัตโนมัติ)
+      // เรียกใช้ API ตรวจสอบสลิป (ถูกต้อง = สถานะไม่เปลี่ยน / ไม่ถูกต้อง = Backend เปลี่ยนเป็น "รอการชำระเงิน")
       const res = await axios.patch(
         `${API_BASE}/api/shop/orders/${order.id}/verify-payment`,
         { is_verified: isApproved },
         { params: { shop_id: order.shop_id } }
       );
 
-      const updatedStatus = res.data?.new_status || (isApproved ? STATUS.PRINTING : STATUS.AWAITING_PAYMENT);
+      const updatedStatus = isApproved
+        ? currentState
+        : res.data?.new_status || STATUS.AWAITING_PAYMENT;
 
       setIsVerified(isApproved);
       setCurrentState(updatedStatus);
@@ -327,7 +330,7 @@ export default function OrderCard({
                 )}
               </div>
 
-              <div className={isVerified === true ? "grid grid-cols-2 gap-2" : ""}>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setShowRejectModal(true)}
@@ -342,21 +345,26 @@ export default function OrderCard({
                   ปฏิเสธ
                 </button>
 
-                {isVerified === true && (
-                  <button
-                    type="button"
-                    onClick={() => updateState(STATUS.PRINTING)}
-                    disabled={updating}
-                    className="flex items-center justify-center gap-1.5 h-10 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {pendingAction === STATUS.PRINTING ? (
-                      <Loader2 size={15} className="animate-spin" />
-                    ) : (
-                      <Check size={15} />
-                    )}
-                    ยืนยัน
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    // ยังไม่ได้ตรวจสลิปว่าถูกต้อง -> แจ้งให้ไปตรวจสลิปก่อน
+                    if (isVerified !== true) {
+                      setShowSlipRequiredModal(true);
+                      return;
+                    }
+                    updateState(STATUS.PRINTING);
+                  }}
+                  disabled={updating || verifyingSlip}
+                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {pendingAction === STATUS.PRINTING ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Check size={15} />
+                  )}
+                  ยืนยัน
+                </button>
               </div>
             </div>
           )}
@@ -424,6 +432,12 @@ export default function OrderCard({
           const ok = await updateState(STATUS.CANCELLED, reason);
           if (ok) setShowRejectModal(false);
         }}
+      />
+
+      {/* แจ้งให้ตรวจสลิปก่อนยืนยันออเดอร์ */}
+      <SlipRequiredModal
+        isOpen={showSlipRequiredModal}
+        onClose={() => setShowSlipRequiredModal(false)}
       />
 
       {/* Pop-up Modal แสดงรูปภาพสลิป */}

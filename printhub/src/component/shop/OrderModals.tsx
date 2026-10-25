@@ -85,6 +85,47 @@ export function ActionConfirmModal({
 }
 
 // ==========================================
+// แจ้งเตือน: ต้องตรวจสลิปก่อนจึงจะยืนยันออเดอร์ได้
+// ==========================================
+interface SlipRequiredModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function SlipRequiredModal({ isOpen, onClose }: SlipRequiredModalProps) {
+  if (!isOpen) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <div
+        className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-6 text-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 bg-amber-50 text-amber-600">
+          <AlertTriangle size={22} />
+        </div>
+        <h3 className="text-base font-semibold text-gray-900 mb-1">ยังไม่ได้ตรวจสอบสลิป</h3>
+        <p className="text-sm text-gray-500 mb-6">
+          กรุณาตรวจสอบสลิปโอนเงินว่าถูกต้องก่อน จึงจะยืนยันออเดอร์ได้
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium"
+        >
+          ตกลง
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
 // Reject Order Modal (เลือกเหตุผล / พิมพ์เอง)
 // ==========================================
 export const REJECT_REASON_OTHER = "อื่นๆ";

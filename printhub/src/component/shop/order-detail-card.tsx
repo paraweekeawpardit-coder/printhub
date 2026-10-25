@@ -13,7 +13,7 @@ import {
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
 import { useRouter, useParams } from "next/navigation";
-import { RejectOrderModal } from "./OrderModals";
+import { RejectOrderModal, SlipRequiredModal } from "./OrderModals";
 
 export type OrderItemDetail = {
   id: string;
@@ -127,6 +127,7 @@ export default function OrderDetailCard({
   const [verifyingSlip, setVerifyingSlip] = useState<boolean>(false);
   const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
   const [rejecting, setRejecting] = useState<boolean>(false);
+  const [showSlipRequiredModal, setShowSlipRequiredModal] = useState<boolean>(false);
 
   const statusConfig = STATUS_CONFIG[order.status] ?? FALLBACK_STATUS;
   const items = order.items ?? [];
@@ -428,6 +429,11 @@ export default function OrderDetailCard({
                   setShowRejectModal(true);
                   return;
                 }
+                // ยืนยันออเดอร์ -> ต้องตรวจสลิปว่าถูกต้องก่อน
+                if ((newStatus as string) === "กำลังพิมพ์" && isVerified !== true) {
+                  setShowSlipRequiredModal(true);
+                  return;
+                }
                 onUpdateStatus?.(order.order_id, newStatus);
               }}
             />
@@ -442,6 +448,12 @@ export default function OrderDetailCard({
         isUpdating={rejecting}
         orderLabel={`#${order.order_no ?? order.order_id.slice(0, 8)}`}
         onConfirm={handleRejectConfirm}
+      />
+
+      {/* แจ้งให้ตรวจสลิปก่อนยืนยันออเดอร์ */}
+      <SlipRequiredModal
+        isOpen={showSlipRequiredModal}
+        onClose={() => setShowSlipRequiredModal(false)}
       />
 
       {/* Slip Modal */}
