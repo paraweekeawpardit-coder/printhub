@@ -20,6 +20,7 @@ interface ServiceOptionModalProps {
   initialItem?: any;
   onClose: () => void;
   onAddToCart: (itemData: any) => void;
+  onBuyNow?: (itemData: any) => void; // สั่งทันที (สั่งเฉพาะรายการนี้)
 }
 
 export default function ServiceOptionModal({
@@ -27,7 +28,9 @@ export default function ServiceOptionModal({
   initialItem,
   onClose,
   onAddToCart,
+  onBuyNow,
 }: ServiceOptionModalProps) {
+  const [submittingMode, setSubmittingMode] = useState<"cart" | "buy" | null>(null);
   const [modalOptions, setModalOptions] = useState<Record<string, OptionItem>>({});
   const [quantity, setQuantity] = useState(
     initialItem?.quantity ? Number(initialItem.quantity) : 1
@@ -338,8 +341,9 @@ export default function ServiceOptionModal({
     return urls;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (mode: "cart" | "buy" = "cart") => {
     try {
+      setSubmittingMode(mode);
       setIsUploading(true);
       setFileError("");
 
@@ -360,7 +364,8 @@ export default function ServiceOptionModal({
           ? finalFileUrls.join(", ")
           : initialItem?.file_url || "";
 
-      onAddToCart({
+      const submitFn = mode === "buy" && onBuyNow ? onBuyNow : onAddToCart;
+      submitFn({
         category: serviceTypeName,
         selected_size: getOptionValue(["ขนาด", "ขนาดกระดาษ", "ขนาดมาตรฐาน", "size"], "A4"),
         color_type: getOptionValue(["ระบบสี", "รูปแบบสีการพิมพ์", "color", "สี"], ""),
@@ -381,6 +386,7 @@ export default function ServiceOptionModal({
       setFileError(err.message || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
     } finally {
       setIsUploading(false);
+      setSubmittingMode(null);
     }
   };
 
@@ -441,7 +447,10 @@ export default function ServiceOptionModal({
           missingGroups={missingGroups}
           canAddToCart={canAddToCart}
           isUploading={isUploading}
-          onSubmit={handleSubmit}
+          onSubmit={() => handleSubmit("cart")}
+          // ตอนแก้ไขรายการในตะกร้า ไม่มีปุ่มสั่งทันที
+          onBuyNow={onBuyNow && !initialItem ? () => handleSubmit("buy") : undefined}
+          submittingMode={submittingMode}
         />
       </div>
     </div>

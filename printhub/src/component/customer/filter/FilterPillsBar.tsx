@@ -18,6 +18,10 @@ interface FilterPillsBarProps {
   onToggleOpenOnly: () => void;
   isTopRated: boolean;
   onToggleTopRated: () => void;
+  minRating?: number;
+  onChangeMinRating?: (rating: number) => void;
+  ratingSort?: "none" | "high" | "low";
+  onChangeRatingSort?: (sort: "none" | "high" | "low") => void;
   minPrice?: number | string;
   maxPrice?: number | string;
   onApplyPrice: (min?: number, max?: number) => void;
@@ -35,6 +39,10 @@ export default function FilterPillsBar({
   onToggleOpenOnly,
   isTopRated,
   onToggleTopRated,
+  minRating,
+  onChangeMinRating,
+  ratingSort,
+  onChangeRatingSort,
   minPrice,
   maxPrice,
   onApplyPrice,
@@ -123,6 +131,10 @@ export default function FilterPillsBar({
         onToggleOpenOnly={onToggleOpenOnly}
         isTopRated={isTopRated}
         onToggleTopRated={onToggleTopRated}
+        minRating={minRating}
+        onChangeMinRating={onChangeMinRating}
+        ratingSort={ratingSort}
+        onChangeRatingSort={onChangeRatingSort}
         hasActiveSpecs={hasActiveSpecs}
         filterCount={filterCount}
         onOpenModal={handleOpenModal}

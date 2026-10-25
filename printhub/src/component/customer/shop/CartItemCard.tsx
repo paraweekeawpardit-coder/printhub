@@ -9,7 +9,7 @@ interface CartItemCardProps {
   itemSubtotal: number;
   itemPages: number;
   onEdit?: () => void;
-  onRemove: () => void;
+  onRemove?: () => void;
 }
 
 // ชื่อไฟล์จาก URL (ตัด query string และถอดรหัสภาษาไทย)
@@ -36,8 +36,9 @@ export default function CartItemCard({
         .filter(Boolean)
     : [];
 
+  // ไม่แสดงค่า "ไม่มี" (ลูกค้าไม่ได้เลือกตัวเลือกนั้น)
   const specs = [item.selected_size, item.color_type, item.paper_type, item.finishing_option].filter(
-    (s) => s && String(s).trim()
+    (s) => s && String(s).trim() && String(s).trim() !== "ไม่มี"
   );
 
   return (
@@ -85,6 +86,7 @@ export default function CartItemCard({
       )}
 
       {/* ปุ่มจัดการ */}
+      {(onEdit || onRemove) && (
       <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
         {onEdit && (
           <button
@@ -96,15 +98,18 @@ export default function CartItemCard({
             แก้ไข
           </button>
         )}
-        <button
-          type="button"
-          onClick={onRemove}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-          ลบ
-        </button>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            ลบ
+          </button>
+        )}
       </div>
+      )}
     </div>
   );
 }

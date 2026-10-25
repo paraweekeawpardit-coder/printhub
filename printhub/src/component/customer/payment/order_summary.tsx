@@ -27,6 +27,17 @@ export interface OrderDetails {
   smallOrderFee?: number; // ค่าธรรมเนียมสั่งซื้อขนาดเล็ก
 }
 
+// ค่าที่ไม่มีความหมายสำหรับลูกค้า (ค่าตั้งต้น / ไม่ได้เลือก) ไม่ต้องแสดงในสเปก
+const HIDDEN_SPEC_VALUES = ["มาตรฐาน", "ไม่มี", "SINGLE", "DOUBLE", "สี/ขาวดำ", "ขาว-ดำ / สี"];
+
+// รวมสเปกของรายการเป็นบรรทัดเดียว เช่น "A4 | ขาว-ดำ | เย็บมุม"
+const formatSpecs = (item: OrderItem) =>
+  [item.paperSize, item.colorType, item.printSide]
+    .flatMap((v) => String(v || "").split("|"))
+    .map((v) => v.trim())
+    .filter((v) => v && !HIDDEN_SPEC_VALUES.includes(v))
+    .join(" | ");
+
 interface OrderSummaryProps {
   orderData: OrderDetails | null;
   isLoading?: boolean;
@@ -71,7 +82,7 @@ export function OrderSummary({ orderData, isLoading }: OrderSummaryProps) {
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 font-mono text-xs space-y-3 text-gray-800">
       <div className="text-center font-bold text-sm border-b border-dashed border-gray-300 pb-2">
-        ใบสรุปรายการสั่งซื้อ (Order Summary)
+        ใบสรุปรายการสั่งซื้อ
       </div>
 
       {/* รายการงานพิมพ์ */}
@@ -83,15 +94,15 @@ export function OrderSummary({ orderData, isLoading }: OrderSummaryProps) {
           items.map((item, idx) => (
             <div key={idx} className="mb-2 pl-2 border-l-2 border-blue-200">
               <div className="font-semibold text-gray-700">{item.fileName || `งานพิมพ์เอกสาร ${item.paperSize}`}</div>
-              <div className="text-gray-600">
-                - งานพิมพ์เอกสาร {item.paperSize} ({item.colorType} / {item.printSide})
-              </div>
-              <div className="flex justify-between text-gray-600">
-                <span>{item.pagesPerSet} หน้า x {item.pricePerPage.toFixed(2)} บาท/หน้า = {(item.pagesPerSet * item.pricePerPage).toFixed(2)} บาท</span>
-              </div>
-              <div className="flex justify-between font-medium pt-0.5">
-                <span>รวม {item.quantity} ชุด (x{item.quantity})</span>
-                <span className="font-bold">= {item.totalPrice.toFixed(2)} บาท</span>
+              {formatSpecs(item) && (
+                <div className="text-gray-600">- {formatSpecs(item)}</div>
+              )}
+              {/* ราคาที่เก็บไว้เป็นราคาต่อชุด (รวมทุกหน้าแล้ว) จึงไม่คูณจำนวนหน้าซ้ำ */}
+              <div className="flex justify-between font-medium pt-0.5 text-gray-700">
+                <span>
+                  {item.pagesPerSet} หน้า x {item.quantity} ชุด
+                </span>
+                <span className="font-bold">= {Number(item.totalPrice || 0).toFixed(2)} บาท</span>
               </div>
             </div>
           ))
@@ -118,26 +129,16 @@ export function OrderSummary({ orderData, isLoading }: OrderSummaryProps) {
           <span>= {totalPrintAndService.toFixed(2)} บาท</span>
         </div>
 
-        {/* ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (Small Order Fee) */}
-        {actualSmallOrderFee > 0 ? (
+        {/* ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (Small Order Fee) แสดงเฉพาะเมื่อมีค่าธรรมเนียม */}
+        {actualSmallOrderFee > 0 && (
           <div className="flex justify-between text-xs text-amber-700">
             <div>
-              <span className="font-semibold block">ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (Small Order Fee)</span>
+              <span className="font-semibold block">ค่าธรรมเนียมสั่งซื้อขนาดเล็ก</span>
               <span className="text-amber-600 block text-[10px]">
-                *เนื่องจากค่างานไม่ถึง {smallOrderFeeThreshold} บาท (คิดเพิ่ม 20 บาท)
+                *ยอดสั่งขั้นต่ำ {smallOrderFeeThreshold} บาท หากไม่ถึงคิดค่าธรรมเนียม {actualSmallOrderFee} บาท
               </span>
             </div>
             <span className="font-bold">= +{actualSmallOrderFee.toFixed(2)} บาท</span>
-          </div>
-        ) : (
-          <div className="flex justify-between text-xs text-gray-500">
-            <div>
-              <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (Small Order Fee)</span>
-              <span className="text-gray-400 block text-[10px]">
-                *ไม่มี (เนื่องจากค่างาน ≥ {smallOrderFeeThreshold} บาท)
-              </span>
-            </div>
-            <span>= 0.00 บาท</span>
           </div>
         )}
       </div>

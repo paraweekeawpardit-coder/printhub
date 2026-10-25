@@ -216,7 +216,7 @@ export default function CustomerCartCard({
               item?.color_type,
               item?.paper_type,
               item?.finishing_option,
-            ].filter((s) => s && String(s).trim());
+            ].filter((s) => s && String(s).trim() && String(s).trim() !== "ไม่มี"); // ไม่แสดง "ไม่มี"
 
             const fileUrls = String(item?.file_url || "")
               .split(",")

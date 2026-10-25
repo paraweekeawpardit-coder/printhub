@@ -44,7 +44,10 @@ export default function CustomerHomePage() {
 
   const [isOpenOnly, setIsOpenOnly] = useState(true);
   const [isNearest, setIsNearest] = useState(true);
-  const [isTopRated, setIsTopRated] = useState(false);
+  // เรียงตามคะแนน: none = ไม่เรียง, high = สูงสุดก่อน (backend), low = ต่ำสุดก่อน (เรียงฝั่งหน้าบ้าน)
+  const [ratingSort, setRatingSort] = useState<"none" | "high" | "low">("none");
+  const isTopRated = ratingSort === "high";
+  const [minRating, setMinRating] = useState(0); // กรองดาว: 0 = ทั้งหมด
 
   const [cartItems, setCartItems] = useState<any[]>([]);
 
@@ -208,9 +211,17 @@ export default function CustomerHomePage() {
 
   // กรองรายการร้านค้าสำรองฝั่งหน้าบ้าน
   const displayedShops = useMemo(() => {
-    return shops.filter((shop: any) => {
+    const getRating = (shop: any) =>
+      Number(shop.rating ?? shop.average_rating ?? shop.avg_rating ?? shop.score ?? 0) || 0;
+
+    const filtered = shops.filter((shop: any) => {
       if (isOpenOnly && !checkIsShopOpen(shop)) {
         return false;
+      }
+
+      // กรองตามดาว (ตั้งแต่ X ดาวขึ้นไป)
+      if (minRating > 0) {
+        if (!(getRating(shop) >= minRating)) return false;
       }
 
       if (selectedService && selectedService !== "ทั้งหมด") {
@@ -226,11 +237,18 @@ export default function CustomerHomePage() {
 
       return true;
     });
-  }, [shops, isOpenOnly, selectedService]);
+
+    // เรียงคะแนนต่ำสุดก่อน (คะแนนเท่ากันคงลำดับเดิม เช่น ระยะทาง)
+    if (ratingSort === "low") {
+      return [...filtered].sort((a, b) => getRating(a) - getRating(b));
+    }
+    return filtered;
+  }, [shops, isOpenOnly, selectedService, minRating, ratingSort]);
 
   const handleResetFilters = () => {
     setIsNearest(false);
-    setIsTopRated(false);
+    setRatingSort("none");
+    setMinRating(0);
     setIsOpenOnly(false);
     setMinPrice(undefined);
     setMaxPrice(undefined);
@@ -309,7 +327,11 @@ export default function CustomerHomePage() {
             isOpenOnly={isOpenOnly}
             onToggleOpenOnly={() => setIsOpenOnly(!isOpenOnly)}
             isTopRated={isTopRated}
-            onToggleTopRated={() => setIsTopRated(!isTopRated)}
+            onToggleTopRated={() => setRatingSort(isTopRated ? "none" : "high")}
+            ratingSort={ratingSort}
+            onChangeRatingSort={setRatingSort}
+            minRating={minRating}
+            onChangeMinRating={setMinRating}
             minPrice={minPrice}
             maxPrice={maxPrice}
             onApplyPrice={(min, max) => {

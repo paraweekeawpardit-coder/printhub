@@ -36,6 +36,7 @@ interface ShopCartDrawerProps {
     total_price: number;
   }) => void | string | Promise<void | string>;
   isSubmitting?: boolean;
+  isBuyNow?: boolean; // โหมดสั่งทันที: สั่งเฉพาะรายการเดียว
 }
 
 const timeToMinutes = (timeStr: string) => {
@@ -74,6 +75,7 @@ export default function ShopCartDrawer({
   onRemoveItem,
   onProceedToPayment,
   isSubmitting = false,
+  isBuyNow = false,
 }: ShopCartDrawerProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [appointmentDate, setAppointmentDate] = useState("");
@@ -232,14 +234,17 @@ export default function ShopCartDrawer({
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-bold text-base text-slate-900 leading-tight">ตะกร้าสินค้า</h3>
+                  <h3 className="font-bold text-base text-slate-900 leading-tight">
+                    {isBuyNow ? "สั่งทันที" : "ตะกร้าสินค้า"}
+                  </h3>
                   <p className="text-xs text-slate-500 truncate">
-                    ร้าน {shop?.shop_name || shop?.name || "ร้านค้า"} · {cartItems.length} รายการ
+                    ร้าน {shop?.shop_name || shop?.name || "ร้านค้า"} ·{" "}
+                    {isBuyNow ? "สั่งเฉพาะรายการนี้ (ไม่รวมของในตะกร้า)" : `${cartItems.length} รายการ`}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {cartItems.length > 0 && (
+                {cartItems.length > 0 && !isBuyNow && (
                   <button
                     type="button"
                     onClick={() => {
@@ -282,7 +287,7 @@ export default function ShopCartDrawer({
                           }
                         : undefined
                     }
-                    onRemove={() => onRemoveItem && onRemoveItem(item.id)}
+                    onRemove={onRemoveItem ? () => onRemoveItem(item.id) : undefined}
                   />
                 ))}
               </div>
@@ -349,9 +354,14 @@ export default function ShopCartDrawer({
                       <span className="text-slate-700 font-medium">฿{totalCartPrice.toFixed(2)}</span>
                     </div>
                     {smallOrderFee > 0 && (
-                      <div className="flex justify-between text-orange-600">
-                        <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (&lt;50 บาท)</span>
-                        <span className="font-medium">+฿{smallOrderFee.toFixed(2)}</span>
+                      <div className="flex justify-between gap-3 text-orange-600">
+                        <div>
+                          <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก</span>
+                          <span className="block text-[11px] text-orange-500/90">
+                            ยอดสั่งขั้นต่ำ 50 บาท · สั่งเพิ่มอีก ฿{(50 - totalCartPrice).toFixed(2)} เพื่อไม่เสียค่าธรรมเนียม
+                          </span>
+                        </div>
+                        <span className="font-medium shrink-0">+฿{smallOrderFee.toFixed(2)}</span>
                       </div>
                     )}
                     <div className="flex items-end justify-between pt-2 border-t border-slate-100">

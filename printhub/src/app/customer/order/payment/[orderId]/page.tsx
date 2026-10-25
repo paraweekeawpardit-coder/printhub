@@ -194,9 +194,9 @@ export default function PaymentPage() {
 
               return {
                 fileName: item.category || 'งานพิมพ์เอกสาร',
-                paperSize: item.describe || 'A4',
-                colorType: 'มาตรฐาน',
-                printSide: 'ไม่มี',
+                paperSize: item.describe || '', // สเปกรวม เช่น "A4 | ขาว-ดำ | เย็บมุม"
+                colorType: '',
+                printSide: '',
                 pagesPerSet: item.page_count || 1,
                 pricePerPage: Number(item.unit_price) || 0,
                 quantity: qty,
