@@ -52,9 +52,10 @@ export default function PaymentActionButton({
 
   // 🌟 2. คำนวณเวลาเป้าหมาย (Timestamp ms) พร้อมป้องกันปัญหาเรื่อง Timezone
   const targetExpiryTime = React.useMemo(() => {
+    // ต้องมีฟังก์ชันนี้เพื่อกัน Timezone เพี้ยน!
     const parseSafeTime = (dateStr?: string | null) => {
       if (!dateStr) return null;
-      let cleaned = dateStr.trim();
+      let cleaned = String(dateStr).trim();
       if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
         cleaned = `${cleaned.replace(" ", "T")}Z`;
       }
@@ -62,14 +63,19 @@ export default function PaymentActionButton({
       return isNaN(parsed) ? null : parsed;
     };
 
+    // 1. ใช้ expires_at ที่คำนวณมาใหม่
     if (order.expires_at) {
-      return parseSafeTime(order.expires_at);
+      const exp = parseSafeTime(order.expires_at);
+      if (exp) return exp;
     }
-    // Fallback: order_date + 10 นาที กรณีออเดอร์เก่ายังไม่มี expires_at
-    const fallbackBase = parseSafeTime(order.order_date || order.created_at);
-    if (fallbackBase) {
-      return fallbackBase + 10 * 60 * 1000;
+
+    // 2. Fallback
+    const rawDate = order.order_date || order.created_at;
+    if (rawDate) {
+      const base = parseSafeTime(rawDate);
+      if (base) return base + 10 * 60 * 1000;
     }
+
     return null;
   }, [order.expires_at, order.order_date, order.created_at]);
 
@@ -110,11 +116,14 @@ export default function PaymentActionButton({
   const isTimeOut = remainingSeconds <= 0;
   const isSlipRejected = order.payment?.is_verified === false;
 
-  // นำทางไปหน้าชำระเงิน
+  // นำทางไปหน้าชำระเงิน พร้อมส่ง expiresAt เป้าหมายที่ถูกต้องไปด้วยเสมอ
   const handleGoToPayment = () => {
+    // 🌟 แปลง targetExpiryTime เป็น ISO String เพื่อส่งต่อให้หน้าอัปสลิป
+    const targetIso = targetExpiryTime ? new Date(targetExpiryTime).toISOString() : "";
+    
     const queryParams = new URLSearchParams({
       totalPrice: String(order.total_price || 0),
-      ...(order.expires_at ? { expiresAt: order.expires_at } : {}),
+      ...(targetIso ? { expiresAt: targetIso } : {}),
     });
     router.push(`/customer/order/payment/${order.id}?${queryParams.toString()}`);
   };

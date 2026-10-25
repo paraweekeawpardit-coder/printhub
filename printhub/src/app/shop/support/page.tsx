@@ -100,10 +100,6 @@ export default function ShopSupportPage() {
                 </p>
               </div>
             </div>
-
-            <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-xs font-medium rounded-full border border-emerald-200">
-              เจ้าหน้าที่พร้อมให้บริการ
-            </span>
           </div>
 
           {/* Chat Box ฝั่งร้านค้า (ส่ง role="shop") */}

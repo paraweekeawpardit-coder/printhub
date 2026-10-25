@@ -1,6 +1,21 @@
 import { Request, Response } from 'express';
 import supabase from '../config/supabase.js';
 
+// วันเปิดร้าน (print_shop.open_days: 0=อาทิตย์ ... 6=เสาร์) ถ้าไม่มีข้อมูล = เปิดทุกวัน
+const isShopOpenOnWeekday = (raw: any, weekday: number) => {
+  let list: any[] = [];
+  if (Array.isArray(raw)) list = raw;
+  else if (typeof raw === "string") list = raw.replace(/[{}\[\]"\s]/g, "").split(",").filter(Boolean);
+  const days = list.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  return days.length === 0 || days.includes(weekday);
+};
+
+// วันในสัปดาห์ของ "ตอนนี้" ตามเวลาไทย (0=อาทิตย์ ... 6=เสาร์)
+const todayWeekdayBangkok = () =>
+  ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
+    new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Bangkok", weekday: "short" }).format(new Date())
+  );
+
 // ==========================================
 // 1. ดึงข้อมูลตะกร้าสินค้า (GET)
 // ==========================================
@@ -32,8 +47,7 @@ export const getCart = async (req: Request, res: Response) => {
           unit_price,
           subtotal,
           file_url,
-          page_count,
-          side_type
+          page_count
         )
       `)
       .eq("customer_id", customerId);
@@ -63,6 +77,7 @@ export const getCart = async (req: Request, res: Response) => {
         is_open,
         open_time,
         close_time,
+        open_days,
         address:address_id (
           latitude,
           longitude
@@ -74,6 +89,7 @@ export const getCart = async (req: Request, res: Response) => {
 
     const now = new Date();
     const currentTime = now.toTimeString().slice(0, 8);
+    const todayWeekday = todayWeekdayBangkok();
     let totalItemsAllCarts = 0;
     const allCartItems: any[] = [];
 
@@ -83,7 +99,8 @@ export const getCart = async (req: Request, res: Response) => {
       totalItemsAllCarts += items.length;
       allCartItems.push(...items);
 
-      let isOpenNow = shop?.is_open !== false;
+      // ปิดถ้าร้านกดปิดเอง หรือวันนี้ไม่ใช่วันเปิดร้าน
+      let isOpenNow = shop?.is_open !== false && isShopOpenOnWeekday(shop?.open_days, todayWeekday);
       if (isOpenNow && shop?.open_time && shop?.close_time) {
         if (shop.open_time <= shop.close_time) {
           isOpenNow = currentTime >= shop.open_time && currentTime <= shop.close_time;
@@ -113,8 +130,10 @@ export const getCart = async (req: Request, res: Response) => {
         shop_name: shop?.shop_name || "ร้านค้างานพิมพ์",
         profile_image: shop?.profile_image || null,
         is_open: isOpenNow,
+        is_temporarily_closed: shop?.is_open === false, // ร้านกดปิดร้านชั่วคราวเอง
         open_time: shop?.open_time || null,
         close_time: shop?.close_time || null,
+        open_days: shop?.open_days ?? null,
         distance: distance,
         items: items,
         total_price: items.reduce((sum: number, it: any) => sum + Number(it.subtotal || it.unit_price * it.quantity || 0), 0)
@@ -156,7 +175,6 @@ export const addToCart = async (req: Request, res: Response) => {
       file_url,
       total_pages,
       page_count,
-      side_type,
     } = req.body;
 
     const actualCustomerId = (req as any).user?.id || customer_id;
@@ -168,7 +186,7 @@ export const addToCart = async (req: Request, res: Response) => {
       });
     }
 
-    // 1. ตรวจสอบตะกร้าของร้านนี้
+    // 1. ตรวจสอบตะกร้าของร้านนี้โดยเฉพาะ (ต้องตรงทั้ง customer_id และ shop_id)
     let { data: cart, error: cartErr } = await supabase
       .from("cart")
       .select("id, shop_id")
@@ -176,37 +194,28 @@ export const addToCart = async (req: Request, res: Response) => {
       .eq("shop_id", shop_id)
       .maybeSingle();
 
-    if (cartErr) {
-      console.error("Cart query error:", cartErr);
-    }
-
-    // 2. ถ้ายังไม่มีตะกร้าของร้านนี้ ให้สร้างใหม่
+    // 2. ถ้ายังไม่มีตะกร้าของร้านนี้ ให้สร้างตะกร้าใบใหม่ของร้านนี้ขึ้นมา
     if (!cart) {
       const { data: newCart, error: createCartErr } = await supabase
         .from("cart")
         .insert([{ customer_id: actualCustomerId, shop_id: shop_id }])
         .select("id, shop_id")
-        .single();
+        .maybeSingle();
 
       if (createCartErr) {
-        console.error("Create cart error:", createCartErr);
-        // Fallback: ดึง cart ที่เพิ่งสร้างเผื่อ query จังหวะแรกหลุด
-        const { data: fallbackCart } = await supabase
-          .from("cart")
-          .select("id, shop_id")
-          .eq("customer_id", actualCustomerId)
-          .eq("shop_id", shop_id)
-          .maybeSingle();
-        cart = fallbackCart;
-      } else {
-        cart = newCart;
+        console.error("❌ สร้างตะกร้าใหม่ไม่สำเร็จ:", createCartErr.message);
+        return res.status(500).json({
+          success: false,
+          message: "ไม่สามารถสร้างตะกร้าแยกตามร้านค้าได้ กรุณาตรวจสอบฐานข้อมูล cart",
+        });
       }
+      cart = newCart;
     }
 
     if (!cart?.id) {
       return res.status(500).json({
         success: false,
-        message: "ไม่สามารถสร้างหรือดึง Cart ID สำหรับร้านค้านี้ได้",
+        message: "ไม่พบ Cart ID ของร้านค้านี้",
       });
     }
 
@@ -231,7 +240,6 @@ export const addToCart = async (req: Request, res: Response) => {
       unit_price: parsedUnitPrice,
       // subtotal: calculatedSubtotal,
       page_count: calculatedPages,
-      side_type: side_type || "SINGLE",
       total_pages: calculatedPages,
     };
 

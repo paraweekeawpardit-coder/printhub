@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { ShoppingBag, Trash2, X, Loader2 } from "lucide-react";
+import { ShoppingBag, Trash2, X, Loader2, CalendarCheck, ArrowRight } from "lucide-react";
 import CartItemCard from "./CartItemCard";
 import CartScheduleForm from "./CartScheduleForm";
+import { formatOpenDays, isOpenOnWeekday, weekdayOfDateStr, weekdayFullName } from "../shopOpenDays";
 
 export interface CartItem {
   id: string;
@@ -33,7 +34,7 @@ interface ShopCartDrawerProps {
     appointment_time: string;
     description: string;
     total_price: number;
-  }) => void;
+  }) => void | string | Promise<void | string>;
   isSubmitting?: boolean;
 }
 
@@ -95,6 +96,10 @@ export default function ShopCartDrawer({
     0
   );
 
+  // ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (เหมือน backend: ยอดต่ำกว่า 50 บาท +20 บาท)
+  const smallOrderFee = totalCartPrice > 0 && totalCartPrice < 50 ? 20 : 0;
+  const netTotal = totalCartPrice + smallOrderFee;
+
   const getNowInfo = () => {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -103,8 +108,45 @@ export default function ShopCartDrawer({
     return { todayStr, minAllowedTimeStr };
   };
 
-  const handleConfirmCheckout = () => {
+  // ตรวจวัน/เวลานัดรับ (ใช้ทั้งตอนเลือก และตอนกดชำระเงิน) ถ้าผ่านคืนค่า ""
+  const validateSchedule = (date: string, time: string) => {
     const { todayStr, minAllowedTimeStr } = getNowInfo();
+
+    if (date) {
+      if (date < todayStr) {
+        return "วันที่นัดรับต้องเป็นวันปัจจุบันหรือวันข้างหน้าเท่านั้น";
+      }
+      // วันนัดรับต้องเป็นวันที่ร้านเปิด
+      const selectedWeekday = weekdayOfDateStr(date);
+      if (!isOpenOnWeekday(shop?.open_days, selectedWeekday)) {
+        return `ร้านปิดวัน${weekdayFullName(selectedWeekday)} กรุณาเลือกวันอื่น (ร้านเปิด ${formatOpenDays(shop?.open_days)})`;
+      }
+    }
+
+    if (time) {
+      const shopOpen = shop?.open_time ? shop.open_time.slice(0, 5) : "08:00";
+      const shopClose = shop?.close_time ? shop.close_time.slice(0, 5) : "18:00";
+      const selectedTime = time.slice(0, 5);
+
+      if (!isWithinShopHours(selectedTime, shopOpen, shopClose)) {
+        return `เวลานัดรับต้องอยู่ระหว่างเวลาทำการ (${shopOpen} - ${shopClose} น.)`;
+      }
+
+      if (date) {
+        const selectedDateTime = new Date(`${date}T${selectedTime}:00`);
+        const now = new Date();
+        const nowWithoutSeconds = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), 0);
+        const diffInMinutes = Math.round((selectedDateTime.getTime() - nowWithoutSeconds.getTime()) / (1000 * 60));
+        if (diffInMinutes < 30) {
+          return `กรุณาเลือกเวลานัดรับตั้งแต่ ${minAllowedTimeStr} น. เป็นต้นไป (ล่วงหน้าอย่างน้อย 30 นาที)`;
+        }
+      }
+    }
+
+    return "";
+  };
+
+  const handleConfirmCheckout = async () => {
 
     if (!appointmentDate || !appointmentTime) {
       setTimeError("กรุณาระบุวันและเวลานัดหมายให้ครบถ้วน");
@@ -112,41 +154,31 @@ export default function ShopCartDrawer({
     }
 
     if (shop?.is_open === false) {
-      setTimeError("ขณะนี้ร้านค้าปิดให้บริการชั่วคราว ไม่สามารถทำการสั่งซื้อได้");
+      setTimeError(
+        shop?.is_temporarily_closed
+          ? "ขณะนี้ร้านค้าปิดให้บริการชั่วคราว ไม่สามารถทำการสั่งซื้อได้"
+          : "ขณะนี้ร้านค้าปิดทำการ ไม่สามารถทำการสั่งซื้อได้"
+      );
       return;
     }
 
-    if (appointmentDate < todayStr) {
-      setTimeError("วันที่นัดรับต้องเป็นวันปัจจุบันหรือวันข้างหน้าเท่านั้น");
+    const scheduleError = validateSchedule(appointmentDate, appointmentTime);
+    if (scheduleError) {
+      setTimeError(scheduleError);
       return;
     }
 
-    const shopOpen = shop?.open_time ? shop.open_time.slice(0, 5) : "08:00";
-    const shopClose = shop?.close_time ? shop.close_time.slice(0, 5) : "18:00";
     const selectedTime = appointmentTime.slice(0, 5);
-
-    if (!isWithinShopHours(selectedTime, shopOpen, shopClose)) {
-      setTimeError(`เวลานัดรับต้องอยู่ระหว่างเวลาทำการ (${shopOpen} - ${shopClose} น.)`);
-      return;
-    }
-
-    const selectedDateTime = new Date(`${appointmentDate}T${selectedTime}:00`);
-    const now = new Date();
-    const nowWithoutSeconds = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), 0);
-    const diffInMinutes = Math.round((selectedDateTime.getTime() - nowWithoutSeconds.getTime()) / (1000 * 60));
-
-    if (diffInMinutes < 30) {
-      setTimeError(`กรุณาเลือกเวลานัดรับตั้งแต่ ${minAllowedTimeStr} น. เป็นต้นไป (ล่วงหน้าอย่างน้อย 30 นาที)`);
-      return;
-    }
-
     setTimeError("");
-    onProceedToPayment({
+    const errorMessage = await onProceedToPayment({
       receive_date: appointmentDate,
       appointment_time: `${appointmentDate}T${selectedTime}:00`,
       description: orderNote,
       total_price: totalCartPrice,
     });
+    if (typeof errorMessage === "string" && errorMessage) {
+      setTimeError(errorMessage);
+    }
   };
 
   const { todayStr } = getNowInfo();
@@ -191,15 +223,20 @@ export default function ShopCartDrawer({
           onClick={handleClose}
         >
           <div
-            className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[88vh] overflow-hidden"
+            className="bg-white w-full max-w-lg md:max-w-5xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-base text-slate-900">
-                  ตะกร้าสินค้า ({shop?.shop_name || shop?.name || "ร้านค้า"})
-                </h3>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl shrink-0">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-base text-slate-900 leading-tight">ตะกร้าสินค้า</h3>
+                  <p className="text-xs text-slate-500 truncate">
+                    ร้าน {shop?.shop_name || shop?.name || "ร้านค้า"} · {cartItems.length} รายการ
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {cartItems.length > 0 && (
@@ -224,12 +261,12 @@ export default function ShopCartDrawer({
               </div>
             </div>
 
-            <div className="p-5 overflow-y-auto space-y-4 flex-1">
-              <div className="space-y-2.5">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+            <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden md:grid md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
+              {/* ซ้าย: รายการงานพิมพ์ */}
+              <div className="p-5 bg-slate-50/60 space-y-2.5 md:overflow-y-auto">
+                <span className="text-sm font-bold text-slate-900 block">
                   รายการงานพิมพ์ ({cartItems.length})
                 </span>
-
                 {cartItems.map((item, idx) => (
                   <CartItemCard
                     key={item.id || idx}
@@ -250,56 +287,107 @@ export default function ShopCartDrawer({
                 ))}
               </div>
 
-              <CartScheduleForm
-                todayStr={todayStr}
-                shopOpen={shopOpen}
-                shopClose={shopClose}
-                isOpenOvernight={isOpenOvernight}
-                appointmentDate={appointmentDate}
-                appointmentTime={appointmentTime}
-                orderNote={orderNote}
-                timeError={timeError}
-                onDateChange={(d) => {
-                  setAppointmentDate(d);
-                  setTimeError("");
-                }}
-                onTimeChange={(t) => {
-                  setAppointmentTime(t);
-                  setTimeError("");
-                }}
-                onNoteChange={setOrderNote}
-              />
-            </div>
+              {/* ขวา: นัดรับ + หมายเหตุ + สรุปยอด */}
+              <div className="flex flex-col md:min-h-0 md:border-l md:border-slate-100">
+                <div className="p-5 md:flex-1 md:overflow-y-auto">
+                  <CartScheduleForm
+                    todayStr={todayStr}
+                    shopOpen={shopOpen}
+                    shopClose={shopClose}
+                    isOpenOvernight={isOpenOvernight}
+                    openDays={shop?.open_days}
+                    appointmentDate={appointmentDate}
+                    appointmentTime={appointmentTime}
+                    orderNote={orderNote}
+                    timeError={timeError}
+                    onDateChange={(d) => {
+                      setAppointmentDate(d);
+                      setTimeError(validateSchedule(d, appointmentTime));
+                    }}
+                    onTimeChange={(t) => {
+                      setAppointmentTime(t);
+                      setTimeError(validateSchedule(appointmentDate, t));
+                    }}
+                    onNoteChange={setOrderNote}
+                  />
+                </div>
 
-            <div className="p-4 border-t border-slate-100 bg-white space-y-3 shrink-0">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500 font-medium">ยอดรวมทั้งหมด</span>
-                <span className="text-xl font-extrabold text-blue-600">
-                  ฿{totalCartPrice.toFixed(2)}
-                </span>
+                <div className="p-5 border-t border-slate-100 bg-white space-y-4 shrink-0 sticky bottom-0 md:static">
+                  {/* การ์ดสรุปนัดรับ */}
+                  {appointmentDate && appointmentTime ? (
+                    <div className="flex items-center gap-3 rounded-2xl bg-blue-50 border border-blue-100 px-4 py-3">
+                      <div className="w-10 h-10 rounded-xl bg-white text-blue-600 flex items-center justify-center shadow-xs shrink-0">
+                        <CalendarCheck className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-medium text-blue-600">นัดรับงาน</p>
+                        <p className="text-sm font-bold text-slate-900 truncate">
+                          {(() => {
+                            const [y, m, d] = appointmentDate.split("-").map(Number);
+                            return new Date(y, m - 1, d).toLocaleDateString("th-TH", {
+                              weekday: "long",
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            });
+                          })()}{" "}
+                          · {appointmentTime.slice(0, 5)} น.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-2xl border border-dashed border-slate-300 px-4 py-3 text-xs text-slate-500">
+                      <CalendarCheck className="w-4 h-4 text-slate-400 shrink-0" />
+                      เลือกวันและเวลานัดรับก่อนไปชำระเงิน
+                    </div>
+                  )}
+
+                  {/* สรุปยอด */}
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex justify-between text-slate-500">
+                      <span>ค่างานพิมพ์ ({cartItems.length} รายการ)</span>
+                      <span className="text-slate-700 font-medium">฿{totalCartPrice.toFixed(2)}</span>
+                    </div>
+                    {smallOrderFee > 0 && (
+                      <div className="flex justify-between text-orange-600">
+                        <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (&lt;50 บาท)</span>
+                        <span className="font-medium">+฿{smallOrderFee.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-end justify-between pt-2 border-t border-slate-100">
+                      <span className="font-semibold text-slate-900">ยอดชำระสุทธิ</span>
+                      <span className="text-2xl font-extrabold text-blue-600 leading-none">
+                        ฿{netTotal.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={shop?.is_open === false || isSubmitting}
+                    onClick={handleConfirmCheckout}
+                    className={`w-full py-3.5 rounded-2xl text-sm font-bold transition shadow-lg flex items-center justify-center gap-2 ${
+                      shop?.is_open === false || isSubmitting
+                        ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
+                        : "bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white shadow-blue-500/30 cursor-pointer"
+                    }`}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>กำลังสร้างคำสั่งซื้อ...</span>
+                      </>
+                    ) : shop?.is_open === false ? (
+                      "ร้านปิดทำการ (ไม่สามารถสั่งได้)"
+                    ) : (
+                      <>
+                        <span>ไปที่หน้าชำระเงิน</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-
-              <button
-                type="button"
-                disabled={shop?.is_open === false || isSubmitting}
-                onClick={handleConfirmCheckout}
-                className={`w-full py-3 rounded-xl text-xs sm:text-sm font-bold transition shadow-md flex items-center justify-center gap-2 ${
-                  shop?.is_open === false || isSubmitting
-                    ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
-                    : "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25 cursor-pointer"
-                }`}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>กำลังสร้างคำสั่งซื้อ...</span>
-                  </>
-                ) : shop?.is_open === false ? (
-                  "ร้านปิดทำการ (ไม่สามารถสั่งได้)"
-                ) : (
-                  "ไปที่หน้าชำระเงิน →"
-                )}
-              </button>
             </div>
           </div>
         </div>

@@ -348,7 +348,7 @@ export default function AdminSupportPage() {
                       {selectedRoom.senderName}
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {selectedRoom.senderType === "shop" ? "บัญชีร้านค้า" : "บัญชีลูกค้าทั่วไป"} • ID: {selectedRoom.senderId}
+                      {selectedRoom.senderType === "shop" ? "บัญชีร้านค้า" : "บัญชีลูกค้าทั่วไป"}
                     </p>
                   </div>
                 </div>

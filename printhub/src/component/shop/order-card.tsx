@@ -3,6 +3,7 @@
 import { Check, X, Printer, Loader2, Eye, Clock, Calendar } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { RejectOrderModal } from "./OrderModals";
 
 type Order = {
   id: string;
@@ -10,6 +11,7 @@ type Order = {
   customer_id: string;
   shop_id: string;
   description: string | null;
+  reject_reason?: string | null; // เหตุผลที่ร้านปฏิเสธ (print_order.reject_reason)
   order_date: string;
   appointment_time?: string | null;
   receive_date?: string | null;
@@ -91,6 +93,10 @@ export default function OrderCard({
 
   const [currentState, setCurrentState] = useState<string>(initialStatus);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
+  const [rejectReason, setRejectReason] = useState<string | null>(
+    order.reject_reason ?? null
+  );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [isVerified, setIsVerified] = useState<boolean | null>(
@@ -106,10 +112,14 @@ export default function OrderCard({
       order.latest_status || order.current_status?.state || STATUS.PENDING
     );
     setIsVerified(order.payment?.is_verified ?? null);
+    setRejectReason(order.reject_reason ?? null);
   }, [order]);
 
-  async function updateState(newStatus: string) {
-    if (updating || disabled) return;
+  async function updateState(
+    newStatus: string,
+    reason?: string
+  ): Promise<boolean> {
+    if (updating || disabled) return false;
 
     setPendingAction(newStatus);
     setErrorMsg(null);
@@ -119,17 +129,23 @@ export default function OrderCard({
     try {
       await axios.patch(
         url,
-        { status_name: newStatus },
+        {
+          status_name: newStatus,
+          ...(reason ? { reject_reason: reason } : {}),
+        },
         { params: { shop_id: order.shop_id } }
       );
 
       setCurrentState(newStatus);
+      if (reason) setRejectReason(reason);
       onUpdateStatus?.(order.id, newStatus);
+      return true;
     } catch (err: any) {
       console.error("[OrderCard] request failed:", err);
       const backendMessage =
         err.response?.data?.error || "ไม่สามารถเปลี่ยนสถานะได้ กรุณาลองใหม่อีกครั้ง";
       setErrorMsg(backendMessage);
+      return false;
     } finally {
       setPendingAction(null);
     }
@@ -314,7 +330,7 @@ export default function OrderCard({
               <div className={isVerified === true ? "grid grid-cols-2 gap-2" : ""}>
                 <button
                   type="button"
-                  onClick={() => updateState(STATUS.CANCELLED)}
+                  onClick={() => setShowRejectModal(true)}
                   disabled={updating || verifyingSlip}
                   className="flex w-full items-center justify-center gap-1.5 h-10 rounded-xl border border-rose-200 bg-white text-rose-600 text-sm font-medium hover:bg-rose-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -382,12 +398,33 @@ export default function OrderCard({
           )}
 
           {currentState === STATUS.CANCELLED && (
-            <p className="text-sm text-rose-500 font-medium text-center">
-              ยกเลิกแล้ว
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-rose-500 font-medium text-center">
+                ยกเลิกแล้ว
+              </p>
+              <div className="rounded-xl border border-rose-100 bg-rose-50/70 px-3 py-2 text-xs text-rose-700">
+                <span className="font-bold">เหตุผลที่ปฏิเสธ: </span>
+                <span className="whitespace-pre-line break-words">
+                  {rejectReason?.trim() ||
+                    "ระบบยกเลิกอัตโนมัติ (เลยเวลานัดรับ)"}
+                </span>
+              </div>
+            </div>
           )}
         </div>
       </div>
+
+      {/* Modal เลือก/พิมพ์เหตุผลในการปฏิเสธ */}
+      <RejectOrderModal
+        isOpen={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        isUpdating={pendingAction === STATUS.CANCELLED}
+        orderLabel={`#${order.order_no || order.id.slice(0, 8)}`}
+        onConfirm={async (reason) => {
+          const ok = await updateState(STATUS.CANCELLED, reason);
+          if (ok) setShowRejectModal(false);
+        }}
+      />
 
       {/* Pop-up Modal แสดงรูปภาพสลิป */}
       {showSlipModal && (

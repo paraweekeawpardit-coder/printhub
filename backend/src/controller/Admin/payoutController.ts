@@ -2,6 +2,47 @@ import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
 /**
+ * ฟังก์ชันช่วยแปลง Base64 / File Buffer แล้วอัปโหลดไปยัง Supabase Storage (โฟลเดอร์ payout_slip_url)
+ */
+const uploadPayoutSlip = async (fileData: string, payoutId: string): Promise<string> => {
+  // หากเป็น Public URL อยู่แล้ว ให้ส่งกลับทันที
+  if (fileData.startsWith("http://") || fileData.startsWith("https://")) {
+    return fileData;
+  }
+
+  // รองรับกรณีส่งมาเป็น Data URL (Base64)
+  const matches = fileData.match(/^data:(.+);base64,(.+)$/);
+  if (!matches) return fileData;
+
+  const mimeType = matches[1];
+  const base64Data = matches[2];
+  const buffer = Buffer.from(base64Data, "base64");
+  const extension = mimeType.split("/")[1] || "png";
+  const filename = `payout_${payoutId}_${Date.now()}.${extension}`;
+
+  // 🔴 กำหนด Path ไปยังโฟลเดอร์ payout_slip_url ใน Bucket payment_slip
+  const filePath = `payout_slip_url/${filename}`;
+
+  const { error: uploadErr } = await supabase.storage
+    .from("payment_slip")
+    .upload(filePath, buffer, {
+      contentType: mimeType,
+      upsert: true,
+    });
+
+  if (uploadErr) {
+    console.error("Upload Payout Slip Error:", uploadErr.message);
+    throw uploadErr;
+  }
+
+  const { data: publicUrlData } = supabase.storage
+    .from("payment_slip")
+    .getPublicUrl(filePath);
+
+  return publicUrlData.publicUrl;
+};
+
+/**
  * GET /api/admin/payouts
  * ดึงรายการโอนเงินให้ร้านค้า (Shop Payouts)
  * กรองออเดอร์ที่ติดรายงานปัญหา (pending, investigating) และออเดอร์ที่ถูกอนุมัติคืนเงิน (resolved_refund) ออกจากรายการ
@@ -110,12 +151,15 @@ export const processPayout = async (req: Request, res: Response): Promise<Respon
 
     if (targetIds.length === 0) return res.status(400).json({ error: "payout_id or payout_ids is required" });
 
+    // 🟢 ตรวจสอบและจัดการอัปโหลดสลิปเข้าโฟลเดอร์ payout_slip_url
+    const finalSlipUrl = await uploadPayoutSlip(payout_slip_url, targetIds[0]);
+
     const now = new Date().toISOString();
 
     const { data: updatedPayments, error } = await supabase
       .from("payment")
       .update({
-        payout_slip_url: payout_slip_url,
+        payout_slip_url: finalSlipUrl,
         status: "PAID",
         payout_date: now,
         updated_at: now,

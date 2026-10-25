@@ -298,9 +298,7 @@ export default function ShopPage() {
         {/* 3 Dashboard Summary Cards */}
         <div className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-3">
           <div
-            className={`cursor-pointer rounded-2xl transition-all ${
-              activeView === "orders" ? "ring-2 ring-[#0F2942]" : ""
-            }`}
+            className="cursor-pointer rounded-2xl"
             onClick={() =>
               setActiveView(activeView === "orders" ? null : "orders")
             }
@@ -314,9 +312,7 @@ export default function ShopPage() {
           </div>
 
           <div
-            className={`cursor-pointer rounded-2xl transition-all ${
-              activeView === "financial" ? "ring-2 ring-[#0F2942]" : ""
-            }`}
+            className="cursor-pointer rounded-2xl"
             onClick={() =>
               setActiveView(activeView === "financial" ? null : "financial")
             }
@@ -330,9 +326,7 @@ export default function ShopPage() {
           </div>
 
           <div
-            className={`cursor-pointer rounded-2xl transition-all ${
-              activeView === "reviews" ? "ring-2 ring-[#0F2942]" : ""
-            }`}
+            className="cursor-pointer rounded-2xl"
             onClick={() =>
               setActiveView(activeView === "reviews" ? null : "reviews")
             }

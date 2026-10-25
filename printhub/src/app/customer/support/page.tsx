@@ -118,10 +118,6 @@ export default function CustomerSupportPage() {
                 </p>
               </div>
             </div>
-
-            <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-xs font-medium rounded-full border border-emerald-200">
-              เปิดให้บริการ
-            </span>
           </div>
 
           <div className="flex-1 flex flex-col min-h-0 bg-white">

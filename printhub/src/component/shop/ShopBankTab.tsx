@@ -15,9 +15,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-// ==========================================
-// รายชื่อธนาคารในไทยสำหรับ dropdown
-// ==========================================
 const BANK_OPTIONS = [
   { code: "BBL", name: "ธนาคารกรุงเทพ (BBL)" },
   { code: "KBANK", name: "ธนาคารกสิกรไทย (KBANK)" },
@@ -76,6 +73,7 @@ export default function ShopBankTab({
 }: Props) {
   const [copied, setCopied] = useState(false);
   const [isBankMenuOpen, setIsBankMenuOpen] = useState(false);
+  const [accountNumberError, setAccountNumberError] = useState<string>("");
   const bankMenuRef = useRef<HTMLDivElement>(null);
 
   const handleCopy = async () => {
@@ -89,7 +87,6 @@ export default function ShopBankTab({
     }
   };
 
-  // แปลงรูปแบบวันที่ยื่นเรื่อง
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
@@ -104,7 +101,6 @@ export default function ShopBankTab({
     });
   };
 
-  // ปิด dropdown เมื่อคลิกข้างนอก
   useEffect(() => {
     if (!isBankMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -119,6 +115,26 @@ export default function ShopBankTab({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isBankMenuOpen]);
 
+  // ตรวจสอบเลขบัญชี: ตัวเลขเท่านั้น, ความยาว 10 ถึง 12 หลัก
+  const handleAccountNumberChange = (val: string) => {
+    const numericVal = val.replace(/\D/g, "").slice(0, 12);
+    setAccountNumber(numericVal);
+
+    if (numericVal.length > 0 && (numericVal.length < 10 || numericVal.length > 12)) {
+      setAccountNumberError("เลขที่บัญชีต้องมี 10 ถึง 12 หลัก");
+    } else {
+      setAccountNumberError("");
+    }
+  };
+
+  const handleSaveBank = () => {
+    if (accountNumber.length < 10 || accountNumber.length > 12) {
+      setAccountNumberError("เลขที่บัญชีต้องมี 10 ถึง 12 หลัก");
+      return;
+    }
+    onSave();
+  };
+
   const isKnownBank = BANK_OPTIONS.some((b) => b.name === bankName);
   const bankListWithFallback =
     bankName && !isKnownBank
@@ -132,7 +148,6 @@ export default function ShopBankTab({
           !isVerified ? "pointer-events-none blur-[2px] select-none" : ""
         }`}
       >
-        {/* Default Mode: View mode */}
         {!isEditing ? (
           <div>
             <div className="flex items-center justify-between gap-4 p-6">
@@ -150,7 +165,6 @@ export default function ShopBankTab({
                 </div>
               </div>
 
-              {/* 📌 แสดงสถานะรอดำเนินการหากมีคำขอค้างอยู่ บล็อกปุ่มแก้ไข */}
               {isPending ? (
                 <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800 select-none">
                   <Clock size={14} className="animate-spin text-amber-600 shrink-0" />
@@ -194,7 +208,6 @@ export default function ShopBankTab({
               </div>
             </div>
 
-            {/* 📌 Banner แจ้งเตือนเมื่อมีคำขอแก้ไขบัญชีค้างอยู่ */}
             {isPending && (
               <div className="mx-6 mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-xs text-amber-900">
                 <AlertCircle size={18} className="mt-0.5 shrink-0 text-amber-600" />
@@ -209,7 +222,6 @@ export default function ShopBankTab({
             )}
           </div>
         ) : (
-          /* Edit / Form mode */
           <div>
             <div className="space-y-5 p-6">
               <p className="text-xs leading-relaxed text-slate-400">
@@ -217,7 +229,6 @@ export default function ShopBankTab({
               </p>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* ธนาคาร - custom dropdown */}
                 <div>
                   <label className="text-xs font-semibold text-slate-600">
                     ธนาคาร
@@ -252,7 +263,6 @@ export default function ShopBankTab({
                       />
                     </button>
 
-                    {/* Panel: เปิดลงด้านล่างเสมอ + จำกัดความสูงแล้วเลื่อนดูได้ */}
                     {isBankMenuOpen && (
                       <div className="absolute left-0 right-0 top-full z-20 mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg shadow-slate-900/10">
                         {bankListWithFallback.map((b) => (
@@ -291,6 +301,7 @@ export default function ShopBankTab({
                     />
                     <input
                       type="text"
+                      maxLength={100}
                       value={accountName}
                       onChange={(e) => setAccountName(e.target.value)}
                       placeholder="ชื่อ-นามสกุลเจ้าของบัญชี"
@@ -301,7 +312,7 @@ export default function ShopBankTab({
 
                 <div className="sm:col-span-2">
                   <label className="text-xs font-semibold text-slate-600">
-                    เลขที่บัญชี
+                    เลขที่บัญชี 
                   </label>
                   <div className="relative mt-1.5">
                     <Hash
@@ -310,12 +321,20 @@ export default function ShopBankTab({
                     />
                     <input
                       type="text"
+                      maxLength={12}
                       value={accountNumber}
-                      onChange={(e) => setAccountNumber(e.target.value)}
-                      placeholder="xxx-x-xxxxx-x"
-                      className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3.5 text-sm tabular-nums text-[#0F2942] outline-hidden transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15"
+                      onChange={(e) => handleAccountNumberChange(e.target.value)}
+                      placeholder="กรอกเลขที่บัญชี 10-12 หลัก"
+                      className={`w-full rounded-xl border py-2 pl-9 pr-3.5 text-sm tabular-nums text-[#0F2942] outline-hidden transition-colors placeholder:text-slate-300 focus:border-[#2F6FED] focus:ring-2 focus:ring-[#2F6FED]/15 ${
+                        accountNumberError ? "border-rose-400" : "border-slate-200"
+                      }`}
                     />
                   </div>
+                  {accountNumberError && (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-500">
+                      <AlertCircle size={12} /> {accountNumberError}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -331,7 +350,7 @@ export default function ShopBankTab({
               </button>
               <button
                 type="button"
-                onClick={onSave}
+                onClick={handleSaveBank}
                 disabled={saving}
                 className="flex items-center gap-2 rounded-xl bg-[#0F2942] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#16385c] disabled:opacity-50"
               >
@@ -343,7 +362,6 @@ export default function ShopBankTab({
         )}
       </div>
 
-      {/* Verification Overlay */}
       {!isVerified && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/70 backdrop-blur-xs">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">

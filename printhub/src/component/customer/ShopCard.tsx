@@ -3,6 +3,14 @@
 import React from "react";
 import Link from "next/link";
 import { Star, MapPin, Clock } from "lucide-react";
+import {
+  hoursLabel,
+  isAllDayHours,
+  isOpenOnWeekday,
+  nextOpenWeekday,
+  todayWeekdayBangkok,
+  weekdayLongName,
+} from "./shopOpenDays";
 
 export interface Shop {
   id: string | number;
@@ -33,19 +41,21 @@ interface ShopCardProps {
 export const checkIsShopOpen = (shop: any): boolean => {
   if (!shop) return false;
 
-  // 1. ถ้ามีการสั่งปิดโดยตรง
   if (shop.is_open === false || shop.is_open === 0 || shop.is_open === "false") {
     return false;
   }
 
-  // 2. ดึงเวลาเปิด-ปิด
+  // วันนี้ไม่ใช่วันเปิดร้าน
+  if (!isOpenOnWeekday(shop.open_days, todayWeekdayBangkok())) {
+    return false;
+  }
+
   const open = shop.open_time || shop.openTime || shop.opening_time || "";
   const close = shop.close_time || shop.closeTime || shop.closing_time || "";
 
   const openTime = open ? String(open).slice(0, 5) : "";
   const closeTime = close ? String(close).slice(0, 5) : "";
 
-  // 3. ร้านเปิด 24 ชม.
   if (
     (openTime === "00:00" && (closeTime === "23:59" || closeTime === "24:00" || closeTime === "00:00")) ||
     shop.is_24_hours === true
@@ -53,12 +63,10 @@ export const checkIsShopOpen = (shop: any): boolean => {
     return true;
   }
 
-  // 4. ถ้าไม่มีข้อมูลเวลา ให้ถือว่าเปิดไว้ก่อน (เพื่อไม่ให้ร้านหายไปจากหน้าจอ)
   if (!openTime || !closeTime) {
     return true;
   }
 
-  // 5. เทียบเวลาปัจจุบัน
   try {
     const now = new Date();
     const currentHours = String(now.getHours()).padStart(2, "0");
@@ -83,20 +91,28 @@ export default function ShopCard({ shop }: ShopCardProps) {
 
   const isOpen = checkIsShopOpen(shop);
 
-  // คำนวณข้อความเวลาทำการ
   const open = shopData.open_time || shopData.opening_time || "";
   const close = shopData.close_time || shopData.closing_time || "";
   const openTime = open ? String(open).slice(0, 5) : "";
   const closeTime = close ? String(close).slice(0, 5) : "";
 
-  let businessHours = "เปิดให้บริการ";
-  if (
-    (openTime === "00:00" && (closeTime === "23:59" || closeTime === "24:00" || closeTime === "00:00")) ||
-    shopData.is_24_hours === true
-  ) {
-    businessHours = "เปิด 24 ชั่วโมง";
-  } else if (openTime && closeTime) {
-    businessHours = `${openTime} - ${closeTime} น.`;
+  // หน้าแรกบอกแค่สถานะของวันนี้ (ข้อความหลัก + ข้อความรอง)
+  let hoursMain = hoursLabel(open, close);
+  let hoursSub = "";
+  let hoursClosed = false;
+  // ร้านกดปิดร้านชั่วคราวเอง (is_open = false ใน DB)
+  const isTempClosed = shopData.is_temporarily_closed === true;
+  if (isTempClosed) {
+    hoursMain = "ปิดชั่วคราว";
+    hoursClosed = true;
+  } else if (!isOpenOnWeekday(shopData.open_days, todayWeekdayBangkok())) {
+    hoursMain = "วันนี้ปิด";
+    hoursClosed = true;
+    const next = nextOpenWeekday(shopData.open_days, todayWeekdayBangkok());
+    if (next >= 0) {
+      const time = openTime && !isAllDayHours(open, close) ? ` ${openTime} น.` : "";
+      hoursSub = `เปิด${weekdayLongName(next)}${time}`;
+    }
   }
 
   const formattedDistance =
@@ -111,7 +127,35 @@ export default function ShopCard({ shop }: ShopCardProps) {
       : `http://localhost:5000${rawImage.startsWith("/") ? "" : "/"}${rawImage}`
     : null;
 
-  // 🌟 ดึงข้อมูลแท็กบริการแบบครอบคลุมและ Safe ทุกชนิดข้อมูล
+  // 🌟 ดึงข้อมูลคะแนนรีวิวจากทุกชื่อฟิลด์ที่เป็นไปได้
+  const rawRating =
+    shopData.rating !== undefined && shopData.rating !== null
+      ? shopData.rating
+      : shopData.average_rating !== undefined && shopData.average_rating !== null
+        ? shopData.average_rating
+        : shopData.score !== undefined && shopData.score !== null
+          ? shopData.score
+          : shopData.avg_rating !== undefined && shopData.avg_rating !== null
+            ? shopData.avg_rating
+            : 0;
+
+  const displayRating = Number(rawRating);
+
+  // 🌟 ดึงข้อมูลจำนวนรีวิวจากทุกชื่อฟิลด์ที่เป็นไปได้
+  const rawReviewCount =
+    shopData.review_count !== undefined && shopData.review_count !== null
+      ? shopData.review_count
+      : shopData.total_reviews !== undefined && shopData.total_reviews !== null
+        ? shopData.total_reviews
+        : shopData.reviews_count !== undefined && shopData.reviews_count !== null
+          ? shopData.reviews_count
+          : shopData.num_reviews !== undefined && shopData.num_reviews !== null
+            ? shopData.num_reviews
+            : 0;
+
+  const displayReviewCount = Number(rawReviewCount);
+
+  // ดึงข้อมูลแท็กบริการ
   const rawServiceList =
     shopData.service_types ||
     shopData.services ||
@@ -121,23 +165,20 @@ export default function ShopCard({ shop }: ShopCardProps) {
 
   const serviceTags: string[] = Array.isArray(rawServiceList)
     ? rawServiceList
-        .map((s: any) => {
-          if (!s) return "";
-          if (typeof s === "string") return s;
-          return s.type_name || s.name || s.service_type || "";
-        })
-        .filter(Boolean)
+      .map((s: any) => {
+        if (!s) return "";
+        if (typeof s === "string") return s;
+        return s.type_name || s.name || s.service_type || "";
+      })
+      .filter(Boolean)
     : [];
 
   const displayedTags = serviceTags.slice(0, 10);
   const remainingCount = serviceTags.length - displayedTags.length;
 
   return (
-    <Link
-      href={`/customer/shop/${targetId}`}
-      className="group bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-blue-400 transition-all flex flex-col cursor-pointer"
-    >
-      <div className="relative w-full h-44 bg-blue-50/60 border-b border-blue-100 flex items-center justify-center overflow-hidden shrink-0">
+    <div className="group bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs hover:shadow-md hover:border-blue-400 transition-all flex flex-col">
+      <Link href={`/customer/shop/${targetId}`} className="relative w-full h-44 bg-blue-50/60 border-b border-blue-100 flex items-center justify-center overflow-hidden shrink-0 cursor-pointer">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -156,50 +197,61 @@ export default function ShopCard({ shop }: ShopCardProps) {
             className={`text-[10px] font-bold px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 backdrop-blur-md ${
               isOpen
                 ? "bg-emerald-500/90 text-white"
+                : isTempClosed
+                ? "bg-amber-500/95 text-white"
                 : "bg-slate-700/80 text-white"
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isOpen ? "bg-white animate-pulse" : "bg-slate-400"
+                isOpen ? "bg-white animate-pulse" : isTempClosed ? "bg-white" : "bg-slate-400"
               }`}
             />
-            {isOpen ? "เปิดอยู่" : "ปิดทำการ"}
+            {isOpen ? "เปิดอยู่" : isTempClosed ? "ปิดชั่วคราว" : "ปิดทำการ"}
           </span>
         </div>
-      </div>
+
+        {/* ระยะทาง (ซ้าย) + คะแนนรีวิว (ขวา) บรรทัดเดียวกัน */}
+        <div className="absolute bottom-2.5 inset-x-2.5 z-10 flex items-center justify-between gap-2">
+          <span className="text-[11px] font-semibold px-2 py-1 rounded-full shadow-xs flex items-center gap-1 bg-white/90 backdrop-blur-md text-slate-700">
+            <MapPin className="w-3.5 h-3.5 text-blue-600" />
+            {formattedDistance}
+          </span>
+          <span className="text-[11px] font-bold px-2 py-1 rounded-full shadow-xs flex items-center gap-1 bg-white/90 backdrop-blur-md text-slate-800">
+            <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-500" />
+            {displayReviewCount > 0 ? (
+              <>
+                {displayRating.toFixed(1)}
+                <span className="font-medium text-slate-400">({displayReviewCount})</span>
+              </>
+            ) : (
+              <span className="font-medium text-slate-500">ยังไม่มีรีวิว</span>
+            )}
+          </span>
+        </div>
+      </Link>
 
       <div className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
         <div className="space-y-1.5">
-          <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-blue-600 transition truncate">
-            {shopData.shop_name || shopData.name || "ร้านพิมพ์เอกสาร"}
-          </h3>
+          <Link href={`/customer/shop/${targetId}`} className="cursor-pointer block">
+            <h3 className="font-extrabold text-base leading-snug text-slate-900 group-hover:text-blue-600 transition truncate">
+              {shopData.shop_name || shopData.name || "ร้านพิมพ์เอกสาร"}
+            </h3>
+          </Link>
 
-          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-            <div className="flex items-center gap-0.5 text-amber-500 font-bold">
-              <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-500" />
-              <span>{shopData.rating ? Number(shopData.rating).toFixed(1) : "0.0"}</span>
-            </div>
-            {shopData.review_count !== undefined && (
-              <span className="text-[11px] text-slate-400">
-                ({shopData.review_count})
-              </span>
-            )}
-          </div>
 
-          {/* แท็กบริการหลัก */}
           {displayedTags.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-1">
+            <div className="flex flex-wrap gap-1.5 pt-1">
               {displayedTags.map((tag, idx) => (
                 <span
                   key={idx}
-                  className="text-[10px] font-medium bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md border border-blue-100"
+                  className="text-[11px] font-medium leading-none bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-full"
                 >
                   {tag}
                 </span>
               ))}
               {remainingCount > 0 && (
-                <span className="text-[10px] font-medium bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md">
+                <span className="text-[11px] font-semibold leading-none bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded-full">
                   +{remainingCount}
                 </span>
               )}
@@ -207,18 +259,14 @@ export default function ShopCard({ shop }: ShopCardProps) {
           )}
         </div>
 
-        <div className="pt-2 border-t border-slate-100 space-y-1 text-xs text-slate-500">
-          <div className="flex items-center gap-1.5 truncate">
-            <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            <span className="truncate">{formattedDistance}</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 truncate">
-            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span className="text-[11px] text-slate-500 truncate">{businessHours}</span>
-          </div>
+        <div className="pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-xs min-w-0">
+          <Clock className={`w-3.5 h-3.5 shrink-0 ${isOpen ? "text-emerald-500" : "text-rose-500"}`} />
+          <span className={`font-semibold shrink-0 ${isOpen ? "text-emerald-600" : "text-rose-500"}`}>
+            {hoursMain}
+          </span>
+          {hoursSub && <span className="text-slate-400 truncate">· {hoursSub}</span>}
         </div>
       </div>
-    </Link>
+    </div>
   );
 }

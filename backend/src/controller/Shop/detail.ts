@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 
 const ORDER_PENDING_STATE = "รอการดำเนินงาน";
+const ORDER_CANCELLED_STATE = "ยกเลิกการพิมพ์";
+const REJECT_REASON_MAX_LENGTH = 500;
 
 // Helper: ปรับเวลาให้อยู่ในกรอบ 00:00:00 - 23:59:59.999 ของวันนั้นๆ
 export const getDayBounds = (dateInput: Date | string) => {
@@ -54,7 +56,7 @@ export const getOrder = async (
         `
         id, order_no, description, subtotal_price, small_order_fee, platform_fee,
         total_amount, order_date, receive_date, appointment_time, current_status_id,
-        payment_id, review_id,
+        payment_id, review_id, reject_reason,
         customer (
           id, first_name, last_name, contact,
           address ( detail, subdistrict, district, province, postcode )
@@ -98,6 +100,7 @@ export const getOrder = async (
         order_date: order.order_date,
         receive_date: resolveReceiveDate(order.receive_date, order.appointment_time),
         description: order.description,
+        reject_reason: (order as any).reject_reason || null,
         subtotal_price: Number(order.subtotal_price || 0),
         small_order_fee: Number(order.small_order_fee || 0),
         platform_fee: Number(order.platform_fee || 0),
@@ -135,10 +138,19 @@ export const updateOrderStatus = async (
   try {
     const id = req.params.id || req.params.order_id;
     const { status_name } = req.body;
+    const rejectReason =
+      typeof req.body.reject_reason === "string"
+        ? req.body.reject_reason.trim().slice(0, REJECT_REASON_MAX_LENGTH)
+        : "";
     const shop_id = (req.query.shop_id || req.headers.shop_id) as string | undefined;
 
     if (!id || !status_name) {
       return res.status(400).json({ error: "Missing required parameters" });
+    }
+
+    // ปฏิเสธออเดอร์ (ยกเลิกการพิมพ์) ต้องมีเหตุผลเสมอ
+    if (status_name === ORDER_CANCELLED_STATE && !rejectReason) {
+      return res.status(400).json({ error: "กรุณาระบุเหตุผลในการปฏิเสธออเดอร์" });
     }
 
     const { data: order, error: orderError } = await supabase
@@ -173,12 +185,28 @@ export const updateOrderStatus = async (
       updatePayload.work_state_id = newWorkStatus.id;
     }
 
-    await supabase
+    // เก็บเหตุผลที่ปฏิเสธลงคอลัมน์ reject_reason (ชื่อคอลัมน์ตามที่มีใน DB)
+    if (status_name === ORDER_CANCELLED_STATE) {
+      updatePayload.reject_reason = rejectReason;
+    }
+
+    const { error: updateError } = await supabase
       .from("print_order")
-      .update({ current_status_id: statusData.id, work_state_id: newWorkStatus?.id })
+      .update(updatePayload)
       .eq("id", id);
 
-    return res.status(200).json({ message: "Status updated", data: { status_state: statusData.state } });
+    if (updateError) {
+      console.error("Update order status error:", updateError);
+      return res.status(400).json({ error: updateError.message });
+    }
+
+    return res.status(200).json({
+      message: "Status updated",
+      data: {
+        status_state: statusData.state,
+        reject_reason: status_name === ORDER_CANCELLED_STATE ? rejectReason : null,
+      },
+    });
   } catch (err: any) {
     console.error("Update Order Status Error:", err);
     return res.status(500).json({ error: "Server Error" });
@@ -186,8 +214,6 @@ export const updateOrderStatus = async (
 };
 
 // VERIFY PAYMENT SLIP & AUTO CHANGE STATUS
-// - สลิปถูกต้อง (is_verified = true)  => สถานะเปลี่ยนเป็น "กำลังพิมพ์"
-// - สลิปไม่ถูกต้อง (is_verified = false) => สถานะเปลี่ยนเป็น "รอการชำระเงิน"
 export const verifyPayment = async (
   req: Request,
   res: Response
@@ -197,7 +223,6 @@ export const verifyPayment = async (
     let { is_verified } = req.body;
     const shop_id = (req.query.shop_id || req.headers.shop_id) as string | undefined;
 
-    // แปลงค่าเป็น boolean ป้องกันการส่ง string "true"/"false"
     if (typeof is_verified === "string") {
       is_verified = is_verified === "true";
     }
@@ -208,7 +233,7 @@ export const verifyPayment = async (
 
     const { data: order } = await supabase
       .from("print_order")
-      .select("id, shop_id, payment_id")
+      .select("id, shop_id, payment_id, order_date, expires_at")
       .eq("id", id)
       .single();
 
@@ -216,22 +241,57 @@ export const verifyPayment = async (
       return res.status(404).json({ error: "Order not found or unauthorized" });
     }
 
-    // 1. อัปเดตสถานะการตรวจสลิปในตาราง payment
+    // 1. อัปเดตสถานะสลิป
     if (order.payment_id) {
       await supabase
         .from("payment")
-        .update({ is_verified })
+        .update({ is_verified, status: is_verified ? "paid" : "rejected" })
         .eq("id", order.payment_id);
     }
 
-    // 2. กำหนดสถานะออเดอร์ใหม่ตามตาราง status ใน Database
     const nextStatusName = is_verified ? "กำลังพิมพ์" : "รอการชำระเงิน";
+    let newExpiresAt: string | undefined = undefined;
+    const now = Date.now();
 
-    const { data: targetStatus } = await supabase
-      .from("status")
-      .select("id")
-      .eq("state", nextStatusName)
-      .single();
+    // =========================================================
+    // 🌟 สิ่งที่เพื่อนต้องเพิ่ม: คำนวณคืนเวลาให้ลูกค้า ถ้าร้านปฏิเสธสลิป
+    // =========================================================
+    if (!is_verified) {
+      const parseSafeTime = (dateStr?: string | null) => {
+        if (!dateStr) return null;
+        let cleaned = String(dateStr).trim();
+        if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
+          cleaned = `${cleaned.replace(" ", "T")}Z`;
+        }
+        const parsed = new Date(cleaned).getTime();
+        return isNaN(parsed) ? null : parsed;
+      };
+
+      const { data: payData, error: payErr } = await supabase
+        .from("payment")
+        .select("payment_date")
+        .eq("order_id", id)
+        .maybeSingle();
+      if (payErr) console.error("Fetch payment_date error:", payErr);
+
+      const uploadTimeMs = parseSafeTime(payData?.payment_date) || now;
+      
+      let currentExpiresAtMs = parseSafeTime(order.expires_at);
+      if (!currentExpiresAtMs) {
+        const orderDateMs = parseSafeTime(order.order_date) || now;
+        currentExpiresAtMs = orderDateMs + 10 * 60 * 1000;
+      }
+
+      // เวลาที่เหลือ = เวลาหมดอายุเดิม - เวลาตอนส่งสลิป
+      let remainingMs = currentExpiresAtMs - uploadTimeMs;
+      if (remainingMs > 10 * 60 * 1000) remainingMs = 10 * 60 * 1000;
+      if (remainingMs < 0) remainingMs = 0;
+
+      // วันหมดอายุใหม่ = ปัจจุบัน + เวลาที่เหลือ
+      newExpiresAt = new Date(now + remainingMs).toISOString();
+    }
+
+    const { data: targetStatus } = await supabase.from("status").select("id").eq("state", nextStatusName).single();
 
     if (targetStatus) {
       const { data: newWorkStatus } = await supabase
@@ -241,23 +301,16 @@ export const verifyPayment = async (
         .single();
 
       const updatePayload: any = { current_status_id: targetStatus.id };
-      if (newWorkStatus?.id) {
-        updatePayload.work_state_id = newWorkStatus.id;
-      }
+      if (newWorkStatus?.id) updatePayload.work_state_id = newWorkStatus.id;
+      
+      // 🌟 บันทึกเวลาที่คืนให้ลูกค้ายัดลง DB ให้ด้วย
+      if (newExpiresAt) updatePayload.expires_at = newExpiresAt;
 
-      await supabase
-        .from("print_order")
-        .update(updatePayload)
-        .eq("id", id);
+      await supabase.from("print_order").update(updatePayload).eq("id", id);
     }
 
-    return res.status(200).json({
-      message: "Payment verified successfully",
-      is_verified,
-      new_status: nextStatusName,
-    });
+    return res.status(200).json({ message: "Payment verified successfully", is_verified, new_status: nextStatusName });
   } catch (err: any) {
-    console.error("Update Payment Status Error:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };

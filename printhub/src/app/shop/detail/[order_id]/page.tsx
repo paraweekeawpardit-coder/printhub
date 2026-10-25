@@ -22,7 +22,7 @@ import {
   FileText,
   AlertTriangle,
 } from "lucide-react";
-import { SlipModal, ActionConfirmModal, WarnModal } from "@/component/shop/OrderModals";
+import { SlipModal, ActionConfirmModal, RejectOrderModal } from "@/component/shop/OrderModals";
 
 // 🟢 ปรับ API_BASE ให้มี /api นำหน้าเสมอ
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -42,6 +42,9 @@ export default function OrderDetailPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // 🟢 State เช็คการเปิดดูสลิป
+  const [hasViewedSlip, setHasViewedSlip] = useState<boolean>(false);
 
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
   const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
@@ -98,14 +101,17 @@ export default function OrderDetailPage() {
     fetchOrder();
   }, [fetchOrder]);
 
-  // 🟢 อัปเดตสถานะออเดอร์
-  const handleUpdateStatus = async (nextStatus: string) => {
+  // 🟢 อัปเดตสถานะออเดอร์ (รองรับการส่งเหตุผลปฏิเสธ reject_reason)
+  const handleUpdateStatus = async (nextStatus: string, rejectReason?: string) => {
     try {
       setIsUpdating(true);
       setActionError(null);
       await axios.patch(
         `${API_BASE}/shop/orders/${orderId}/status`,
-        { status_name: nextStatus },
+        { 
+          status_name: nextStatus,
+          reject_reason: rejectReason 
+        },
         { params: { shop_id: shopId } }
       );
       await fetchOrder(true);
@@ -193,11 +199,8 @@ export default function OrderDetailPage() {
   const slipUrl: string | null = payment?.slip_url || null;
   const slipVerdict: boolean | null = payment?.is_verified ?? null;
 
-  // 🔒 กำหนดให้สามารถกด "กดตรวจสลิป" ได้เฉพาะเมื่อ:
-  // 1. สถานะออเดอร์อยู่ใน "รอการดำเนินงาน"
-  // 2. ยังไม่เคยตรวจสลิป (slipVerdict === null)
-  // 3. มี URL สลิปแนบมา
-  const canVerifySlip = statusState === "รอการดำเนินงาน" && slipVerdict === null && !!slipUrl;
+  // 🔒 เงื่อนไขการตรวจสอบสลิป: ต้องอยู่ในสถานะรอ, ยังไม่ตรวจ, มีสลิป และเปิดดูสลิปแล้ว
+  const canVerifySlip = statusState === "รอการดำเนินงาน" && slipVerdict === null && !!slipUrl && hasViewedSlip;
 
   const renderStatusBadge = () => {
     switch (statusState) {
@@ -358,10 +361,13 @@ export default function OrderDetailPage() {
                   <p className="text-xs text-blue-100 flex items-center gap-1.5"><Receipt size={14} /> หลักฐานการชำระเงิน</p>
                   <p className="text-2xl font-bold mt-1">฿{Number(payment?.amount ?? order.total_amount ?? 0).toLocaleString()}</p>
                 </div>
-                {/* ปุ่มดูสลิปเปิดให้กดดูได้เสมอตามคำขอ */}
+                {/* 🟢 กดปุ่มเปิดสลิปและบันทึกว่าเปิดดูแล้ว (hasViewedSlip = true) */}
                 <button
                   type="button"
-                  onClick={() => setShowSlipModal(true)}
+                  onClick={() => {
+                    setShowSlipModal(true);
+                    setHasViewedSlip(true);
+                  }}
                   disabled={!slipUrl}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-blue-900 bg-white hover:bg-blue-50 disabled:opacity-50 shadow-xs cursor-pointer"
                 >
@@ -372,40 +378,44 @@ export default function OrderDetailPage() {
               <div className="p-5 border-t border-gray-100">
                 <p className="text-xs font-semibold text-gray-700 mb-3">ผลการตรวจสอบสลิปโอนเงิน</p>
                 
-                {/* 🔴 หากออเดอร์ยกเลิกการพิมพ์แล้ว ล็อกทันที */}
                 {isCancelled ? (
                   <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 text-center flex items-center justify-center gap-1.5">
                     <Lock size={15} /> ออเดอร์นี้ถูกยกเลิกแล้ว ไม่สามารถตรวจสอบสลิปได้
                   </div>
                 ) : slipVerdict === true ? (
-                  /* สถานะ 1: สลิปถูกต้องแล้ว */
                   <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 text-center flex items-center justify-center gap-1.5">
                     <ShieldCheck size={16} /> สลิปถูกต้อง (ยืนยันรับออเดอร์แล้ว)
                   </div>
                 ) : slipVerdict === false ? (
-                  /* สถานะ 2: สลิปถูกปฏิเสธแล้ว (is_verified === false) */
                   <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 text-center flex items-center justify-center gap-1.5">
                     <AlertTriangle size={16} /> ปฏิเสธหลักฐานแล้ว (รอผู้ใช้อัปโหลดสลิปใหม่)
                   </div>
                 ) : (
-                  /* สถานะ 3: สลิปยังไม่ได้ตรวจ (is_verified === null) */
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowVerifyInvalidModal(true)}
-                      disabled={!canVerifySlip || isUpdating}
-                      className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      หลักฐานไม่ถูกต้อง
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowVerifyValidModal(true)}
-                      disabled={!canVerifySlip || isUpdating}
-                      className="flex-1 py-2.5 rounded-xl bg-[#12356b] text-white text-xs font-semibold hover:bg-[#0e2b57] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
-                    >
-                      สลิปถูกต้อง
-                    </button>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowVerifyInvalidModal(true)}
+                        disabled={!canVerifySlip || isUpdating}
+                        className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        หลักฐานไม่ถูกต้อง
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowVerifyValidModal(true)}
+                        disabled={!canVerifySlip || isUpdating}
+                        className="flex-1 py-2.5 rounded-xl bg-[#12356b] text-white text-xs font-semibold hover:bg-[#0e2b57] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-xs"
+                      >
+                        สลิปถูกต้อง
+                      </button>
+                    </div>
+                    {/* แจ้งเตือนเมื่อมีสลิปแต่ยังไม่ได้กดเปิดดู */}
+                    {!!slipUrl && !hasViewedSlip && (
+                      <p className="text-[11px] text-amber-600 text-center flex items-center justify-center gap-1">
+                        <AlertCircle size={13} /> กรุณากดดูสลิปโอนเงินก่อนทำการตรวจสอบ
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -421,6 +431,32 @@ export default function OrderDetailPage() {
               </h2>
               <p className="text-sm font-medium text-gray-800">{order.customer?.first_name} {order.customer?.last_name}</p>
               <p className="text-xs text-gray-500 mt-1">{order.customer?.contact || "-"}</p>
+            </div>
+
+            {/* 🔴 แสดงเหตุผลที่ปฏิเสธ (เมื่อออเดอร์ถูกยกเลิกการพิมพ์) */}
+            {isCancelled && (
+              <div className="bg-white p-5 rounded-2xl border border-red-200 shadow-xs">
+                <h2 className="text-sm font-semibold text-red-600 mb-3 flex items-center gap-2">
+                  <XCircle size={17} className="text-red-600" /> เหตุผลที่ปฏิเสธ
+                </h2>
+                <p className="text-sm text-gray-700 whitespace-pre-line break-words bg-red-50 border border-red-100 rounded-xl p-3">
+                  {order.reject_reason?.trim() || "ระบบยกเลิกอัตโนมัติ (เลยเวลานัดรับ)"}
+                </p>
+              </div>
+            )}
+
+            {/* หมายเหตุจากลูกค้า */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <FileText size={17} className="text-blue-600" /> หมายเหตุ
+              </h2>
+              {order.description?.trim() ? (
+                <p className="text-sm text-gray-700 whitespace-pre-line break-words bg-amber-50 border border-amber-100 rounded-xl p-3">
+                  {order.description}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400">ไม่มีหมายเหตุ</p>
+              )}
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-xs">
@@ -445,15 +481,16 @@ export default function OrderDetailPage() {
       {/* Modals */}
       <SlipModal isOpen={showSlipModal} onClose={() => setShowSlipModal(false)} slipUrl={slipUrl} />
 
-      <ActionConfirmModal
+      {/* โมดอลปฏิเสธงาน (เลือก/พิมพ์เหตุผล) */}
+      <RejectOrderModal
         isOpen={showRejectModal}
         onClose={() => setShowRejectModal(false)}
-        onConfirm={async () => { await handleUpdateStatus("ยกเลิกการพิมพ์"); setShowRejectModal(false); }}
-        title="ปฏิเสธออเดอร์"
-        description="คุณต้องการปฏิเสธรายการคำสั่งพิมพ์นี้ใช่หรือไม่?"
-        confirmText="ปฏิเสธ"
-        isDanger
         isUpdating={isUpdating}
+        orderLabel={`#${order.order_no || order.id}`}
+        onConfirm={async (reason: string) => {
+          await handleUpdateStatus("ยกเลิกการพิมพ์", reason);
+          setShowRejectModal(false);
+        }}
       />
 
       <ActionConfirmModal

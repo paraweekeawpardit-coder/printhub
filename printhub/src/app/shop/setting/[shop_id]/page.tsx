@@ -58,6 +58,7 @@ export default function ShopSettingsPage() {
   const [phone, setPhone] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [openTime, setOpenTime] = useState<string>("09:00");
+  const [openDays, setOpenDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [closeTime, setCloseTime] = useState<string>("18:00");
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
@@ -146,6 +147,7 @@ export default function ShopSettingsPage() {
         setEmail(shop.email ?? "");
         setOpenTime((shop.open_time ?? "09:00").slice(0, 5));
         setCloseTime((shop.close_time ?? "18:00").slice(0, 5));
+        setOpenDays(Array.isArray(shop.open_days) ? shop.open_days : [1, 2, 3, 4, 5]);
         setIsOpen(shop.is_open ?? true);
         setProfileImage(shop.profile_image ?? null);
 
@@ -191,7 +193,10 @@ export default function ShopSettingsPage() {
             price: d.price != null ? String(d.price) : "",
             is_required: d.is_required === true,
             // แถวเก่าที่ยังไม่เคยระบุ ถือเป็นต่อหน้า (ไม่ติ๊ก)
-            price_type: d.price_type === "per_set" ? "per_set" : "per_page",
+            price_type:
+              d.price_type === "per_page" || d.price_type === "per_set"
+                ? d.price_type
+                : "", // ยังไม่เคยระบุ -> ร้านต้องเลือกก่อนบันทึก
           })),
         }));
         setServices(normalizedServices);
@@ -279,6 +284,7 @@ export default function ShopSettingsPage() {
         phone,
         open_time: openTime,
         close_time: closeTime,
+        open_days: openDays,
         address: {
           id: addressId,
           ...address,
@@ -376,7 +382,7 @@ export default function ShopSettingsPage() {
           group_type: item.group_type,
           price: item.price,
           is_required: item.is_required ?? false,
-          price_type: item.price_type === "per_set" ? "per_set" : "per_page",
+          price_type: item.price_type ?? "",
         })),
       }));
 
@@ -554,6 +560,8 @@ export default function ShopSettingsPage() {
                 setOpenTime={setOpenTime}
                 closeTime={closeTime}
                 setCloseTime={setCloseTime}
+                openDays={openDays}
+                setOpenDays={setOpenDays}
                 address={address}
                 setAddress={setAddress}
                 onSave={handleSaveProfile}

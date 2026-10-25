@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Loader2, Star } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import NavBar from "../../../../component/customer/NavBar";
 import ShopHeaderCard from "../../../../component/customer/shop/ShopHeaderCard";
@@ -115,7 +114,7 @@ export default function ShopMainPage() {
           setCartItems(currentShopItems);
         } else {
           setCartItems([]);
-          setTotalCartCount(0);
+          setIsCartOpen(false);
         }
       }
     } catch (err) {
@@ -153,7 +152,6 @@ export default function ShopMainPage() {
         subtotal: itemPayload.subtotal || unitPrice * qty,
         total_pages: extractedPages,
         page_count: extractedPages,
-        side_type: itemPayload.finishing_option?.includes("หน้า-หลัง") ? "DOUBLE" : "SINGLE",
       };
 
       // หากเป็นการแก้ไข ให้ลบรายการเดิมออกก่อนแล้วเพิ่มตัวใหม่
@@ -234,8 +232,9 @@ export default function ShopMainPage() {
     }
   };
 
-  const handleProceedToPayment = async (appointmentData: any) => {
-    if (!shopId || !cartItems || cartItems.length === 0) return;
+  // คืนค่าเป็นข้อความ error (ถ้ามี) เพื่อให้ตะกร้าแสดงให้ลูกค้าเห็น
+  const handleProceedToPayment = async (appointmentData: any): Promise<string | void> => {
+    if (!shopId || !cartItems || cartItems.length === 0) return "ไม่มีรายการในตะกร้า";
 
     const formattedItems = cartItems.map((item: any) => {
       const itemSubtotal =
@@ -284,7 +283,7 @@ export default function ShopMainPage() {
 
       if (!res.ok || !result.success) {
         console.warn("Order creation notice:", result.message || "ไม่สามารถสร้างคำสั่งซื้อได้");
-        return;
+        return result.message || result.error || "ไม่สามารถสร้างคำสั่งซื้อได้ กรุณาลองใหม่อีกครั้ง";
       }
 
       const realOrderId = result.data?.order_id || result.data?.id || fallbackOrderId;
@@ -294,10 +293,14 @@ export default function ShopMainPage() {
         formattedItems.reduce((a, b) => a + b.totalPrice, 0);
       const expiresAt = result.data?.expires_at || "";
 
+      // เคลียร์เฉพาะรายการของร้านปัจจุบันในหน้าจอ
       setCartItems([]);
       setIsCartOpen(false);
-      setTotalCartCount(0);
 
+      // 🌟 โหลดข้อมูลตะกร้าใหม่ เพื่อให้ Navbar อัปเดตยอดของร้านอื่นที่ยังเหลืออยู่จริง
+      if (customerId) {
+        await loadData(customerId);
+      }
       pendingOrderPayload.id = realOrderId;
       sessionStorage.setItem("pending_order_data", JSON.stringify(pendingOrderPayload));
 
@@ -309,12 +312,15 @@ export default function ShopMainPage() {
       router.push(`/customer/order/payment/${realOrderId}?${queryParams.toString()}`);
     } catch (err: any) {
       console.error("Order API exception:", err);
+      return "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง";
     } finally {
       setIsSubmittingOrder(false);
     }
   };
 
-  const updatedShop = shop ? { ...shop, is_open: isShopOpen } : null;
+  const updatedShop = shop
+    ? { ...shop, is_open: isShopOpen, is_temporarily_closed: shop.is_open === false }
+    : null;
   const totalCartPrice = cartItems.reduce(
     (sum, item) => sum + (Number(item.subtotal) || Number(item.unit_price * item.quantity) || 0),
     0
@@ -339,19 +345,9 @@ export default function ShopMainPage() {
       />
 
       <div className="max-w-5xl mx-auto px-4 pt-6 relative">
-        {/* 💡 แถวปุ่มย้อนกลับและปุ่มลิงก์ไปหน้าดูรีวิวร้านค้า */}
+        {/* 💡 แถวปุ่มย้อนกลับ (เอาปุ่ม "ดูรีวิวร้านค้า" ออกแล้ว เหลือแค่ปุ่มย้อนกลับ) */}
         <div className="flex items-center justify-between mb-2">
           <ShopBackButton />
-
-          {shopId && (
-            <Link
-              href={`/customer/shop/${shopId}/reviews`}
-              className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs"
-            >
-              <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-              <span>ดูรีวิวร้านค้า</span>
-            </Link>
-          )}
         </div>
 
         <main className="space-y-6">

@@ -9,7 +9,10 @@ import {
   ExternalLink,
   Store,
   Phone,
+  ChevronDown,
 } from "lucide-react";
+
+import { hoursLabel, isAllDayHours, isOpenOnWeekday, nextOpenText, todayWeekdayBangkok, weekSchedule } from "../shopOpenDays";
 
 interface ShopHeaderCardProps {
   shop: any;
@@ -21,6 +24,7 @@ interface Review {
 
 export default function ShopHeaderCard({ shop }: ShopHeaderCardProps) {
   const [imgError, setImgError] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
   const [ratingValue, setRatingValue] = useState("0.0");
   const [totalReviews, setTotalReviews] = useState(0);
 
@@ -102,15 +106,18 @@ export default function ShopHeaderCard({ shop }: ShopHeaderCardProps) {
     shop.detail ||
     (typeof shop.address === "string" ? shop.address : "");
 
-  const subdistrict = addr.subdistrict ? `ต.${addr.subdistrict}` : "";
-  const district = addr.district ? `อ.${addr.district}` : "";
-  const province = addr.province ? `จ.${addr.province}` : "";
-  const postcode = addr.postcode || "";
+  // แสดงตามข้อมูลใน DB คั่นด้วยคอมมา: detail, แขวง/ตำบล, เขต/อำเภอ, จังหวัด, รหัสไปรษณีย์
+  const clean = (v: any) => String(v ?? "").trim();
+  const detailText = clean(detail);
+  // ถ้าในช่อง detail มีค่านี้อยู่แล้ว (เช่น ที่อยู่เต็มจากแผนที่) ไม่ต้องต่อท้ายซ้ำ
+  const extraParts = [addr.subdistrict, addr.district, addr.province, addr.postcode]
+    .map(clean)
+    .filter((v) => v && !detailText.includes(v));
 
   const fullAddress =
-    [detail, subdistrict, district, province, postcode]
+    [detailText, ...extraParts]
       .filter(Boolean)
-      .join(" ") ||
+      .join(", ") ||
     shop.location ||
     "";
 
@@ -132,6 +139,16 @@ export default function ShopHeaderCard({ shop }: ShopHeaderCardProps) {
 
   // 3. ข้อมูลพื้นฐานร้าน
   const isOpen = Boolean(shop.is_open);
+  const isTempClosed = shop.is_temporarily_closed === true;
+  const isClosedToday = !isOpenOnWeekday(shop.open_days, todayWeekdayBangkok());
+  const statusText = isTempClosed
+    ? "ปิดทำการชั่วคราว"
+    : isOpen
+    ? "เปิดให้บริการ"
+    : isClosedToday
+    ? "วันนี้ปิดทำการ"
+    : "ปิดทำการ";
+  const reopenText = !isTempClosed && isClosedToday ? nextOpenText(shop.open_days, shop.open_time, shop.close_time) : "";
   const phone = shop.phone || shop.contact || shop.shop_phone || shop.tel;
 
   // 4. รูปภาพโปรไฟล์ร้าน
@@ -154,131 +171,149 @@ export default function ShopHeaderCard({ shop }: ShopHeaderCardProps) {
     }
   }
 
+  const hoursText = hoursLabel(shop?.open_time, shop?.close_time);
+  const allDay = isAllDayHours(shop?.open_time, shop?.close_time);
+  const openHHMM = shop?.open_time ? String(shop.open_time).slice(0, 5) : "";
+  const closeHHMM = shop?.close_time ? String(shop.close_time).slice(0, 5) : "";
+
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-7 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
-      {/* เส้นตกแต่งไล่เฉดสีฟ้า-น้ำเงินด้านบน */}
+    <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-sm relative overflow-hidden">
+      {/* เส้นตกแต่งด้านบน */}
       <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-sky-500 to-indigo-600" />
 
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pt-1">
-        {/* ฝั่งซ้าย: รูปโปรไฟล์ขนาดใหญ่ + ข้อมูลร้านค้า */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 min-w-0 flex-1 w-full">
-          {/* รูปโปรไฟล์ร้านค้าขนาดใหญ่ */}
-          <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-40 md:h-40 rounded-2xl overflow-hidden bg-slate-50 border border-slate-200/80 shrink-0 flex items-center justify-center shadow-inner group">
-            {profileImg && !imgError ? (
-              <img
-                src={profileImg}
-                alt={shop.shop_name || "ร้านค้า"}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                onError={() => setImgError(true)}
-              />
-            ) : (
-              <Store className="w-14 h-14 text-slate-300" />
-            )}
-          </div>
+      <div className="flex flex-col sm:flex-row gap-5 pt-1">
+        {/* รูปร้าน */}
+        <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden bg-slate-50 border border-slate-200/80 shrink-0 flex items-center justify-center">
+          {profileImg && !imgError ? (
+            <img
+              src={profileImg}
+              alt={shop.shop_name || "ร้านค้า"}
+              className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <Store className="w-12 h-12 text-slate-300" />
+          )}
+        </div>
 
-          {/* รายละเอียดร้านค้า */}
-          <div className="space-y-3 min-w-0 flex-1 w-full">
-            {/* บรรทัดที่ 1: ชื่อร้านค้า */}
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+        {/* ข้อมูลร้าน */}
+        <div className="flex-1 min-w-0 space-y-3">
+          {/* แถว 1: ชื่อร้าน + เบอร์โทร | สถานะ (ขวาสุด) */}
+          <div className="flex flex-col-reverse sm:flex-row sm:items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight break-words">
                 {shop.shop_name || "ร้านค้างานพิมพ์"}
               </h1>
-            </div>
-
-            {/* บรรทัดที่ 2: เวลาเปิด-ปิด วางคู่กับ เบอร์โทรศัพท์ */}
-            <div className="flex flex-wrap items-center gap-3 text-xs pt-0.5">
-              {/* ป้ายเวลาทำการ */}
-              <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200/80 px-3.5 py-1.5 rounded-xl shadow-2xs">
-                <Clock className="w-4 h-4 text-blue-600 shrink-0" />
-                <span>
-                  {shop?.open_time && shop?.close_time
-                    ? `${String(shop.open_time).slice(0, 5)} - ${String(
-                      shop.close_time
-                    ).slice(0, 5)} น.`
-                    : "เปิดตลอด 24 ชม."}
-                </span>
-              </div>
-
-              {/* เบอร์โทรศัพท์ */}
+              <span className="h-6 w-px bg-slate-300" aria-hidden="true" />
               {phone ? (
                 <a
                   href={`tel:${phone}`}
-                  className="inline-flex items-center gap-2 text-xs text-blue-700 hover:text-blue-900 font-bold bg-blue-50/80 hover:bg-blue-100 border border-blue-200/80 px-3.5 py-1.5 rounded-xl transition shadow-2xs"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-700 bg-slate-50 hover:bg-blue-50 border border-slate-200 px-2.5 py-1 rounded-lg transition"
                   title="คลิกเพื่อโทรออก"
                 >
-                  <Phone className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span>{phone}</span>
+                  <Phone className="w-3.5 h-3.5" />
+                  {phone}
                 </a>
               ) : (
-                <div className="inline-flex items-center gap-2 text-slate-400 bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl">
-                  <Phone className="w-4 h-4 text-slate-300 shrink-0" />
-                  <span>ยังไม่มีเบอร์ติดต่อ</span>
-                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs text-slate-400 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                  <Phone className="w-3.5 h-3.5" />
+                  ยังไม่มีเบอร์ติดต่อ
+                </span>
               )}
             </div>
 
-            {/* เส้นแบ่งแนวนอนก่อนถึงที่อยู่ */}
-            <hr className="border-t border-slate-100 my-1.5" />
-
-            {/* บรรทัดที่ 3 & 4: ที่อยู่ร้าน + ปุ่ม Google Maps */}
-            <div className="space-y-2 text-xs text-slate-600 pt-0.5">
-              <div className="flex items-start gap-1.5 text-slate-700 max-w-xl">
-                <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                <span className="font-normal text-slate-600 leading-relaxed">
-                  {fullAddress || "ยังไม่ได้ระบุรายละเอียดที่อยู่"}
-                </span>
-              </div>
-
-              {googleMapsUrl && (
-                <div className="pl-5">
-                  <a
-                    href={googleMapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 border border-slate-200 px-3 py-1 rounded-lg transition shrink-0 shadow-2xs"
-                    title="เปิดดูตำแหน่งบน Google Maps"
-                  >
-                    <span>Google Maps</span>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                  </a>
-                </div>
-              )}
+            <div className="flex flex-col items-start sm:items-end gap-1 shrink-0">
+              <span
+                className={`text-xs px-3 py-1.5 rounded-full font-bold border inline-flex items-center gap-1.5 ${
+                  isOpen ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${isOpen ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`} />
+                {statusText}
+              </span>
+              {reopenText && <span className="text-[11px] text-slate-500">{reopenText}</span>}
             </div>
           </div>
-        </div>
 
-        {/* ฝั่งขวา: สถานะเปิด/ปิด + กล่องคะแนนรีวิวคลิกได้ */}
-        <div className="flex md:flex-col items-center md:items-end justify-between w-full md:w-auto gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100 shrink-0">
-          {/* สถานะเปิด/ปิด */}
-          <span
-            className={`text-xs px-3.5 py-1.5 rounded-full font-bold border flex items-center gap-1.5 shadow-2xs ${isOpen
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                : "bg-rose-50 text-rose-800 border-rose-200"
+          {/* แถว 2: คะแนนรีวิว + เวลาทำการ (กดดูวันเปิด-ปิด) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link
+              href={`/customer/shop/${shopId}/reviews`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-3 py-1.5 rounded-xl transition"
+              title="คลิกเพื่อดูรีวิวร้านค้า"
+            >
+              <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+              <span className="font-extrabold text-amber-950">{ratingValue}</span>
+              <span className="text-amber-700 font-medium">({totalReviews} รีวิว)</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => setShowSchedule((v) => !v)}
+              aria-expanded={showSchedule}
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
+                showSchedule
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-blue-50 text-blue-700 border-blue-200/80 hover:bg-blue-100"
               }`}
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${isOpen ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
-                }`}
-            />
-            {isOpen ? "เปิดให้บริการ" : "ปิดทำการ"}
-          </span>
+            >
+              <Clock className="w-4 h-4 shrink-0" />
+              <span>{hoursText}</span>
+              <span className="opacity-40">|</span>
+              <span className="font-medium">วันเปิด-ปิด</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSchedule ? "rotate-180" : ""}`} />
+            </button>
+          </div>
 
-          {/* กล่องคะแนนรีวิวคลิกได้ — คงหน้าตาเดิม */}
-          <Link
-            href={`/customer/shop/${shopId}/reviews`}
-            className="flex items-center gap-2.5 bg-amber-50/90 hover:bg-amber-100 border border-amber-200/80 px-4 py-2 rounded-2xl shadow-2xs transition cursor-pointer"
-            title="คลิกเพื่อดูรีวิวร้านค้า"
-          >
-            <Star className="w-5 h-5 fill-amber-400 text-amber-400 shrink-0" />
-            <div className="text-right">
-              <span className="text-base font-extrabold text-amber-950 block leading-none">
-                {ratingValue}
-              </span>
-              <span className="text-[11px] text-amber-800 font-semibold block mt-0.5">
-                {totalReviews} รีวิว
-              </span>
+          {/* ตารางวันเปิด-ปิด (กางในการ์ด) */}
+          {showSchedule && (
+            <div className="grid grid-cols-7 gap-1.5 pt-2">
+              {weekSchedule(shop?.open_days, shop?.open_time, shop?.close_time).map((d) => (
+                <div
+                  key={d.weekday}
+                  className={`relative rounded-xl border px-1 py-2 text-center ${
+                    d.isOpen ? "bg-white border-slate-200" : "bg-slate-50 border-slate-100"
+                  } ${d.isToday ? "ring-2 ring-blue-500 border-blue-500" : ""}`}
+                >
+                  {d.isToday && (
+                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 rounded-full bg-blue-600 text-white text-[9px] font-bold leading-4">
+                      วันนี้
+                    </span>
+                  )}
+                  <p className={`text-xs font-bold ${d.isOpen ? "text-slate-800" : "text-slate-400"}`}>
+                    {d.name.replace("วัน", "").replace("พฤหัสบดี", "พฤหัส")}
+                  </p>
+                  <p
+                    className={`text-[10px] mt-0.5 whitespace-nowrap ${
+                      d.isOpen ? (allDay ? "text-emerald-600 font-semibold" : "text-slate-500") : "text-rose-500 font-semibold"
+                    }`}
+                  >
+                    {!d.isOpen ? "ปิด" : allDay ? "24 ชม." : openHHMM && closeHHMM ? `${openHHMM}–${closeHHMM}` : "เปิด"}
+                  </p>
+                </div>
+              ))}
             </div>
-          </Link>
+          )}
+
+          {/* แถว 3: ที่อยู่ + Google Maps */}
+          <div className="flex items-start gap-1.5 pt-2 border-t border-slate-100 text-xs">
+            <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+            <p className="text-slate-600 leading-relaxed">
+              {fullAddress || "ยังไม่ได้ระบุรายละเอียดที่อยู่"}
+              {googleMapsUrl && (
+                <a
+                  href={googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-2 inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline whitespace-nowrap"
+                  title="เปิดดูตำแหน่งบน Google Maps"
+                >
+                  Google Maps
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </p>
+          </div>
         </div>
       </div>
     </div>
