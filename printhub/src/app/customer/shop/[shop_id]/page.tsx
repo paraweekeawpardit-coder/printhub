@@ -28,6 +28,8 @@ export default function ShopMainPage() {
   const [selectedService, setSelectedService] = useState<ServiceType | null>(null);
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  // สั่งทันที: id ของรายการที่จะสั่งเดี่ยว ๆ (null = สั่งทั้งตะกร้าแบบเดิม)
+  const [buyNowItemId, setBuyNowItemId] = useState<string | null>(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   const [customerId, setCustomerId] = useState<string>("");
@@ -130,7 +132,8 @@ export default function ShopMainPage() {
     }
   }, [shopId, customerId]);
 
-  const handleAddToCart = async (itemPayload: any) => {
+  // เพิ่มรายการลงตะกร้า คืนค่า id ของรายการที่สร้าง (ใช้กับปุ่มสั่งทันที)
+  const addItemToCart = async (itemPayload: any): Promise<string | null> => {
     try {
       const qty = Number(itemPayload.quantity) || 1;
       const unitPrice = Number(itemPayload.unit_price) || 0;
@@ -171,7 +174,7 @@ export default function ShopMainPage() {
 
       if (!res.ok || !json.success) {
         console.warn(json.message);
-        return;
+        return null;
       }
 
       setSelectedService(null);
@@ -180,8 +183,23 @@ export default function ShopMainPage() {
       if (customerId) {
         await loadData(customerId);
       }
+      return json.data?.id ? String(json.data.id) : null;
     } catch (err) {
       console.error("Add item to cart error:", err);
+      return null;
+    }
+  };
+
+  const handleAddToCart = async (itemPayload: any) => {
+    await addItemToCart(itemPayload);
+  };
+
+  // สั่งทันที: เพิ่มลงตะกร้า แล้วเปิดขั้นนัดรับงานเฉพาะรายการนี้
+  const handleBuyNow = async (itemPayload: any) => {
+    const newItemId = await addItemToCart(itemPayload);
+    if (newItemId) {
+      setBuyNowItemId(newItemId);
+      setIsCartOpen(true);
     }
   };
 
@@ -232,11 +250,31 @@ export default function ShopMainPage() {
     }
   };
 
+  // ปิดหน้าต่างนัดรับงาน: ถ้าเป็นสั่งทันทีแล้วไม่สั่งต่อ ให้เอารายการนั้นออกจากตะกร้า
+  // (ระบบใส่ตะกร้าไว้ชั่วคราวเพราะ backend สร้างออเดอร์จากตะกร้า แต่ลูกค้าไม่ได้ตั้งใจใส่ตะกร้า)
+  const handleCloseCheckout = () => {
+    setIsCartOpen(false);
+    const cancelledId = buyNowItemId;
+    setBuyNowItemId(null);
+    if (!cancelledId) return;
+
+    setCartItems((prev) => prev.filter((it: any) => String(it.id) !== String(cancelledId)));
+    setTotalCartCount((n: number) => Math.max(0, n - 1));
+    fetch(`http://localhost:5000/api/customer/cart/item/${cancelledId}`, { method: "DELETE" }).catch((err) =>
+      console.error("Remove buy-now item error:", err)
+    );
+  };
+
+  // รายการที่จะสั่งในหน้าต่างนัดรับงาน: สั่งทันที = รายการเดียว, ปกติ = ทั้งตะกร้าของร้านนี้
+  const checkoutItems = buyNowItemId
+    ? cartItems.filter((it: any) => String(it.id) === String(buyNowItemId))
+    : cartItems;
+
   // คืนค่าเป็นข้อความ error (ถ้ามี) เพื่อให้ตะกร้าแสดงให้ลูกค้าเห็น
   const handleProceedToPayment = async (appointmentData: any): Promise<string | void> => {
-    if (!shopId || !cartItems || cartItems.length === 0) return "ไม่มีรายการในตะกร้า";
+    if (!shopId || !checkoutItems || checkoutItems.length === 0) return "ไม่มีรายการในตะกร้า";
 
-    const formattedItems = cartItems.map((item: any) => {
+    const formattedItems = checkoutItems.map((item: any) => {
       const itemSubtotal =
         Number(item.subtotal) || Number(item.unit_price * item.quantity) || 0;
       const itemPages =
@@ -244,9 +282,12 @@ export default function ShopMainPage() {
 
       return {
         fileName: item.category || "งานพิมพ์เอกสาร",
-        paperSize: item.paper_type || item.selected_size || "A4",
-        colorType: item.color_type || "สี/ขาวดำ",
-        printSide: item.finishing_option || "ไม่มี",
+        // สเปกรวมเป็นบรรทัดเดียว (เหมือน describe ที่ backend บันทึก)
+        paperSize: [item.selected_size, item.color_type, item.paper_type, item.finishing_option]
+          .filter(Boolean)
+          .join(" | "),
+        colorType: "",
+        printSide: "",
         pagesPerSet: itemPages,
         pricePerPage: item.unit_price || 0,
         quantity: item.quantity || 1,
@@ -276,6 +317,8 @@ export default function ShopMainPage() {
           description: appointmentData.description || "",
           receive_date: appointmentData.receive_date,
           appointment_time: appointmentData.appointment_time,
+          // สั่งทันที: สั่งเฉพาะรายการนี้ รายการอื่นยังอยู่ในตะกร้า
+          ...(buyNowItemId ? { item_ids: [buyNowItemId] } : {}),
         }),
       });
 
@@ -296,6 +339,7 @@ export default function ShopMainPage() {
       // เคลียร์เฉพาะรายการของร้านปัจจุบันในหน้าจอ
       setCartItems([]);
       setIsCartOpen(false);
+      setBuyNowItemId(null);
 
       // 🌟 โหลดข้อมูลตะกร้าใหม่ เพื่อให้ Navbar อัปเดตยอดของร้านอื่นที่ยังเหลืออยู่จริง
       if (customerId) {
@@ -378,17 +422,19 @@ export default function ShopMainPage() {
             setEditingCartItem(null);
           }}
           onAddToCart={handleAddToCart}
+          onBuyNow={handleBuyNow}
         />
       )}
 
       <ShopCartDrawer
         shop={updatedShop}
-        cartItems={cartItems}
+        cartItems={checkoutItems}
         isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
+        onClose={handleCloseCheckout}
         onClearCart={handleClearCart}
-        onEditItem={handleEditCartItem}
-        onRemoveItem={handleRemoveCartItem}
+        onEditItem={buyNowItemId ? undefined : handleEditCartItem}
+        onRemoveItem={buyNowItemId ? undefined : handleRemoveCartItem}
+        isBuyNow={Boolean(buyNowItemId)}
         onProceedToPayment={handleProceedToPayment}
         isSubmitting={isSubmittingOrder}
       />

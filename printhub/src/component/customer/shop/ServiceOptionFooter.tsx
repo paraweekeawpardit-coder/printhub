@@ -1,12 +1,12 @@
 /**
  * Component: ServiceOptionFooter
- * หน้าที่: แถบสรุปยอดเงินด้านล่าง แจ้งเตือนสเปกที่จำเป็นที่ยังเลือกไม่ครบ และปุ่มกดยืนยันใส่ตะกร้า
+ * หน้าที่: แถบสรุปยอดเงินด้านล่าง แจ้งเตือนสเปกที่จำเป็นที่ยังเลือกไม่ครบ ปุ่มใส่ตะกร้า และปุ่มสั่งทันที
  */
 
 "use client";
 
 import React from "react";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, ArrowRight } from "lucide-react";
 
 interface ServiceOptionFooterProps {
   isMultiPageService: boolean;
@@ -18,6 +18,8 @@ interface ServiceOptionFooterProps {
   canAddToCart: boolean;
   isUploading: boolean;
   onSubmit: () => void;
+  onBuyNow?: () => void; // ไม่ส่งมา = ไม่แสดงปุ่มสั่งทันที (เช่น ตอนแก้ไขรายการในตะกร้า)
+  submittingMode?: "cart" | "buy" | null;
 }
 
 export default function ServiceOptionFooter({
@@ -30,6 +32,8 @@ export default function ServiceOptionFooter({
   canAddToCart,
   isUploading,
   onSubmit,
+  onBuyNow,
+  submittingMode = null,
 }: ServiceOptionFooterProps) {
   return (
     <div className="p-4 sm:px-6 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
@@ -49,28 +53,58 @@ export default function ServiceOptionFooter({
         )}
       </div>
 
-      <button
-        type="button"
-        disabled={!canAddToCart}
-        onClick={onSubmit}
-        className={`w-full sm:w-auto px-6 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md transition cursor-pointer ${
-          canAddToCart
-            ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20"
-            : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-        }`}
-      >
-        {isUploading ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>กำลังอัปโหลดไฟล์ขึ้นเซิร์ฟเวอร์...</span>
-          </>
-        ) : (
-          <>
-            <Plus className="w-4 h-4" />
-            <span>ใส่ตะกร้า</span>
-          </>
+      <div className="w-full sm:w-auto flex items-center gap-2">
+        {/* ใส่ตะกร้า: ถ้ามีปุ่มสั่งทันที จะเป็นปุ่มรอง (ขอบ) */}
+        <button
+          type="button"
+          disabled={!canAddToCart}
+          onClick={onSubmit}
+          className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+            !canAddToCart
+              ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+              : onBuyNow
+              ? "bg-white text-blue-700 border border-blue-200 hover:bg-blue-50"
+              : "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
+          }`}
+        >
+          {isUploading && submittingMode !== "buy" ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>กำลังอัปโหลดไฟล์...</span>
+            </>
+          ) : (
+            <>
+              <Plus className="w-4 h-4" />
+              <span>ใส่ตะกร้า</span>
+            </>
+          )}
+        </button>
+
+        {onBuyNow && (
+          <button
+            type="button"
+            disabled={!canAddToCart}
+            onClick={onBuyNow}
+            className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md transition cursor-pointer ${
+              canAddToCart
+                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20"
+                : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+            }`}
+          >
+            {isUploading && submittingMode === "buy" ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>กำลังอัปโหลดไฟล์...</span>
+              </>
+            ) : (
+              <>
+                <span>สั่งทันที</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
         )}
-      </button>
+      </div>
     </div>
   );
 }

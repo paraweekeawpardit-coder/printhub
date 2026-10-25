@@ -123,6 +123,23 @@ export const createOrder = async (req: Request, res: Response) => {
       });
     }
 
+    // "สั่งทันที": ส่ง item_ids มา = สั่งเฉพาะรายการที่เลือก (รายการอื่นยังอยู่ในตะกร้า)
+    // ไม่ส่งมา = สั่งทั้งตะกร้าของร้านนี้ (แบบเดิม)
+    const selectedItemIds: string[] | null =
+      Array.isArray(req.body.item_ids) && req.body.item_ids.length > 0
+        ? req.body.item_ids.map((id: any) => String(id))
+        : null;
+    const orderCartItems: any[] = selectedItemIds
+      ? cart.cart_item.filter((it: any) => selectedItemIds.includes(String(it.id)))
+      : cart.cart_item;
+
+    if (orderCartItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ไม่พบรายการที่เลือกในตะกร้า กรุณาลองใหม่อีกครั้ง",
+      });
+    }
+
     const { data: shop, error: shopError } = await supabase
       .from("print_shop")
       .select("open_time, close_time, open_days")
@@ -183,7 +200,7 @@ export const createOrder = async (req: Request, res: Response) => {
       }
     }
 
-    const pricing = calculateOrderPricing(cart.cart_item);
+    const pricing = calculateOrderPricing(orderCartItems);
     const pendingPaymentStatusId = "8961dbd1-5317-4690-b037-e2ed4e9587e5";
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
@@ -233,7 +250,7 @@ export const createOrder = async (req: Request, res: Response) => {
       console.warn("work_status insert warning:", wsErr);
     }
 
-    const orderItems = cart.cart_item.map((item: any) => ({
+    const orderItems = orderCartItems.map((item: any) => ({
       order_id: newOrder.id,
       file_url: item.file_url,
       category: item.category,
@@ -257,7 +274,7 @@ export const createOrder = async (req: Request, res: Response) => {
     if (itemsError) throw itemsError;
 
     const filesToInsert: any[] = [];
-    (cart.cart_item || []).forEach((item: any, idx: number) => {
+    (orderCartItems || []).forEach((item: any, idx: number) => {
       if (!item.file_url) return;
       const correspondingItemId = insertedItems?.[idx]?.id || null;
       const urls = item.file_url.split(",").map((u: string) => u.trim()).filter(Boolean);
@@ -279,8 +296,16 @@ export const createOrder = async (req: Request, res: Response) => {
       await supabase.from("print_file").insert(filesToInsert);
     }
 
-    await supabase.from("cart_item").delete().eq("cart_id", cart.id);
-    await supabase.from("cart").delete().eq("id", cart.id).eq("shop_id", targetShopId);
+    if (selectedItemIds && orderCartItems.length < cart.cart_item.length) {
+      // สั่งทันที: ลบเฉพาะรายการที่สั่งไป ตะกร้ายังเหลือรายการอื่น
+      await supabase
+        .from("cart_item")
+        .delete()
+        .in("id", orderCartItems.map((it: any) => it.id));
+    } else {
+      await supabase.from("cart_item").delete().eq("cart_id", cart.id);
+      await supabase.from("cart").delete().eq("id", cart.id).eq("shop_id", targetShopId);
+    }
 
     const displayNo = formatOrderNo(newOrder.order_no, newOrder.id);
     await supabase.from("notifications").insert([

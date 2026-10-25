@@ -48,8 +48,8 @@ const getSpecs = (item: any): string[] =>
     ? String(item.describe)
         .split("|")
         .map((s: string) => s.trim())
-        // SINGLE/DOUBLE = side_type ที่เลิกใช้แล้ว (ข้อมูลเก่า)
-        .filter((s: string) => s && !/^(SINGLE|DOUBLE)$/i.test(s))
+        // SINGLE/DOUBLE = side_type ที่เลิกใช้แล้ว (ข้อมูลเก่า), "ไม่มี" = ลูกค้าไม่ได้เลือกตัวเลือกนั้น
+        .filter((s: string) => s && !/^(SINGLE|DOUBLE|ไม่มี)$/i.test(s))
     : [];
 
 interface OrderItemsAccordionProps {
@@ -150,7 +150,7 @@ function OrderSummary({
         </div>
         {smallOrderFee > 0 && (
           <div className="flex justify-between text-orange-600">
-            <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (&lt;50 บาท)</span>
+            <span>ค่าธรรมเนียมสั่งซื้อขนาดเล็ก (ยอดไม่ถึงขั้นต่ำ 50 บาท)</span>
             <span className="font-semibold">+฿{smallOrderFee.toFixed(2)}</span>
           </div>
         )}
