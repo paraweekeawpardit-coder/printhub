@@ -1,7 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Star, AlertTriangle, Printer, User, FileText, Calendar, Layers, X } from "lucide-react";
+import {
+  Star,
+  AlertTriangle,
+  Printer,
+  User,
+  FileText,
+  Calendar,
+  Layers,
+  X,
+  MessageSquare,
+  Flag,
+  Send,
+} from "lucide-react";
 
 export type PrintOrderItem = {
   id?: string;
@@ -15,6 +27,8 @@ export type ReviewItem = {
   rating?: number;
   score?: number;
   comment: string;
+  shop_reply?: string | null; // 🟢 รองรับข้อความตอบกลับจากร้านค้า
+  reply_at?: string | null;
   image_url?: string | null;
   created_at: string;
   customer?: {
@@ -23,8 +37,8 @@ export type ReviewItem = {
     profile_image?: string;
   };
   print_order?: {
-    id: string; // uuid สำหรับใช้งาน
-    order_no?: number | string; // เลขโชว์
+    id: string;
+    order_no?: number | string;
     description?: string | null;
     items?: PrintOrderItem[];
     total_price?: number;
@@ -40,14 +54,14 @@ export type ComplaintItem = {
   admin_note?: string | null;
   image_url?: string | null;
   created_at: string;
-  updated_at?: string | null; // วันที่แอดมินรับเรื่อง (ใช้คำนวณกำหนดแจ้งผล)
+  updated_at?: string | null;
   customer?: {
     first_name: string;
     last_name: string;
   };
   print_order?: {
-    id: string; // uuid สำหรับใช้งาน
-    order_no?: number | string; // เลขโชว์
+    id: string;
+    order_no?: number | string;
     description?: string | null;
     items?: PrintOrderItem[];
   };
@@ -92,7 +106,6 @@ const REPORT_STATUS_MAP: Record<string, ReportStatusConfig> = {
   },
 };
 
-// ค่าว่าง/null ถือเป็น pending, ค่าที่ไม่รู้จัก => คืน null (ไม่แสดง)
 const getReportStatus = (status?: string | null): ReportStatusConfig | null => {
   const key = (status ?? "").toLowerCase().trim();
   if (key === "") return REPORT_STATUS_MAP.pending;
@@ -100,7 +113,6 @@ const getReportStatus = (status?: string | null): ReportStatusConfig | null => {
   return REPORT_STATUS_MAP[key] ?? null;
 };
 
-// แอดมินรับเรื่องแล้ว (investigating) -> แจ้งผลภายใน 2 วันนับจาก updated_at
 const REVIEW_DEADLINE_DAYS = 2;
 const getReviewDeadline = (updatedAt?: string | null): string | null => {
   if (!updatedAt) return null;
@@ -109,7 +121,6 @@ const getReviewDeadline = (updatedAt?: string | null): string | null => {
   return new Date(t + REVIEW_DEADLINE_DAYS * 24 * 60 * 60 * 1000).toISOString();
 };
 
-// image_url อาจเป็น URL เดียว, หลาย URL คั่นด้วย comma/ขึ้นบรรทัดใหม่ หรือ JSON array
 const parseImageUrls = (raw?: string | null): string[] => {
   const text = (raw ?? "").trim();
   if (!text) return [];
@@ -168,6 +179,8 @@ type Props = {
   summary?: ReviewSummary;
   ratingCounts?: Record<number, number>;
   onOrderClick?: (id: string) => void;
+  onReplyReview?: (reviewId: string, replyText: string) => Promise<void>; // 🟢 ฟังก์ชันส่งการตอบกลับ
+  onReportReview?: (reviewId: string, reason: string) => Promise<void>;  // 🟢 ฟังก์ชันรายงานรีวิว
 };
 
 export default function ReviewComplaintModal({
@@ -176,13 +189,24 @@ export default function ReviewComplaintModal({
   summary,
   ratingCounts,
   onOrderClick,
+  onReplyReview,
+  onReportReview,
 }: Props) {
   const [tab, setTab] = useState<"reviews" | "complaints">("reviews");
   const [selectedStar, setSelectedStar] = useState<number | "all">("all");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const visibleComplaints = complaints.filter((c) => getReportStatus(c.status));
+  // 🟢 State สำหรับการตอบกลับรีวิว
+  const [replyingReviewId, setReplyingReviewId] = useState<string | null>(null);
+  const [replyInputText, setReplyInputText] = useState<string>("");
+  const [isSubmittingReply, setIsSubmittingReply] = useState<boolean>(false);
 
+  // 🟢 State สำหรับการรายงานรีวิวที่ไม่เหมาะสม
+  const [reportingReviewId, setReportingReviewId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState<string>("");
+  const [isSubmittingReport, setIsSubmittingReport] = useState<boolean>(false);
+
+  const visibleComplaints = complaints.filter((c) => getReportStatus(c.status));
   const getRatingValue = (r: ReviewItem) => Number(r.rating ?? r.score ?? 0);
 
   const counts =
@@ -199,8 +223,8 @@ export default function ReviewComplaintModal({
     summary?.average_rating?.toFixed(1) ??
     (totalReviews > 0
       ? (
-          reviews.reduce((sum, r) => sum + getRatingValue(r), 0) / totalReviews
-        ).toFixed(1)
+        reviews.reduce((sum, r) => sum + getRatingValue(r), 0) / totalReviews
+      ).toFixed(1)
       : "0.0");
 
   const filteredReviews =
@@ -218,18 +242,59 @@ export default function ReviewComplaintModal({
     });
   };
 
-  const renderOrderItemsDetail = (order: ReviewItem["print_order"] | ComplaintItem["print_order"]) => {
+  // 🟢 Submit ตอบกลับรีวิว
+  const handleSendReply = async (reviewId: string) => {
+    if (!replyInputText.trim() || !onReplyReview) return;
+    try {
+      setIsSubmittingReply(true);
+      await onReplyReview(reviewId, replyInputText.trim());
+      setReplyingReviewId(null);
+      setReplyInputText("");
+    } catch (err: any) {
+      alert(err.message || "เกิดข้อผิดพลาดในการตอบกลับ");
+    } finally {
+      setIsSubmittingReply(false);
+    }
+  };
+
+  // 🟢 Submit รายงานรีวิว
+  const handleSendReport = async () => {
+    if (!reportingReviewId || !reportReason.trim() || !onReportReview) return;
+    try {
+      setIsSubmittingReport(true);
+      await onReportReview(reportingReviewId, reportReason.trim());
+      setReportingReviewId(null);
+      setReportReason("");
+      alert("ส่งรายงานรีวิวที่ไม่เหมาะสมเรียบร้อยแล้ว");
+    } catch (err: any) {
+      alert(err.message || "เกิดข้อผิดพลาดในการส่งรายงาน");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
+  const renderOrderItemsDetail = (
+    order: ReviewItem["print_order"] | ComplaintItem["print_order"]
+  ) => {
     if (!order) return null;
 
     if (order.items && order.items.length > 0) {
       return (
         <div className="mt-2 space-y-1">
           {order.items.map((item, idx) => (
-            <div key={item.id || idx} className="text-[11px] text-slate-600 bg-white p-2 rounded border border-slate-100">
+            <div
+              key={item.id || idx}
+              className="rounded border border-slate-100 bg-white p-2 text-[11px] text-slate-600"
+            >
               <span className="font-semibold text-slate-800">
-                • {item.category || "สิ่งพิมพ์"} {item.quantity ? `(จำนวน ${item.quantity} ชิ้น)` : ""}
+                • {item.category || "สิ่งพิมพ์"}{" "}
+                {item.quantity ? `(จำนวน ${item.quantity} ชิ้น)` : ""}
               </span>
-              {item.describe && <p className="text-[10px] text-slate-500 pl-2 pt-0.5">{item.describe}</p>}
+              {item.describe && (
+                <p className="pl-2 pt-0.5 text-[10px] text-slate-500">
+                  {item.describe}
+                </p>
+              )}
             </div>
           ))}
         </div>
@@ -237,10 +302,18 @@ export default function ReviewComplaintModal({
     }
 
     if (order.description) {
-      return <p className="text-[11px] text-slate-600 mt-1 pl-1">{order.description}</p>;
+      return (
+        <p className="mt-1 pl-1 text-[11px] text-slate-600">
+          {order.description}
+        </p>
+      );
     }
 
-    return <p className="text-[11px] text-slate-400 mt-1 italic pl-1">ไม่พบข้อมูลสิ่งพิมพ์</p>;
+    return (
+      <p className="mt-1 pl-1 text-[11px] italic text-slate-400">
+        ไม่พบข้อมูลสิ่งพิมพ์
+      </p>
+    );
   };
 
   return (
@@ -260,11 +333,10 @@ export default function ReviewComplaintModal({
           <button
             type="button"
             onClick={() => setTab("reviews")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${
-              tab === "reviews"
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${tab === "reviews"
                 ? "bg-white text-amber-600 shadow-sm"
                 : "text-slate-500 hover:text-slate-700"
-            }`}
+              }`}
           >
             <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
             <span>รีวิว ({totalReviews})</span>
@@ -272,11 +344,10 @@ export default function ReviewComplaintModal({
           <button
             type="button"
             onClick={() => setTab("complaints")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${
-              tab === "complaints"
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${tab === "complaints"
                 ? "bg-white text-rose-600 shadow-sm"
                 : "text-slate-500 hover:text-slate-700"
-            }`}
+              }`}
           >
             <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
             <span>รายการร้องเรียน ({visibleComplaints.length})</span>
@@ -296,11 +367,10 @@ export default function ReviewComplaintModal({
                 {[1, 2, 3, 4, 5].map((star) => (
                   <Star
                     key={star}
-                    className={`h-4 w-4 ${
-                      star <= Math.round(Number(avgRating))
+                    className={`h-4 w-4 ${star <= Math.round(Number(avgRating))
                         ? "fill-amber-400 text-amber-400"
                         : "text-slate-300"
-                    }`}
+                      }`}
                   />
                 ))}
               </div>
@@ -331,7 +401,7 @@ export default function ReviewComplaintModal({
                         className="h-full rounded-full bg-amber-400 transition-all duration-300"
                       />
                     </div>
-                    <span className="w-16 text-right text-slate-400 font-mono">
+                    <span className="w-16 font-mono text-right text-slate-400">
                       {count} ({Math.round(percentage)}%)
                     </span>
                   </div>
@@ -342,15 +412,16 @@ export default function ReviewComplaintModal({
 
           {/* Filter Star Bar */}
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
-            <span className="text-xs font-semibold text-slate-500">กรองดาว:</span>
+            <span className="text-xs font-semibold text-slate-500">
+              กรองดาว:
+            </span>
             <button
               type="button"
               onClick={() => setSelectedStar("all")}
-              className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${
-                selectedStar === "all"
+              className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${selectedStar === "all"
                   ? "bg-slate-800 text-white shadow-sm"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+                }`}
             >
               ทั้งหมด
             </button>
@@ -359,28 +430,28 @@ export default function ReviewComplaintModal({
                 key={star}
                 type="button"
                 onClick={() => setSelectedStar(star)}
-                className={`flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-medium transition-all ${
-                  selectedStar === star
+                className={`flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-medium transition-all ${selectedStar === star
                     ? "bg-amber-500 text-white shadow-sm"
                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
+                  }`}
               >
                 <span>{star}</span>
                 <Star
-                  className={`h-3 w-3 ${
-                    selectedStar === star
+                  className={`h-3 w-3 ${selectedStar === star
                       ? "fill-white text-white"
                       : "fill-amber-400 text-amber-400"
-                  }`}
+                    }`}
                 />
-                <span className="text-[10px] opacity-80">({counts[star] || 0})</span>
+                <span className="text-[10px] opacity-80">
+                  ({counts[star] || 0})
+                </span>
               </button>
             ))}
           </div>
 
-          {/* 🟢 คอนเทนเนอร์แสดงผลแบบ Scroll แนวตั้ง จำกัดสูงคงที่ประมาณ 3 รายการ */}
+          {/* รายการรีวิว */}
           {filteredReviews.length > 0 ? (
-            <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+            <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
               {filteredReviews.map((r) => {
                 const scoreVal = getRatingValue(r);
                 return (
@@ -390,29 +461,55 @@ export default function ReviewComplaintModal({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-50 text-amber-600 font-bold border border-amber-100">
-                          {r.customer?.first_name ? r.customer.first_name.charAt(0) : <User className="h-4 w-4" />}
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-amber-100 bg-amber-50 font-bold text-amber-600">
+                          {r.customer?.first_name ? (
+                            r.customer.first_name.charAt(0)
+                          ) : (
+                            <User className="h-4 w-4" />
+                          )}
                         </div>
                         <div>
                           <h4 className="text-xs font-bold text-slate-800">
-                            {r.customer ? `${r.customer.first_name} ${r.customer.last_name}` : "ลูกค้าทั่วไป"}
+                            {r.customer
+                              ? `${r.customer.first_name} ${r.customer.last_name}`
+                              : "ลูกค้าทั่วไป"}
                           </h4>
-                          <div className="flex items-center gap-0.5 mt-0.5">
+                          <div className="mt-0.5 flex items-center gap-0.5">
                             {[1, 2, 3, 4, 5].map((s) => (
                               <Star
                                 key={s}
-                                className={`h-3 w-3 ${
-                                  s <= scoreVal ? "fill-amber-400 text-amber-400" : "text-slate-200"
-                                }`}
+                                className={`h-3 w-3 ${s <= scoreVal
+                                    ? "fill-amber-400 text-amber-400"
+                                    : "text-slate-200"
+                                  }`}
                               />
                             ))}
                           </div>
                         </div>
                       </div>
-                      <span className="text-[11px] text-slate-400">{formatDate(r.created_at)}</span>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-400">
+                          {formatDate(r.created_at)}
+                        </span>
+                        {/* 🟢 ปุ่มรายงานรีวิวที่ไม่เหมาะสม */}
+                        {onReportReview && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReportingReviewId(r.id);
+                              setReportReason("");
+                            }}
+                            className="rounded p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                            title="รายงานรีวิวนี้"
+                          >
+                            <Flag className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    <p className="mt-2.5 text-xs text-slate-700 leading-relaxed bg-slate-50/50 p-2.5 rounded-lg border border-slate-100/60">
+                    <p className="mt-2.5 rounded-lg border border-slate-100/60 bg-slate-50/50 p-2.5 text-xs leading-relaxed text-slate-700">
                       {r.comment || "ไม่ได้ระบุความคิดเห็นเพิ่มเติม"}
                     </p>
 
@@ -421,13 +518,84 @@ export default function ReviewComplaintModal({
                     {r.print_order && (
                       <div
                         onClick={() => onOrderClick?.(r.print_order!.id)}
-                        className="mt-2.5 rounded-lg bg-emerald-50/40 p-2.5 border border-emerald-100/70 text-emerald-900 cursor-pointer hover:bg-emerald-100/50 transition-colors"
+                        className="mt-2.5 cursor-pointer rounded-lg border border-emerald-100/70 bg-emerald-50/40 p-2.5 text-emerald-900 transition-colors hover:bg-emerald-100/50"
                       >
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800">
-                          <Printer className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          Order <strong className="text-emerald-950">#{r.print_order.order_no || r.print_order.id.slice(0, 8)}</strong>
+                          <Printer className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                          Order{" "}
+                          <strong className="text-emerald-950">
+                            #{r.print_order.order_no || r.print_order.id.slice(0, 8)}
+                          </strong>
                         </div>
                         {renderOrderItemsDetail(r.print_order)}
+                      </div>
+                    )}
+
+                    {/* 🟢 แสดงคำตอบของร้านค้า (ถ้ามีตอบไว้แล้ว) */}
+                    {r.shop_reply && (
+                      <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/50 p-2.5 text-xs text-blue-900">
+                        <div className="flex items-center justify-between font-semibold text-blue-700">
+                          <span className="flex items-center gap-1">
+                            <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
+                            คำตอบรับจากร้านค้า
+                          </span>
+                          {r.reply_at && (
+                            <span className="text-[10px] text-blue-400 font-normal">
+                              {formatDate(r.reply_at)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-slate-700">{r.shop_reply}</p>
+                      </div>
+                    )}
+
+                    {/* 🟢 ปุ่มกดตอบกลับรีวิว */}
+                    {onReplyReview && (
+                      <div className="mt-3 flex justify-end">
+                        {replyingReviewId === r.id ? (
+                          <div className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                            <textarea
+                              rows={2}
+                              value={replyInputText}
+                              onChange={(e) => setReplyInputText(e.target.value)}
+                              placeholder="พิมพ์ข้อความตอบกลับลูกค้าที่นี่..."
+                              className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-blue-500 focus:outline-none"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyingReviewId(null);
+                                  setReplyInputText("");
+                                }}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:bg-slate-100"
+                              >
+                                ยกเลิก
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isSubmittingReply || !replyInputText.trim()}
+                                onClick={() => handleSendReply(r.id)}
+                                className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                <Send className="h-3 w-3" />
+                                {isSubmittingReply ? "กำลังส่ง..." : "ส่งคำตอบ"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReplyingReviewId(r.id);
+                              setReplyInputText(r.shop_reply || "");
+                            }}
+                            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5 text-slate-500" />
+                            {r.shop_reply ? "แก้ไขการตอบกลับ" : "ตอบกลับรีวิว"}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -435,18 +603,20 @@ export default function ReviewComplaintModal({
               })}
             </div>
           ) : (
-            <div className="py-12 text-center text-slate-400 text-xs">ยังไม่มีรีวิวในระดับดาวนี้</div>
+            <div className="py-12 text-center text-xs text-slate-400">
+              ยังไม่มีรีวิวในระดับดาวนี้
+            </div>
           )}
         </div>
       ) : (
-        /* 🟢 ข้อร้องเรียน Scroll แนวตั้ง */
+        /* ข้อร้องเรียน Scroll แนวตั้ง */
         <div className="space-y-4">
           {visibleComplaints.length > 0 ? (
-            <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+            <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
               {visibleComplaints.map((c) => (
                 <div
                   key={c.id}
-                  className="rounded-xl border border-rose-100 bg-rose-50/20 p-4 space-y-2.5"
+                  className="space-y-2.5 rounded-xl border border-rose-100 bg-rose-50/20 p-4"
                 >
                   <div className="flex items-center justify-between border-b border-rose-100/60 pb-2">
                     <div className="flex items-center gap-2">
@@ -466,40 +636,42 @@ export default function ReviewComplaintModal({
                       {c.print_order && (
                         <span
                           onClick={() => onOrderClick?.(c.print_order!.id)}
-                          className="text-xs font-bold text-slate-800 hover:text-blue-600 cursor-pointer underline underline-offset-2"
+                          className="cursor-pointer text-xs font-bold text-slate-800 underline underline-offset-2 hover:text-blue-600"
                         >
                           Order #{c.print_order.order_no || c.print_order.id.slice(0, 8)}
                         </span>
                       )}
                     </div>
-                    <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                    <span className="flex items-center gap-1 text-[11px] text-slate-400">
                       <Calendar size={12} /> {formatDate(c.created_at)}
                     </span>
                   </div>
 
-                  <div className="text-xs text-slate-700 space-y-2">
-                    <p className="font-semibold text-slate-800 flex items-center gap-1.5">
+                  <div className="space-y-2 text-xs text-slate-700">
+                    <p className="flex items-center gap-1.5 font-semibold text-slate-800">
                       <User size={13} className="text-slate-500" />
                       ผู้แจ้งเรื่อง:{" "}
                       <span className="font-normal text-slate-600">
-                        {c.customer ? `${c.customer.first_name} ${c.customer.last_name}` : "ไม่ระบุชื่อ"}
+                        {c.customer
+                          ? `${c.customer.first_name} ${c.customer.last_name}`
+                          : "ไม่ระบุชื่อ"}
                       </span>
                     </p>
 
                     <div>
-                      <p className="font-semibold text-slate-800 flex items-center gap-1.5 mb-1">
+                      <p className="mb-1 flex items-center gap-1.5 font-semibold text-slate-800">
                         <FileText size={13} className="text-slate-500" />
                         รายละเอียดปัญหาร้องเรียน:
                       </p>
-                      <p className="bg-white p-2.5 rounded-lg border border-rose-100 text-slate-700 whitespace-pre-line leading-relaxed text-[11px]">
+                      <p className="whitespace-pre-line rounded-lg border border-rose-100 bg-white p-2.5 text-[11px] leading-relaxed text-slate-700">
                         {c.description || "ไม่มีรายละเอียดเพิ่มเติม"}
                       </p>
                       <ImageThumbs raw={c.image_url} onPreview={setPreviewUrl} />
                     </div>
 
                     {c.print_order && (
-                      <div className="bg-white/80 p-2.5 rounded-lg border border-rose-100">
-                        <p className="font-semibold text-slate-800 flex items-center gap-1.5 text-[11px] text-rose-900 mb-1">
+                      <div className="rounded-lg border border-rose-100 bg-white/80 p-2.5">
+                        <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-rose-900">
                           <Layers size={13} className="text-rose-600" /> รายการที่สั่งซื้อ:
                         </p>
                         {renderOrderItemsDetail(c.print_order)}
@@ -508,8 +680,8 @@ export default function ReviewComplaintModal({
 
                     {getReportStatus(c.status)?.showDisputeNote && (
                       <p className="text-[11px] font-medium text-amber-700">
-                        * หากท่านมีข้อโต้แย้งกรุณาติดต่อแอดมินภายในวันที่{" "}
-                         {formatDate(getReviewDeadline(c.updated_at)!)}
+                        • หากท่านมีข้อโต้แย้งกรุณาติดต่อแอดมินภายในวันที่{" "}
+                        {formatDate(getReviewDeadline(c.updated_at)!)}
                       </p>
                     )}
                   </div>
@@ -517,10 +689,14 @@ export default function ReviewComplaintModal({
               ))}
             </div>
           ) : (
-            <div className="py-12 text-center text-slate-400 text-xs">ไม่มีรายการร้องเรียน</div>
+            <div className="py-12 text-center text-xs text-slate-400">
+              ไม่มีรายการร้องเรียน
+            </div>
           )}
         </div>
       )}
+
+      {/* Modal รูปภาพเต็มจอ */}
       {previewUrl && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
@@ -542,6 +718,66 @@ export default function ReviewComplaintModal({
           />
         </div>
       )}
+
+      {/* 🟢 Modal สำหรับกรอกเหตุผลรายงานรีวิวที่ไม่เหมาะสม */}
+      {reportingReviewId && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setReportingReviewId(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h4 className="flex items-center gap-2 text-sm font-bold text-rose-600">
+                <Flag className="h-4 w-4" /> รายงานรีวิวที่ไม่เหมาะสม
+              </h4>
+              <button
+                type="button"
+                onClick={() => setReportingReviewId(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-600">
+              โปรดระบุเหตุผลในการรายงานรีวิวนี้ เพื่อให้แอดมินดำเนินการตรวจสอบ:
+            </p>
+
+            <textarea
+              rows={4}
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              placeholder="ระบุเหตุผล เช่น ใช้ถ้อยคำหยาบคาย, ข้อมูลเท็จ, ไม่เกี่ยวกับสินค้า..."
+              className="mt-2 w-full rounded-xl border border-slate-200 p-3 text-xs focus:border-rose-500 focus:outline-none"
+            />
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReportingReviewId(null)}
+                className="rounded-lg border border-slate-200 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingReport || !reportReason.trim()}
+                onClick={handleSendReport}
+                className="rounded-lg bg-rose-600 px-4 py-1.5 text-xs text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {isSubmittingReport ? "กำลังส่ง..." : "ส่งรายงาน"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      
     </div>
   );
+
+
 }

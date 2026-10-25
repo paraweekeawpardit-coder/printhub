@@ -273,6 +273,56 @@ export default function ShopPage() {
     await fetchDashboardData({ silent: true });
   };
 
+  // 🟢 ฟังก์ชันตอบกลับรีวิว (Reply Review)
+  const handleReplyReview = async (reviewId: string, replyText: string) => {
+    if (isSuspended) throw new Error("บัญชีนี้ถูกระงับการใช้งาน");
+
+    const token = localStorage.getItem("token");
+    try {
+      await axios.post(
+        `${API_URL}/shop/reviews/${reviewId}/reply`,
+        { reply_text: replyText },
+        {
+          headers: {
+            shop_id: shopId,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+      // รีเฟรชข้อมูลในระบบทันที
+      await fetchDashboardData({ silent: true });
+    } catch (err: any) {
+      throw new Error(
+        err?.response?.data?.error || "ไม่สามารถส่งคำตอบกลับได้ กรุณาลองใหม่อีกครั้ง"
+      );
+    }
+  };
+
+  // 🟢 ฟังก์ชันรายงานรีวิวที่ไม่เหมาะสม (Report Review)
+  const handleReportReview = async (reviewId: string, reason: string) => {
+    if (isSuspended) throw new Error("บัญชีนี้ถูกระงับการใช้งาน");
+
+    const token = localStorage.getItem("token");
+    try {
+      await axios.post(
+        `${API_URL}/shop/reviews/${reviewId}/report`,
+        { reason },
+        {
+          headers: {
+            shop_id: shopId,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+      // รีเฟรชข้อมูลในระบบทันที
+      await fetchDashboardData({ silent: true });
+    } catch (err: any) {
+      throw new Error(
+        err?.response?.data?.error || "ไม่สามารถส่งรายงานได้ กรุณาลองใหม่อีกครั้ง"
+      );
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50/50 font-['Prompt',sans-serif]">
       <ShopNavbar />
@@ -356,10 +406,13 @@ export default function ShopPage() {
 
         {activeView === "reviews" && (
           <div className="mb-10">
+            {/* 🟢 ส่ง Props ฟังก์ชันตอบและรายงานรีวิวไปยัง ReviewComplaintModal */}
             <ReviewComplaintModal
               reviews={reviewData.reviews}
               complaints={reviewData.complaints}
               onOrderClick={handleOrderClick}
+              onReplyReview={handleReplyReview}
+              onReportReview={handleReportReview}
             />
           </div>
         )}
