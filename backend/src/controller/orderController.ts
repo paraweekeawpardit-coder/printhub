@@ -307,17 +307,6 @@ export const createOrder = async (req: Request, res: Response) => {
       await supabase.from("cart").delete().eq("id", cart.id).eq("shop_id", targetShopId);
     }
 
-    const displayNo = formatOrderNo(newOrder.order_no, newOrder.id);
-    await supabase.from("notifications").insert([
-      {
-        shop_id: cart.shop_id,
-        order_id: newOrder.id,
-        title: "คำสั่งพิมพ์ใหม่!",
-        message: `คุณมีออเดอร์ใหม่ #${displayNo} รอลูกค้าชำระเงิน`,
-        is_read: false,
-      },
-    ]);
-
     return res.status(201).json({
       success: true,
       message: "สร้างคำสั่งซื้อสำเร็จ",
@@ -492,7 +481,6 @@ export const updateWorkStatus = async (req: Request, res: Response) => {
       current_status_id: finalStatusId,
       work_state_id: wsId,
     };
-    // ถ้ามีการชดเชยเวลา ให้แนบไปเซฟในฐานข้อมูลด้วย
     if (newExpiresAt) {
       updatePayload.expires_at = newExpiresAt;
     }
@@ -506,6 +494,9 @@ export const updateWorkStatus = async (req: Request, res: Response) => {
       .eq("id", orderId);
 
     if (orderError) throw orderError;
+
+    // 💡 ตัดการ insert notifications ฝั่งร้านค้าออกทั้งหมดแล้ว
+
     return res.status(200).json({ success: true, message: "อัปเดตสถานะเรียบร้อยแล้ว" });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -763,8 +754,8 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
         {
           shop_id: orderData.shop_id,
           order_id: targetOrderId,
-          title: "แจ้งชำระเงินแล้ว",
-          message: `ออเดอร์ #${displayNo} ได้ทำการชำระเงินแล้ว กรุณาตรวจสอบและดำเนินการ`,
+          title: "คำสั่งพิมพ์ใหม่!",
+          message: `คุณมีคำสั่งพิมพ์ใหม่ #${displayNo} ได้ทำการชำระเงินแล้ว กรุณาตรวจสอบและดำเนินการ`,
           is_read: false,
         },
       ]);
