@@ -103,7 +103,7 @@ export default function AdminLoginPage() {
             <input
               type="text"
               className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-black outline-none transition text-slate-800"
-              placeholder="admin@printhub.com"
+              placeholder="กรอกอีเมลของคุณ"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -118,7 +118,7 @@ export default function AdminLoginPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-black outline-none transition pr-10 text-slate-800"
-                placeholder="••••••••"
+                placeholder="กรอกรหัสผ่าน"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

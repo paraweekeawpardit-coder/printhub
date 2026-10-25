@@ -11,6 +11,7 @@ export const getPendingShops = async (
 ): Promise<Response> => {
   try {
     // 🟢 กรองเฉพาะร้านค้าที่สถานะเป็น 'pending' จริงๆ
+    // 🟢 แก้ไข: กรองเฉพาะร้านค้าที่สถานะเป็น 'pending' จริงๆ (ไม่ดึงร้านที่โดนแบน suspended)
     const { data: shops, error: shopError } = await supabase
       .from("print_shop")
       .select("*, address:address_id(*)")
@@ -65,7 +66,7 @@ export const getPendingShops = async (
 
 /**
  * GET /api/admin/shops/all
- * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่เคยผ่านการอนุมัติแล้ว
+ * ดึงข้อมูลร้านค้าทั้งหมดในระบบที่เคยผ่านการอนุมัติแล้ว (is_verify = true รวมถึงร้านที่โดนระงับ suspended)
  */
 export const getAllShops = async (
   _req: Request,
@@ -199,6 +200,8 @@ export const toggleSuspendShop = async (
     const isSuspend = suspend === true || suspend === "true";
     const newStatus = isSuspend ? "suspended" : "approved";
 
+    // 🟢 แก้ไข: ร้านค้าที่ผ่านการอนุมัติแล้ว แม้โดนระงับใช้งาน (suspended) ค่า is_verify ยังคงเป็น true
+    // เพื่อไม่ให้หลุดไปโผล่ในหน้า "คำขอสมัครใหม่"
     const { data: updatedShop, error } = await supabase
       .from("print_shop")
       .update({
@@ -216,6 +219,7 @@ export const toggleSuspendShop = async (
       return res.status(400).json({ error: error.message });
     }
 
+    // 🟢 เมื่อปลดการระงับสำเร็จ ให้เคลียร์สถานะคำขอปลดระงับที่ค้างอยู่เป็น 'approved'
     if (!isSuspend) {
       await supabase
         .from("shop_appeals")

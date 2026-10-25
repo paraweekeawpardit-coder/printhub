@@ -1,9 +1,19 @@
 import express from 'express';
-import { getOwnerStats, verifyOwnerPin } from '../controller/ownerController.js';
+import { 
+  getOwnerStats, 
+  getOwnerShopOrders, 
+  loginOwner 
+} from '../controller/ownerController.js';
 
 const router = express.Router();
 
+// GET: ดึงข้อมูลภาพรวมการเงินและรายได้แยกตามร้านค้า
 router.get('/stats', getOwnerStats);
-router.post('/verify-pin', verifyOwnerPin);
+
+// GET: ดึงรายการออเดอร์ย่อยของร้านค้าที่เลือก (สำหรับดูที่มาของเงิน commission 8%)
+router.get('/shops/:shopId/orders', getOwnerShopOrders);
+
+// POST: เข้าสู่ระบบ Owner ด้วย Email + Password (เปลี่ยนจาก /verify-pin)
+router.post('/login', loginOwner);
 
 export default router;

@@ -21,6 +21,16 @@ const kanit = Kanit({
 export const metadata: Metadata = {
   title: 'PrintHub',
   description: 'แพลตฟอร์มค้นหาและสั่งปริ้นท์เอกสารออนไลน์',
+  icons: {
+    icon: [
+      { url: '/icon.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon.png', sizes: '192x192', type: 'image/png' },
+    ],
+    shortcut: '/icon.png',
+    apple: [
+      { url: '/icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
 };
 
 export default function RootLayout({
