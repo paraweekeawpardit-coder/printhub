@@ -440,6 +440,7 @@ export const getFinancialOverview = async (
       });
     }
 
+    // ดึงข้อมูลการเงินจากฟิลด์จริงในตาราง print_order
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(`
@@ -447,6 +448,7 @@ export const getFinancialOverview = async (
         order_no,
         order_date,
         total_price,
+        small_order_fee,
         payment:payment_id (payout_slip_url, payout_date)
       `)
       .eq("shop_id", shop_id)
@@ -456,22 +458,31 @@ export const getFinancialOverview = async (
     if (error) return res.status(400).json({ error: error.message });
 
     const orderList = orders ?? [];
-    const FEE_RATE = 0.05;
+
+    const FEE_RATE = 0.08; // ค่าธรรมเนียม 8% เมื่อไม่มี small_order_fee
+    const round2 = (n: number) => Math.round(n * 100) / 100;
 
     let totalGross = 0;
     let totalFee = 0;
     let totalNet = 0;
 
     const transactions = orderList.map((o: any) => {
-      const gross = Number(o.total_price || 0);
-      const fee = gross * FEE_RATE;
-      const net = gross - fee;
+      // ยอดเต็ม = total_price
+      const gross = Number(o.total_price ?? 0);
+
+      // ค่าธรรมเนียม:
+      //  - ถ้ามี small_order_fee -> ใช้ค่านั้น
+      //  - ถ้าไม่มี -> หัก 8% ของ total_price
+      const smallOrderFee = Number(o.small_order_fee ?? 0);
+      const fee = round2(smallOrderFee > 0 ? smallOrderFee : gross * FEE_RATE);
+
+      // รับสุทธิ = ยอดเต็ม - ค่าธรรมเนียม
+      const net = round2(gross - fee);
 
       totalGross += gross;
       totalFee += fee;
       totalNet += net;
 
-      // payment อาจกลับมาเป็น object หรือ array ขึ้นกับ relation
       const payment = Array.isArray(o.payment) ? o.payment[0] : o.payment;
       const payoutSlip = payment?.payout_slip_url?.trim() || null;
 
@@ -482,7 +493,6 @@ export const getFinancialOverview = async (
         gross,
         fee,
         net,
-        // มีสลิป = แพลตฟอร์มโอนเงินให้ร้านแล้ว, ไม่มี = กำลังดำเนินการ
         payout_slip_url: payoutSlip,
         payout_date: payment?.payout_date ?? null,
       };

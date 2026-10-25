@@ -3,6 +3,7 @@ import supabase from "../../config/supabase.js";
 
 const ORDER_PENDING_STATE = "รอการดำเนินงาน";
 const ORDER_CANCELLED_STATE = "ยกเลิกการพิมพ์";
+const ORDER_PRINTING_STATE = "กำลังพิมพ์";
 const REJECT_REASON_MAX_LENGTH = 500;
 
 // Helper: ปรับเวลาให้อยู่ในกรอบ 00:00:00 - 23:59:59.999 ของวันนั้นๆ
@@ -155,13 +156,27 @@ export const updateOrderStatus = async (
 
     const { data: order, error: orderError } = await supabase
       .from("print_order")
-      .select("id, shop_id, current_status_id")
+      .select("id, shop_id, current_status_id, payment_id")
       .eq("id", id)
       .single();
 
     if (orderError || !order) return res.status(404).json({ error: "Order not found" });
     if (shop_id && order.shop_id !== shop_id) {
       return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    // ยืนยันออเดอร์ (เริ่มพิมพ์) ได้เฉพาะเมื่อร้านตรวจสลิปแล้วว่าถูกต้อง
+    if (status_name === ORDER_PRINTING_STATE) {
+      const { data: payRow } = order.payment_id
+        ? await supabase.from("payment").select("is_verified").eq("id", order.payment_id).maybeSingle()
+        : await supabase.from("payment").select("is_verified").eq("order_id", id).maybeSingle();
+
+      if (payRow?.is_verified !== true) {
+        return res.status(400).json({
+          error: "กรุณาตรวจสอบสลิปให้ถูกต้องก่อนยืนยันออเดอร์",
+          code: "SLIP_NOT_VERIFIED",
+        });
+      }
     }
 
     const { data: statusData } = await supabase
@@ -233,7 +248,7 @@ export const verifyPayment = async (
 
     const { data: order } = await supabase
       .from("print_order")
-      .select("id, shop_id, payment_id, order_date, expires_at")
+      .select("id, shop_id, payment_id, current_status_id, order_date, expires_at")
       .eq("id", id)
       .single();
 
@@ -249,7 +264,22 @@ export const verifyPayment = async (
         .eq("id", order.payment_id);
     }
 
-    const nextStatusName = is_verified ? "กำลังพิมพ์" : "รอการชำระเงิน";
+    // สลิปถูกต้อง: บันทึกผลตรวจสลิปอย่างเดียว ไม่เปลี่ยนสถานะออเดอร์
+    // (ร้านต้องกด "ยืนยันออเดอร์" เองอีกครั้ง)
+    if (is_verified) {
+      const { data: curStatus } = order.current_status_id
+        ? await supabase.from("status").select("state").eq("id", order.current_status_id).maybeSingle()
+        : { data: null };
+
+      return res.status(200).json({
+        message: "Payment verified successfully",
+        is_verified,
+        new_status: curStatus?.state ?? null,
+      });
+    }
+
+    // สลิปไม่ถูกต้อง: เปลี่ยนเป็น "รอการชำระเงิน" ตามเดิม
+    const nextStatusName = "รอการชำระเงิน";
     let newExpiresAt: string | undefined = undefined;
     const now = Date.now();
 
