@@ -15,14 +15,12 @@ type Props = {
 
 export default function OrderActions({
   status,
-  isVerified,
   onUpdateStatus,
   disabled,
 }: Props) {
   if (status === "รอการดำเนินงาน") {
-    // การรับออเดอร์ทำผ่านการกด "ยืนยันสลิปถูกต้อง" ในหน้าตรวจสลิป
-    // ปุ่ม "รับออเดอร์" เหลือไว้เฉพาะออเดอร์เก่าที่สลิป verified แล้วแต่ยังค้างรอดำเนินงาน
-    const showLegacyAccept = isVerified === true;
+    // ปุ่ม "ยืนยันออเดอร์" แสดงเสมอ
+    // ฝั่ง parent ต้องเช็คเองว่าสลิปถูกต้องแล้วหรือยัง ถ้ายังให้แสดง popup แจ้งให้ไปตรวจสลิปก่อน
 
     return (
       <div className="flex gap-2">
@@ -35,17 +33,15 @@ export default function OrderActions({
           <X size={14} />
           ปฏิเสธ
         </button>
-        {showLegacyAccept && (
-          <button
-            type="button"
-            onClick={() => onUpdateStatus?.("กำลังพิมพ์")}
-            disabled={disabled}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Check size={14} />
-            รับออเดอร์
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => onUpdateStatus?.("กำลังพิมพ์")}
+          disabled={disabled}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Check size={14} />
+          ยืนยันออเดอร์
+        </button>
       </div>
     );
   }

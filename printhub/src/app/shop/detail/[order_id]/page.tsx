@@ -22,7 +22,7 @@ import {
   FileText,
   AlertTriangle,
 } from "lucide-react";
-import { SlipModal, ActionConfirmModal, RejectOrderModal } from "@/component/shop/OrderModals";
+import { SlipModal, ActionConfirmModal, RejectOrderModal, SlipRequiredModal } from "@/component/shop/OrderModals";
 
 // 🟢 ปรับ API_BASE ให้มี /api นำหน้าเสมอ
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -49,6 +49,7 @@ export default function OrderDetailPage() {
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
   const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+  const [showSlipRequiredModal, setShowSlipRequiredModal] = useState<boolean>(false);
 
   // Modals สำหรับยืนยันผลตรวจสลิป
   const [showVerifyValidModal, setShowVerifyValidModal] = useState<boolean>(false);
@@ -254,7 +255,11 @@ export default function OrderDetailPage() {
                   <XCircle size={16} /> ปฏิเสธ
                 </button>
                 <button
-                  onClick={() => setShowConfirmModal(true)}
+                  onClick={() =>
+                    slipVerdict === true
+                      ? setShowConfirmModal(true)
+                      : setShowSlipRequiredModal(true)
+                  }
                   disabled={isUpdating}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium shadow-xs disabled:opacity-50"
                 >
@@ -384,7 +389,7 @@ export default function OrderDetailPage() {
                   </div>
                 ) : slipVerdict === true ? (
                   <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 text-center flex items-center justify-center gap-1.5">
-                    <ShieldCheck size={16} /> สลิปถูกต้อง (ยืนยันรับออเดอร์แล้ว)
+                    <ShieldCheck size={16} /> สลิปถูกต้อง
                   </div>
                 ) : slipVerdict === false ? (
                   <div className="w-full py-2.5 rounded-xl text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 text-center flex items-center justify-center gap-1.5">
@@ -493,6 +498,11 @@ export default function OrderDetailPage() {
         }}
       />
 
+      <SlipRequiredModal
+        isOpen={showSlipRequiredModal}
+        onClose={() => setShowSlipRequiredModal(false)}
+      />
+
       <ActionConfirmModal
         isOpen={showConfirmModal}
         onClose={() => setShowConfirmModal(false)}
@@ -511,7 +521,7 @@ export default function OrderDetailPage() {
           setShowVerifyValidModal(false);
         }}
         title="ยืนยันสลิปถูกต้อง"
-        description="หากยืนยันสลิปถูกต้อง ระบบจะทำการยืนยันรายการคำสั่งพิมพ์นี้ทันทีคุณยืนยันใช่หรือไม่"
+        description="คุณยืนยันว่าสลิปถูกต้องใช่หรือไม่? การยืนยันสลิปไม่ได้เป็นการรับออเดอร์ คุณต้องกดปุ่มยืนยันออเดอร์แยกอีกครั้ง"
         confirmText="ยืนยันสลิปถูกต้อง"
         isUpdating={isUpdating}
       />

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronRight, BarChart2, Calendar, Search, ChevronLeft } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronRight, BarChart2, Calendar, Search, ChevronLeft, XCircle } from "lucide-react";
 
 type TrendItem = { label: string; count: number };
 
@@ -15,6 +15,9 @@ type Props = {
     monthly: TrendItem[];
   };
   onOrderClick: (id: string) => void;
+  // เรียก API ปฏิเสธออเดอร์ (ถ้า throw error จะแสดงข้อความในหน้าต่างยืนยัน)
+  // หลังสำเร็จ ฝั่ง parent ควร refetch ข้อมูลออเดอร์
+  onRejectOrder?: (id: string, reason: string) => Promise<void> | void;
 };
 
 export default function OrderBreakdownModal({
@@ -23,6 +26,7 @@ export default function OrderBreakdownModal({
   orders,
   trendData,
   onOrderClick,
+  onRejectOrder,
 }: Props) {
   const [selectedStatus, setSelectedStatus] = useState<string>("ทั้งหมด");
   const [timeframe, setTimeframe] = useState<"daily" | "weekly" | "monthly">("monthly");
@@ -30,6 +34,56 @@ export default function OrderBreakdownModal({
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 3;
+
+  // ปฏิเสธออเดอร์
+  const [rejectTarget, setRejectTarget] = useState<{ id: string; label: string } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState("");
+
+  const isPendingStatus = (s?: string) =>
+    s === "รอการดำเนินงาน" || s === "รอการดำเนินการ";
+
+  const closeRejectModal = () => {
+    if (rejecting) return;
+    setRejectTarget(null);
+    setRejectReason("");
+    setRejectError("");
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectTarget || !onRejectOrder) return;
+    const reason = rejectReason.trim();
+    if (!reason) {
+      setRejectError("กรุณาระบุเหตุผลในการปฏิเสธออเดอร์");
+      return;
+    }
+    try {
+      setRejecting(true);
+      setRejectError("");
+      await onRejectOrder(rejectTarget.id, reason);
+      setRejecting(false);
+      setRejectTarget(null);
+      setRejectReason("");
+    } catch (e: any) {
+      setRejectError(e?.message || "ปฏิเสธออเดอร์ไม่สำเร็จ กรุณาลองใหม่");
+      setRejecting(false);
+    }
+  };
+
+  // ปิดหน้าต่างด้วยปุ่ม Esc
+  useEffect(() => {
+    if (!rejectTarget || rejecting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setRejectTarget(null);
+        setRejectReason("");
+        setRejectError("");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rejectTarget, rejecting]);
 
   const getPercent = (count: number) => {
     if (!total || total === 0) return 0;
@@ -267,6 +321,24 @@ export default function OrderBreakdownModal({
                 </div>
 
                 <div className="flex items-center gap-3">
+                  {onRejectOrder && isPendingStatus(o.latest_status) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation(); // ไม่ให้เปิดหน้า order detail
+                        setRejectTarget({
+                          id: o.id,
+                          label: `#${o.order_no || o.id?.slice(0, 8)}`,
+                        });
+                        setRejectReason("");
+                        setRejectError("");
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100"
+                    >
+                      <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      ปฏิเสธออเดอร์
+                    </button>
+                  )}
                   <span
                     className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
                       o.latest_status === "รายการเสร็จสิ้น"
@@ -321,6 +393,63 @@ export default function OrderBreakdownModal({
           </div>
         )}
       </div>
+
+      {/* หน้าต่างยืนยันการปฏิเสธออเดอร์ */}
+      {rejectTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`ปฏิเสธออเดอร์ ${rejectTarget.label}`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={closeRejectModal}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-bold text-[#0F2942]">
+              ปฏิเสธออเดอร์ {rejectTarget.label}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              เมื่อปฏิเสธแล้วจะไม่สามารถย้อนกลับได้ กรุณาระบุเหตุผลเพื่อแจ้งลูกค้า
+            </p>
+
+            <textarea
+              value={rejectReason}
+              onChange={(e) => {
+                setRejectReason(e.target.value);
+                if (rejectError) setRejectError("");
+              }}
+              disabled={rejecting}
+              rows={3}
+              placeholder="เหตุผลในการปฏิเสธ..."
+              className="mt-3 w-full resize-none rounded-xl border border-slate-200 p-3 text-xs text-slate-700 outline-none focus:border-rose-400 disabled:opacity-60"
+            />
+            {rejectError && (
+              <p className="mt-1 text-xs text-rose-600">{rejectError}</p>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeRejectModal}
+                disabled={rejecting}
+                className="rounded-lg border border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReject}
+                disabled={rejecting}
+                className="rounded-lg bg-rose-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                {rejecting ? "กำลังดำเนินการ..." : "ยืนยันปฏิเสธ"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
