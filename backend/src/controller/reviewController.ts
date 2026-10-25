@@ -442,7 +442,7 @@ export const submitOrderReport = async (
 };
 
 // ==========================================
-// 4. ดึงรายการรีวิวทั้งหมดของร้านค้า (ดึงชื่อ-นามสกุลจริง และรายการสินค้าในออร์เดอร์)
+// 4. ดึงรายการรีวิวทั้งหมดของร้านค้า (ดึงชื่อ-นามสกุลจริง รายการสินค้า และข้อความตอบกลับจากร้านค้า)
 // ==========================================
 export const getShopReviews = async (req: Request, res: Response) => {
   try {
@@ -455,6 +455,7 @@ export const getShopReviews = async (req: Request, res: Response) => {
       });
     }
 
+    // 🟢 ดึงข้อมูลจากตาราง review เพิ่ม shop_reply และ reply_at
     const { data: reviews, error } = await supabase
       .from("review")
       .select(`
@@ -463,6 +464,8 @@ export const getShopReviews = async (req: Request, res: Response) => {
         comment,
         image_url,
         created_at,
+        shop_reply,
+        reply_at,
         customer_id,
         customer:customer_id (
           id,
@@ -482,14 +485,20 @@ export const getShopReviews = async (req: Request, res: Response) => {
       throw error;
     }
 
-    if (!reviews || reviews.length === 0) {
-      return res.status(200).json({
-        success: true,
-        data: [],
-      });
-    }
+    const rawReviews = reviews || [];
+    const total_reviews = rawReviews.length;
 
-    const formattedReviews = reviews.map((rev: any) => {
+    let sumScore = 0;
+    const rating_counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+    const formattedReviews = rawReviews.map((rev: any) => {
+      const scoreNum = Number(rev.score || 0);
+      sumScore += scoreNum;
+
+      if (scoreNum >= 1 && scoreNum <= 5) {
+        rating_counts[scoreNum] = (rating_counts[scoreNum] || 0) + 1;
+      }
+
       const cust = rev.customer;
       let customerName = "ลูกค้าผู้ใช้บริการ";
 
@@ -504,18 +513,38 @@ export const getShopReviews = async (req: Request, res: Response) => {
 
       return {
         id: rev.id,
-        score: rev.score,
+        score: scoreNum,
         comment: rev.comment,
         image_url: rev.image_url,
         created_at: rev.created_at,
+        shop_reply: rev.shop_reply || null, // 🟢 แนบคำตอบรับจากร้านค้า
+        reply_at: rev.reply_at || null,     // 🟢 แนบเวลาตอบกลับ
         customer_name: customerName,
+        customer: cust,
         print_order: rev.print_order,
       };
     });
 
+    const average_rating =
+      total_reviews > 0 ? Number((sumScore / total_reviews).toFixed(1)) : 0;
+
+    const rating_breakdown = [5, 4, 3, 2, 1].map((stars) => ({
+      stars,
+      count: rating_counts[stars] || 0,
+      percentage:
+        total_reviews > 0
+          ? Number(((rating_counts[stars] / total_reviews) * 100).toFixed(1))
+          : 0,
+    }));
+
     return res.status(200).json({
       success: true,
       data: formattedReviews,
+      summary: {
+        average_rating,
+        total_reviews,
+        rating_breakdown,
+      },
     });
   } catch (error: any) {
     console.error("❌ getShopReviews Error:", error);

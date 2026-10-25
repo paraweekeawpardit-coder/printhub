@@ -366,3 +366,84 @@ export const getShops = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };
+
+// ==========================================
+// ดึงข้อมูลรีวิวของร้านค้าสำหรับฝั่งลูกค้า
+// ==========================================
+export const getShopReviews = async (req: Request, res: Response) => {
+  try {
+    const { shopId } = req.params;
+
+    if (!shopId) {
+      return res.status(400).json({ success: false, message: "กรุณาระบุ shopId" });
+    }
+
+    // 🟢 เพิ่ม shop_reply และ reply_at ในการ select จากตาราง review
+    const { data: reviews, error } = await supabase
+      .from("review") // ใช้ชื่อตาราง review (ไม่มี s) ให้ตรงตาม Supabase DB
+      .select(`
+        id,
+        score,
+        comment,
+        image_url,
+        created_at,
+        shop_reply,
+        reply_at,
+        customer:customer_id (
+          first_name,
+          last_name
+        ),
+        print_order:order_id (
+          id,
+          description,
+          print_order_item (*)
+        )
+      `)
+      .eq("shop_id", shopId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    const rawReviews = reviews || [];
+    const total_reviews = rawReviews.length;
+
+    // คำนวณสรุปคะแนนดาว (Average & Breakdown)
+    let sumScore = 0;
+    const rating_counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+    rawReviews.forEach((r: any) => {
+      const s = Number(r.score || 0);
+      sumScore += s;
+      if (s >= 1 && s <= 5) {
+        rating_counts[s] = (rating_counts[s] || 0) + 1;
+      }
+    });
+
+    const average_rating =
+      total_reviews > 0 ? Number((sumScore / total_reviews).toFixed(1)) : 0;
+
+    const rating_breakdown = [5, 4, 3, 2, 1].map((stars) => ({
+      stars,
+      count: rating_counts[stars] || 0,
+      percentage:
+        total_reviews > 0
+          ? Number(((rating_counts[stars] / total_reviews) * 100).toFixed(1))
+          : 0,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: rawReviews,
+      summary: {
+        average_rating,
+        total_reviews,
+        rating_breakdown,
+      },
+    });
+  } catch (err: any) {
+    console.error("Error in getShopReviews:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};

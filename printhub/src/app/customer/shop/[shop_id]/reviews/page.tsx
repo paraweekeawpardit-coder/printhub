@@ -18,6 +18,8 @@ interface ReviewItem {
     score: number;
     rating?: number;
     comment: string | null;
+    shop_reply?: string | null; // 🟢 เพิ่ม field ข้อความตอบกลับจากร้านค้า
+    reply_at?: string | null;   // 🟢 เพิ่ม field เวลาตอบกลับ
     image_url: string | null;
     created_at?: string;
     customer_name?: string;
@@ -140,9 +142,9 @@ export default function ShopReviewsPage() {
     const cleanDescription = (text?: string) => {
         if (!text) return "";
         return text
-            .replace(/\|\s*(SINGLE|ไม่มี)/gi, "") // ตัด | SINGLE หรือ | ไม่มี
-            .replace(/(SINGLE|ไม่มี)/gi, "")      // ตัดคำว่า SINGLE หรือ ไม่มี เดี่ยวๆ
-            .replace(/\|\s*$/g, "")              // ตัดเครื่องหมาย | ที่อยู่ท้ายสุดถ้ามี
+            .replace(/\|\s*(SINGLE|ไม่มี)/gi, "")
+            .replace(/(SINGLE|ไม่มี)/gi, "")
+            .replace(/\|\s*$/g, "")
             .trim();
     };
 
@@ -374,6 +376,26 @@ export default function ShopReviewsPage() {
                                                         alt="รูปรีวิวจากลูกค้า"
                                                         className="w-full h-full object-cover"
                                                     />
+                                                </div>
+                                            )}
+
+                                            {/* 🟢 แสดงคำตอบรับจากร้านค้า (ถ้ามี) */}
+                                            {rev.shop_reply && (
+                                                <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1">
+                                                    <div className="flex items-center justify-between font-bold text-blue-700">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
+                                                            คำตอบรับจากร้านค้า
+                                                        </span>
+                                                        {rev.reply_at && (
+                                                            <span className="text-[10px] text-blue-400 font-normal">
+                                                                {formatDate(rev.reply_at)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-slate-700 leading-relaxed pl-5">
+                                                        {rev.shop_reply}
+                                                    </p>
                                                 </div>
                                             )}
                                         </div>
