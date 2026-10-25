@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Search, X } from "lucide-react";
 import SlipTable, { formatThaiDate } from "../../../component/admin/SlipTable";
 import SlipModal, { TransactionItem } from "../../../component/admin/SlipModal";
 
@@ -137,14 +138,26 @@ export default function AdminSlipsPage() {
             ศูนย์รวมข้อมูลสลิปหลักฐานการชำระเงินของลูกค้า และประวัติธุรกรรมในระบบ
           </p>
         </div>
-        <div className="w-full sm:w-80">
+
+        {/* 🔍 ช่องค้นหาปรับขนาดและดีไซน์ให้ตรงตามภาพตัวอย่าง */}
+        <div className="w-full sm:w-96 relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           <input
             type="text"
-            placeholder="ค้นหา เลขออเดอร์, Transaction ID, ชื่อลูกค้า หรือ ร้านค้า..."
+            placeholder="ค้นหา Order ID (#197), ชื่อลูกค้า, เลขบัญชี หรือร้านค้า..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-2xs"
+            className="w-full pl-9 pr-9 py-2 rounded-2xl border border-slate-200 bg-slate-50/60 text-xs text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/80 transition-all shadow-2xs"
           />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-0.5 rounded-full hover:bg-slate-200/60 cursor-pointer"
+              title="ล้างคำค้นหา"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

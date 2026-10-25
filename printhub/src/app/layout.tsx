@@ -23,12 +23,12 @@ export const metadata: Metadata = {
   description: 'แพลตฟอร์มค้นหาและสั่งปริ้นท์เอกสารออนไลน์',
   icons: {
     icon: [
-      { url: '/icon.png', sizes: '32x32', type: 'image/png' },
-      { url: '/icon.png', sizes: '192x192', type: 'image/png' },
+      { url: '/logo_printhub.png', sizes: '32x32', type: 'image/png' },
+      { url: '/logo_printhub.png', sizes: '192x192', type: 'image/png' },
     ],
-    shortcut: '/icon.png',
+    shortcut: '/logo_printhub.png',
     apple: [
-      { url: '/icon.png', sizes: '180x180', type: 'image/png' },
+      { url: '/logo_printhub.png', sizes: '180x180', type: 'image/png' },
     ],
   },
 };

@@ -49,7 +49,7 @@ export default function OwnerDashboardPage() {
     return (
       <div className="min-h-[85vh] flex items-center justify-center p-4">
         <div className="w-full max-w-md flex flex-col gap-2">
-          {/* ปุ่มย้อนกลับอยู่นอกการ์ดมุมซ้ายบนแบบเดียวกับ Admin */}
+          {/* ปุ่มย้อนกลับ */}
           <div className="flex justify-start">
             <Link
               href="/auth"
@@ -63,14 +63,16 @@ export default function OwnerDashboardPage() {
             </Link>
           </div>
 
-          <form onSubmit={handleVerify} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-4 w-full">
-            <div className="flex justify-center text-slate-900">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
+          <form onSubmit={handleVerify} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-2xs flex flex-col gap-4 w-full">
+            {/* โลโก้ PrintHub */}
+            <div className="flex justify-center">
+              <img
+                src="/logo_printhub.png"
+                alt="PrintHub Logo"
+                className="w-12 h-12 object-contain"
+              />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 text-center">ยืนยันสิทธิ์เจ้าของระบบ (Owner)</h2>
+            <h2 className="text-xl font-bold text-[#353A4C] text-center">ยืนยันสิทธิ์เจ้าของระบบ (Owner)</h2>
             <p className="text-xs text-slate-500 text-center">กรุณากรอกอีเมลและรหัสผ่านเพื่อเข้าดูข้อมูลการเงินและภาพรวมธุรกิจ</p>
             
             <div className="flex flex-col gap-3 mt-2">
@@ -82,7 +84,7 @@ export default function OwnerDashboardPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="กรอกอีเมลของคุณ"
                   required
-                  className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:border-slate-900 text-sm transition-all"
+                  className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:border-[#367ADF] text-sm transition-all"
                 />
               </div>
 
@@ -94,7 +96,7 @@ export default function OwnerDashboardPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="กรอกรหัสผ่าน"
                   required
-                  className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:border-slate-900 text-sm transition-all"
+                  className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:border-[#367ADF] text-sm transition-all"
                 />
               </div>
             </div>
@@ -104,7 +106,7 @@ export default function OwnerDashboardPage() {
             <button 
               type="submit" 
               disabled={verifying}
-              className="p-3 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer text-sm mt-2"
+              className="p-3 bg-[#353A4C] hover:bg-[#394988] text-white rounded-xl font-semibold active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer text-sm mt-2 shadow-2xs"
             >
               {verifying ? "กำลังตรวจสอบ..." : "ยืนยันตัวตน"}
             </button>
