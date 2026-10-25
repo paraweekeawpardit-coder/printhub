@@ -84,4 +84,8 @@ router.put("/bank-account/:shop_id", ...shopOnly, Setting.updateBankAccount);
 router.get("/services/:shop_id", ...shopOnly, Setting.getShopServices);
 router.post("/services", ...shopOnly, Setting.saveShopServices); // shop_id อยู่ใน body
 
+// ===== Reviews & Complaints Actions =====
+router.post("/reviews/:reviewId/reply", ...shopOnly, Home.replyReview);
+router.post("/reviews/:reviewId/report", ...shopOnly, Home.reportReview);
+
 export default router;

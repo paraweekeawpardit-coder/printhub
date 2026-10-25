@@ -126,7 +126,7 @@ export const getTotalScore = async (
     }
 
     const { data: reviews, error: reviewError } = await supabase
-      .from("review")
+      .from("review") // 🟢 ชื่อตาราง review (ไม่มี s)
       .select("score")
       .eq("shop_id", shop_id);
 
@@ -175,7 +175,7 @@ export const getTodayInCome = async (
 
     if (statusError || !statusData) {
       return res.status(200).json({ income: 0, orderCount: 0 });
-    }  
+    }
 
     const { data: orders, error: orderError } = await supabase
       .from("print_order")
@@ -223,7 +223,7 @@ export const getNumOrderUnAccept = async (
 
     await syncAutoStatuses(shop_id);
 
-    // 1. ดึง ID ของสถานะ "รอการดำเนินงาน" (ใส่คำว่า "รอการดำเนินการ" สำรองไว้เผื่อใช้ใน db)
+    // 1. ดึง ID ของสถานะ "รอการดำเนินงาน"
     const { data: statuses, error: statusError } = await supabase
       .from("status")
       .select("id")
@@ -235,7 +235,7 @@ export const getNumOrderUnAccept = async (
 
     const statusIds = statuses.map((s) => s.id);
 
-    // 2. นับจำนวนออเดอร์ทั้งหมดที่อยู่ในสถานะรอการดำเนินงาน (ไม่จำกัดวัน)
+    // 2. นับจำนวนออเดอร์ทั้งหมดที่อยู่ในสถานะรอการดำเนินงาน
     const { count, error } = await supabase
       .from("print_order")
       .select("id", { count: "exact", head: true })
@@ -269,7 +269,6 @@ export const getTopOrder = async (
 
     await syncAutoStatuses(shop_id);
 
-    // ดึงออเดอร์ทั้งหมดของร้านค้า
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(
@@ -316,7 +315,6 @@ export const getTopOrder = async (
       return res.status(200).json([]);
     }
 
-    // Helper: แปลง Date/ISO String ให้เหลือแค่ "YYYY-MM-DD" ในโซนเวลาไทย
     const getThailandDateString = (dateInput?: string | Date | null) => {
       if (!dateInput) return "";
       const d = new Date(dateInput);
@@ -327,11 +325,9 @@ export const getTopOrder = async (
     const todayStr = getThailandDateString(new Date());
 
     const todayOrders = orders.filter((order: any) => {
-      // 1. กรองสถานะ "รอการชำระเงิน" ออก
       const state = order.current_status?.state;
       if (state === "รอการชำระเงิน") return false;
 
-      // 2. เช็คเฉพาะวันที่สั่งซื้อ (order_date) ตรงกับวันที่ปัจจุบันแบบเป๊ะๆ (ตัดเรื่องชั่วโมงออก)
       const orderDateStr = getThailandDateString(order.order_date);
       return orderDateStr === todayStr;
     });
@@ -368,7 +364,6 @@ export const getTopOrder = async (
       };
     });
 
-    // ลำดับการจัดเรียงสถานะ
     const STATUS_RANK: Record<string, number> = {
       "รอการดำเนินการ": 0,
       "รอการดำเนินงาน": 0,
@@ -440,7 +435,6 @@ export const getFinancialOverview = async (
       });
     }
 
-    // ดึงข้อมูลการเงินจากฟิลด์จริงในตาราง print_order
     const { data: orders, error } = await supabase
       .from("print_order")
       .select(`
@@ -459,7 +453,7 @@ export const getFinancialOverview = async (
 
     const orderList = orders ?? [];
 
-    const FEE_RATE = 0.08; // ค่าธรรมเนียม 8% เมื่อไม่มี small_order_fee
+    const FEE_RATE = 0.08;
     const round2 = (n: number) => Math.round(n * 100) / 100;
 
     let totalGross = 0;
@@ -467,16 +461,11 @@ export const getFinancialOverview = async (
     let totalNet = 0;
 
     const transactions = orderList.map((o: any) => {
-      // ยอดเต็ม = total_price
       const gross = Number(o.total_price ?? 0);
 
-      // ค่าธรรมเนียม:
-      //  - ถ้ามี small_order_fee -> ใช้ค่านั้น
-      //  - ถ้าไม่มี -> หัก 8% ของ total_price
       const smallOrderFee = Number(o.small_order_fee ?? 0);
       const fee = round2(smallOrderFee > 0 ? smallOrderFee : gross * FEE_RATE);
 
-      // รับสุทธิ = ยอดเต็ม - ค่าธรรมเนียม
       const net = round2(gross - fee);
 
       totalGross += gross;
@@ -635,10 +624,10 @@ export const getOrderStatusBreakdown = async (
 
     const parseSafeDate = (dateStr: any) => {
       if (!dateStr) return null;
-      
+
       const cleanStr = String(dateStr).split("T")[0];
       const parts = cleanStr.split(/[-/]/);
-      
+
       if (parts.length === 3) {
         let year = parseInt(parts[0], 10);
         let month = parseInt(parts[1], 10) - 1;
@@ -724,7 +713,7 @@ export const getOrderStatusBreakdown = async (
         if (!od) return false;
         return od.getFullYear() === yr;
       }).length;
-      
+
       yearlyData.push({ label: `${yr + 543}`, count });
     }
 
@@ -751,7 +740,6 @@ export const getOrderStatusBreakdown = async (
 // ==========================================
 // Get Complaints & Reviews
 // ==========================================
-// ดึง print_order + print_order_item แล้วทำเป็น Map ตาม order_id
 async function fetchOrderMap(orderIds: string[]) {
   const map = new Map<string, any>();
   if (orderIds.length === 0) return map;
@@ -780,8 +768,6 @@ async function fetchOrderMap(orderIds: string[]) {
   return map;
 }
 
-// ปิดบังชื่อลูกค้า: แสดงเฉพาะตัวแรกกับตัวสุดท้าย ตัวกลางเป็น *
-// ใช้ grapheme เพื่อไม่ให้สระ/วรรณยุกต์ภาษาไทยถูกตัดแยกจากพยัญชนะ
 const toGraphemes = (text: string): string[] => {
   try {
     const seg = new (Intl as any).Segmenter("th", { granularity: "grapheme" });
@@ -814,6 +800,7 @@ export const getComplaintsAndReviews = async (
       return res.status(400).json({ error: "shop_id is required" });
     }
 
+    // 🟢 แก้ชื่อตารางเป็น review (ไม่มี s) ให้ตรง DB
     const { data: reviews, error: revErr } = await supabase
       .from("review")
       .select(`*, customer (first_name, last_name)`)
@@ -830,8 +817,6 @@ export const getComplaintsAndReviews = async (
 
     if (repErr) console.error("Report Fetch Error:", repErr.message);
 
-    // แสดง report ทุกสถานะ รวมถึง pending (ยังไม่ได้รับการตรวจสอบ)
-    // report ที่ยังไม่มี status ถือว่าเป็น pending
     const visibleReports = (reports ?? []).map((r) => ({
       ...r,
       status: (r.status ?? "").toLowerCase().trim() || "pending",
@@ -839,7 +824,6 @@ export const getComplaintsAndReviews = async (
 
     const rawReviews = reviews ?? [];
 
-    // ดึงรายละเอียด order ของทั้ง review และ report ในครั้งเดียว
     const orderIds = [
       ...new Set(
         [...rawReviews, ...visibleReports]
@@ -890,6 +874,116 @@ export const getComplaintsAndReviews = async (
     });
   } catch (err) {
     console.error("Error in getComplaintsAndReviews:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// ==========================================
+// 🟢 1. ตอบกลับรีวิว (Reply Review)
+// ==========================================
+export const replyReview = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { reviewId } = req.params;
+    const { reply_text } = req.body;
+    const shop_id = (req.headers.shop_id || req.query.shop_id) as string;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    if (!reply_text || !reply_text.trim()) {
+      return res.status(400).json({ error: "กรุณากรอกข้อความตอบกลับ" });
+    }
+
+    // 🟢 อัปเดตข้อมูลลงตาราง review (ไม่มี s)
+    const { data, error } = await supabase
+      .from("review")
+      .update({
+        shop_reply: reply_text.trim(),
+        reply_at: new Date().toISOString(),
+      })
+      .eq("id", reviewId)
+      .eq("shop_id", shop_id)
+      .select();
+
+    if (error) {
+      console.error("Reply Review Supabase Error:", error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ตอบกลับรีวิวเรียบร้อยแล้ว",
+      data,
+    });
+  } catch (err: any) {
+    console.error("Error in replyReview:", err);
+    return res.status(500).json({ error: "Server Error" });
+  }
+};
+
+// ==========================================
+// 🟢 รายงานรีวิวที่ไม่เหมาะสม (Report Review)
+// ==========================================
+export const reportReview = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const { reviewId } = req.params;
+    const { reason } = req.body;
+    const shop_id = (req.headers.shop_id || req.query.shop_id) as string;
+
+    if (!shop_id) {
+      return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ error: "กรุณาระบุเหตุผลการรายงาน" });
+    }
+
+    // 1. ค้นหา customer_id และ order_id จากตาราง review ก่อน
+    const { data: targetReview, error: fetchErr } = await supabase
+      .from("review")
+      .select("customer_id, order_id")
+      .eq("id", reviewId)
+      .single();
+
+    if (fetchErr || !targetReview) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลรีวิวที่ต้องการรายงาน" });
+    }
+
+    // 2. Insert ลงตาราง report เพื่อให้ Admin ตรวจสอบ
+    const { data, error } = await supabase
+      .from("report")
+      .insert([
+        {
+          shop_id: shop_id,
+          customer_id: targetReview.customer_id,
+          order_id: targetReview.order_id,
+          issue_type: "รายงานรีวิวที่ไม่เหมาะสม",
+          description: reason.trim(),
+          status: "pending",
+          created_at: new Date().toISOString(),
+        },
+      ])
+      .select();
+
+    if (error) {
+      console.error("Report Review Supabase Error:", error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ส่งรายงานรีวิวที่ไม่เหมาะสมเรียบร้อยแล้ว",
+      data,
+    });
+  } catch (err: any) {
+    console.error("Error in reportReview:", err);
     return res.status(500).json({ error: "Server Error" });
   }
 };
