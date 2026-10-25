@@ -173,22 +173,6 @@ export default function ShopPage() {
           setIsSuspended(false);
         }
 
-<<<<<<< HEAD
-        // 🟢 อัปเดตค่า State ทั้งหมดโดยดึงจาก Response Object
-        setNum(`${numRes?.data?.numWork ?? 0} รายการ`);
-        setScore(`${Number(scoreRes?.data?.score ?? 0).toFixed(1)} / 5.0`);
-        setIncome(
-          `${Number(incomeRes?.data?.income ?? 0).toLocaleString()} บาท`
-        );
-
-        setTodayOrdersCount(incomeRes?.data?.orderCount ?? 0);
-        setTotalReviewsCount(scoreRes?.data?.totalReviews ?? 0);
-
-        setOrders(ordersRes?.data ?? []);
-
-        setFinancialData(
-          financeRes?.data ?? {
-=======
         // 🌟 2. อัปเดตการแสดงผลการ์ดสรุป 3 ใบ
         const numVal = numRes?.data?.numWork ?? 0;
         const scoreVal = Number(scoreRes?.data?.score ?? 0);
@@ -210,24 +194,10 @@ export default function ShopPage() {
           setFinancialData(financeRes.data);
         } else {
           setFinancialData({
->>>>>>> feature/admin
             totalGross: 0,
             totalFee: 0,
             totalNet: 0,
             transactions: [],
-<<<<<<< HEAD
-            financialTrend: {
-              daily: [],
-              weekly: [],
-              monthly: [],
-              yearly: [],
-            },
-          }
-        );
-
-        setBreakdownData(
-          breakdownRes?.data ?? {
-=======
             financialTrend: { daily: [], weekly: [], monthly: [], yearly: [] },
           });
         }
@@ -236,19 +206,10 @@ export default function ShopPage() {
           setBreakdownData(breakdownRes.data);
         } else {
           setBreakdownData({
->>>>>>> feature/admin
             total: 0,
             counts: {},
             orders: [],
             trendData: { daily: [], weekly: [], monthly: [], yearly: [] },
-<<<<<<< HEAD
-          }
-        );
-
-        setReviewData(
-          reviewRes?.data ?? { reviews: [], complaints: [] }
-        );
-=======
           });
         }
 
@@ -257,7 +218,6 @@ export default function ShopPage() {
         } else {
           setReviewData({ reviews: [], complaints: [] });
         }
->>>>>>> feature/admin
       } catch (err) {
         console.error("Fetch dashboard data error:", err);
       } finally {
