@@ -1,5 +1,31 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
+import { fixPickupTime } from "./Pickuptime.js";
+
+// ==========================================
+// Thai time helpers (Asia/Bangkok, UTC+7)
+// ==========================================
+const TH_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+// date-only → วันไทย 00:00, ไม่มี timezone → UTC, มี timezone → ตามนั้น
+const parseDbDate = (v: any): Date | null => {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  let str = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) str += "T00:00:00+07:00";
+  else if (!/(Z|[+-]\d{2}:?\d{2})$/.test(str)) str = str.replace(" ", "T") + "Z";
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+// คืน Date ที่ต้องอ่านด้วย getUTC*() แล้วจะได้ปี/เดือน/วัน/วันในสัปดาห์ตามปฏิทินไทย
+const toThaiWall = (v: any): Date | null => {
+  const d = parseDbDate(v);
+  return d ? new Date(d.getTime() + TH_OFFSET_MS) : null;
+};
+
+// "YYYY-MM-DD" ตามวันไทย
+const thaiDateKey = (v: any): string => toThaiWall(v)?.toISOString().slice(0, 10) ?? "";
 
 interface Review {
   score: number;
@@ -61,10 +87,10 @@ async function runSyncAutoStatuses(shop_id: string): Promise<void> {
   for (const o of orders as any[]) {
     const state: string = o.current_status?.state || "";
 
-    const timeStr = o.appointment_time || o.receive_date;
+    const timeStr = fixPickupTime(o.appointment_time) || o.receive_date;
     if (!timeStr) continue;
 
-    const t = new Date(timeStr).getTime();
+    const t = parseDbDate(timeStr)?.getTime() ?? NaN;
     if (isNaN(t)) continue;
 
     if (PENDING_STATES.includes(state) && now > t) toCancel.push(o.id);
@@ -315,20 +341,15 @@ export const getTopOrder = async (
       return res.status(200).json([]);
     }
 
-    const getThailandDateString = (dateInput?: string | Date | null) => {
-      if (!dateInput) return "";
-      const d = new Date(dateInput);
-      if (isNaN(d.getTime())) return "";
-      return d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
-    };
-
-    const todayStr = getThailandDateString(new Date());
+    // ใช้ thaiDateKey (parseDbDate) ที่ถือค่าไม่มี timezone เป็น UTC เสมอ
+    // กันกรณีเซิร์ฟเวอร์ไม่ได้รันเป็น UTC แล้ววันที่เพี้ยน
+    const todayStr = thaiDateKey(new Date());
 
     const todayOrders = orders.filter((order: any) => {
       const state = order.current_status?.state;
       if (state === "รอการชำระเงิน") return false;
 
-      const orderDateStr = getThailandDateString(order.order_date);
+      const orderDateStr = thaiDateKey(order.order_date);
       return orderDateStr === todayStr;
     });
 
@@ -342,10 +363,10 @@ export const getTopOrder = async (
 
     const processedOrders = todayOrders.map((order: any) => {
       let state = order.current_status?.state || "";
-      const appointmentTimeStr = order.appointment_time || order.receive_date;
+      const appointmentTimeStr = fixPickupTime(order.appointment_time) || order.receive_date;
 
       if (appointmentTimeStr) {
-        const appointmentTime = new Date(appointmentTimeStr).getTime();
+        const appointmentTime = parseDbDate(appointmentTimeStr)?.getTime() ?? NaN;
 
         if (isPendingStatus(state) && now > appointmentTime) {
           state = "ยกเลิกการพิมพ์";
@@ -359,6 +380,7 @@ export const getTopOrder = async (
 
       return {
         ...order,
+        appointment_time: fixPickupTime(order.appointment_time),
         reject_reason: order.reject_reason || null,
         latest_status: state || "ไม่ทราบสถานะ",
       };
@@ -374,10 +396,9 @@ export const getTopOrder = async (
     };
 
     const getPickupTime = (o: any) => {
-      const t = new Date(
-        o.appointment_time || o.receive_date || o.order_date
-      ).getTime();
-      return isNaN(t) ? new Date(o.order_date).getTime() : t;
+      const t =
+        parseDbDate(o.appointment_time || o.receive_date || o.order_date)?.getTime() ?? NaN;
+      return isNaN(t) ? parseDbDate(o.order_date)?.getTime() ?? 0 : t;
     };
 
     const sortedOrders = [...processedOrders].sort((a: any, b: any) => {
@@ -487,14 +508,14 @@ export const getFinancialOverview = async (
       };
     });
 
-    const now = new Date();
-    const currentYear = now.getFullYear();
+    const now = toThaiWall(new Date())!;
+    const currentYear = now.getUTCFullYear();
 
     const getYearFromOrder = (dateVal: any): number => {
       if (!dateVal) return 0;
-      const d = new Date(dateVal);
-      if (!isNaN(d.getTime())) {
-        let y = d.getFullYear();
+      const d = toThaiWall(dateVal);
+      if (d) {
+        let y = d.getUTCFullYear();
         if (y > 2400) y -= 543;
         return y;
       }
@@ -506,24 +527,24 @@ export const getFinancialOverview = async (
     };
 
     const getMonthFromOrder = (dateVal: any): number => {
-      const d = new Date(dateVal);
-      return isNaN(d.getTime()) ? -1 : d.getMonth();
+      const d = toThaiWall(dateVal);
+      return d ? d.getUTCMonth() : -1;
     };
 
     const daysName = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
-    const currDay = now.getDay();
+    const currDay = now.getUTCDay();
     const mondayOffset = currDay === 0 ? -6 : 1 - currDay;
 
     const dailyTrend = [];
     for (let i = 0; i < 7; i++) {
-      const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + i);
+      const targetDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + mondayOffset + i));
       const targetDateStr = targetDate.toISOString().split("T")[0];
 
       const amount = transactions
-        .filter((t: any) => String(t.date).includes(targetDateStr))
+        .filter((t: any) => thaiDateKey(t.date) === targetDateStr)
         .reduce((sum: number, t: any) => sum + t.net, 0);
 
-      dailyTrend.push({ label: daysName[targetDate.getDay()], amount });
+      dailyTrend.push({ label: daysName[targetDate.getUTCDay()], amount });
     }
 
     const weeklyTrend = [];
@@ -535,8 +556,8 @@ export const getFinancialOverview = async (
         .filter((t: any) => {
           const y = getYearFromOrder(t.date);
           const m = getMonthFromOrder(t.date);
-          const d = new Date(t.date).getDate();
-          return y === currentYear && m === now.getMonth() && d >= startDay && d <= endDay;
+          const d = toThaiWall(t.date)?.getUTCDate() ?? 0;
+          return y === currentYear && m === now.getUTCMonth() && d >= startDay && d <= endDay;
         })
         .reduce((sum: number, t: any) => sum + t.net, 0);
 
@@ -623,24 +644,9 @@ export const getOrderStatusBreakdown = async (
     };
 
     const parseSafeDate = (dateStr: any) => {
-      if (!dateStr) return null;
-
-      const cleanStr = String(dateStr).split("T")[0];
-      const parts = cleanStr.split(/[-/]/);
-
-      if (parts.length === 3) {
-        let year = parseInt(parts[0], 10);
-        let month = parseInt(parts[1], 10) - 1;
-        let day = parseInt(parts[2], 10);
-
-        if (year > 2400) year -= 543;
-
-        return new Date(year, month, day);
-      }
-
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return null;
-      if (d.getFullYear() > 2400) d.setFullYear(d.getFullYear() - 543);
+      const d = toThaiWall(dateStr);
+      if (!d) return null;
+      if (d.getUTCFullYear() > 2400) d.setUTCFullYear(d.getUTCFullYear() - 543);
       return d;
     };
 
@@ -649,28 +655,28 @@ export const getOrderStatusBreakdown = async (
       counts[st] = (counts[st] || 0) + 1;
     });
 
-    const now = new Date();
-    const currentYear = now.getFullYear();
+    const now = toThaiWall(new Date())!;
+    const currentYear = now.getUTCFullYear();
 
     const daysName = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
-    const currDay = now.getDay();
+    const currDay = now.getUTCDay();
     const mondayOffset = currDay === 0 ? -6 : 1 - currDay;
 
     const dailyData: { label: string; count: number }[] = [];
     for (let i = 0; i < 7; i++) {
-      const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + i);
+      const targetDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + mondayOffset + i));
 
       const count = orderList.filter((o: any) => {
         const od = parseSafeDate(o.order_date);
         if (!od) return false;
         return (
-          od.getFullYear() === targetDate.getFullYear() &&
-          od.getMonth() === targetDate.getMonth() &&
-          od.getDate() === targetDate.getDate()
+          od.getUTCFullYear() === targetDate.getUTCFullYear() &&
+          od.getUTCMonth() === targetDate.getUTCMonth() &&
+          od.getUTCDate() === targetDate.getUTCDate()
         );
       }).length;
 
-      dailyData.push({ label: daysName[targetDate.getDay()], count });
+      dailyData.push({ label: daysName[targetDate.getUTCDay()], count });
     }
 
     const weeklyData: { label: string; count: number }[] = [];
@@ -682,10 +688,10 @@ export const getOrderStatusBreakdown = async (
         const od = parseSafeDate(o.order_date);
         if (!od) return false;
         return (
-          od.getFullYear() === currentYear &&
-          od.getMonth() === now.getMonth() &&
-          od.getDate() >= startDay &&
-          od.getDate() <= endDay
+          od.getUTCFullYear() === currentYear &&
+          od.getUTCMonth() === now.getUTCMonth() &&
+          od.getUTCDate() >= startDay &&
+          od.getUTCDate() <= endDay
         );
       }).length;
 
@@ -700,7 +706,7 @@ export const getOrderStatusBreakdown = async (
       const count = orderList.filter((o: any) => {
         const od = parseSafeDate(o.order_date);
         if (!od) return false;
-        return od.getFullYear() === currentYear && od.getMonth() === mIdx;
+        return od.getUTCFullYear() === currentYear && od.getUTCMonth() === mIdx;
       }).length;
       return { label: mName, count };
     });
@@ -711,7 +717,7 @@ export const getOrderStatusBreakdown = async (
       const count = orderList.filter((o: any) => {
         const od = parseSafeDate(o.order_date);
         if (!od) return false;
-        return od.getFullYear() === yr;
+        return od.getUTCFullYear() === yr;
       }).length;
 
       yearlyData.push({ label: `${yr + 543}`, count });

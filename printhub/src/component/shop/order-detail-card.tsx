@@ -10,10 +10,12 @@ import {
   Loader2,
   Clock,
 } from "lucide-react";
+import { parseDate, TH_TZ } from "../../lib/Datetime";
 import CustomerBadge from "./customer-badge";
 import OrderActions, { OrderStatus } from "./order-action";
 import { useRouter, useParams } from "next/navigation";
 import { RejectOrderModal, SlipRequiredModal } from "./OrderModals";
+import SlipInfoPanel from "./Slipinfopanel";
 
 export type OrderItemDetail = {
   id: string;
@@ -99,15 +101,16 @@ const FALLBACK_STATUS = {
 // แปลงรูปแบบวันเวลา (HH:mm น. และ DD/MM/YYYY)
 function formatDate(value?: string | null) {
   if (!value) return "-";
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return value;
+  const d = parseDate(value);
+  if (!d) return value;
   return d.toLocaleString("th-TH", {
+    timeZone: TH_TZ,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   });
 }
 
@@ -479,12 +482,12 @@ export default function OrderDetailCard({
               </button>
             </div>
 
-            <div className="p-4 flex items-center justify-center bg-slate-50 max-h-[60vh] overflow-auto">
+            <div className="p-4 flex items-center justify-center bg-slate-50 max-h-[38vh] overflow-auto">
               {order.payment?.slip_url ? (
                 <img
                   src={order.payment.slip_url}
                   alt="สลิปชำระเงิน"
-                  className="max-h-[55vh] w-auto object-contain rounded-2xl shadow-md"
+                  className="max-h-[34vh] w-auto object-contain rounded-2xl shadow-md"
                 />
               ) : (
                 <p className="text-slate-400 text-sm py-10 font-medium">
@@ -492,6 +495,8 @@ export default function OrderDetailCard({
                 </p>
               )}
             </div>
+
+            {order.payment?.slip_url && <SlipInfoPanel orderId={order.order_id} />}
 
             <div className="p-4 border-t border-slate-100 flex items-center justify-between gap-3 bg-white">
               <button

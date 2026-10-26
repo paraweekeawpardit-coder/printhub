@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
+import { fixPickupTime } from "./Pickuptime.js";
 
 const ORDER_PENDING_STATE = "รอการดำเนินงาน";
 const ORDER_CANCELLED_STATE = "ยกเลิกการพิมพ์";
@@ -8,15 +9,12 @@ const REJECT_REASON_MAX_LENGTH = 500;
 
 // Helper: ปรับเวลาให้อยู่ในกรอบ 00:00:00 - 23:59:59.999 ของวันนั้นๆ
 export const getDayBounds = (dateInput: Date | string) => {
-  const startOfDay = new Date(dateInput);
-  startOfDay.setHours(0, 0, 0, 0);
-
-  const endOfDay = new Date(dateInput);
-  endOfDay.setHours(23, 59, 59, 999);
-
+  const d = new Date(dateInput);
+  // วันที่แบบไทย (YYYY-MM-DD) ไม่ขึ้นกับ timezone ของเซิร์ฟเวอร์
+  const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(d);
   return {
-    start: startOfDay.toISOString(),
-    end: endOfDay.toISOString(),
+    start: new Date(`${ymd}T00:00:00.000+07:00`).toISOString(),
+    end: new Date(`${ymd}T23:59:59.999+07:00`).toISOString(),
   };
 };
 
@@ -28,11 +26,13 @@ const resolveReceiveDate = (receiveDate?: string | null, appointmentTime?: strin
   const isTimeOnly = (v?: string | null) => !!v && /^\d{2}:\d{2}(:\d{2})?$/.test(v);
 
   if (isDateOnly(receiveDate) && isTimeOnly(appointmentTime)) {
-    return `${receiveDate}T${appointmentTime}`;
+    // เวลานัดรับเป็นเวลาไทย → ใส่ +07:00 กันเพี้ยนเมื่อเซิร์ฟเวอร์รันเป็น UTC
+    const t = appointmentTime!.length === 5 ? `${appointmentTime}:00` : appointmentTime;
+    return `${receiveDate}T${t}+07:00`;
   }
   // appointment_time คือเวลานัดรับจริงที่ลูกค้าเลือก (ตรงกับหน้า list)
   // ส่วน receive_date อาจเก็บแค่วันที่ (เวลา 00:00:00) จึงใช้เป็นตัวสำรอง
-  return appointmentTime || receiveDate || null;
+  return fixPickupTime(appointmentTime) || receiveDate || null;
 };
 
 export const getOrder = async (
