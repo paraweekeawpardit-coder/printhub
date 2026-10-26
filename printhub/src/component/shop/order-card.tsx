@@ -4,6 +4,8 @@ import { Check, X, Printer, Loader2, Eye, Clock, Calendar } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { RejectOrderModal, SlipRequiredModal } from "./OrderModals";
+import SlipInfoPanel from "./Slipinfopanel";
+import { parseDate, TH_TZ } from "../../lib/Datetime";
 
 type Order = {
   id: string;
@@ -194,16 +196,19 @@ export default function OrderCard({
   // ฟังก์ชันจัดฟอร์แมตวันเวลาสั่งซื้อ
   const formatOrderDateTime = (dateStr: string) => {
     if (!dateStr) return "-";
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
+    const d = parseDate(dateStr);
+    if (!d) return dateStr;
     const dateFormatted = d.toLocaleDateString("th-TH", {
+      timeZone: TH_TZ,
       day: "numeric",
       month: "short",
       year: "2-digit",
     });
     const timeFormatted = d.toLocaleTimeString("th-TH", {
+      timeZone: TH_TZ,
       hour: "2-digit",
       minute: "2-digit",
+      hourCycle: "h23",
     });
     return `${dateFormatted} (${timeFormatted} น.)`;
   };
@@ -212,17 +217,20 @@ export default function OrderCard({
   const formatPickupDateTime = () => {
     const timeStr = order.appointment_time || order.receive_date;
     if (!timeStr) return null;
-    const d = new Date(timeStr);
-    if (isNaN(d.getTime())) return timeStr;
+    const d = parseDate(timeStr);
+    if (!d) return timeStr;
 
     const dateFormatted = d.toLocaleDateString("th-TH", {
+      timeZone: TH_TZ,
       day: "numeric",
       month: "short",
       year: "2-digit",
     });
     const timeFormatted = d.toLocaleTimeString("th-TH", {
+      timeZone: TH_TZ,
       hour: "2-digit",
       minute: "2-digit",
+      hourCycle: "h23",
     });
 
     return `${dateFormatted} เวลา ${timeFormatted} น.`;
@@ -463,17 +471,19 @@ export default function OrderCard({
               </button>
             </div>
 
-            <div className="p-4 flex items-center justify-center bg-slate-50 max-h-[60vh] overflow-auto">
+            <div className="p-4 flex items-center justify-center bg-slate-50 max-h-[38vh] overflow-auto">
               {order.payment?.slip_url ? (
                 <img
                   src={order.payment.slip_url}
                   alt="สลิปชำระเงิน"
-                  className="max-h-[55vh] w-auto object-contain rounded-lg shadow-md"
+                  className="max-h-[34vh] w-auto object-contain rounded-lg shadow-md"
                 />
               ) : (
                 <p className="text-slate-400 text-sm py-10">ไม่พบรูปภาพสลิป</p>
               )}
             </div>
+
+            {order.payment?.slip_url && <SlipInfoPanel orderId={order.id} />}
 
             <div className="p-4 border-t border-slate-100 flex items-center justify-between gap-3 bg-white">
               <button

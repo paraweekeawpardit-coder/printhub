@@ -2,14 +2,16 @@
 
 import React, { useEffect, useState } from "react";
 import { Receipt, XCircle, AlertTriangle, ShieldCheck, Loader2, X } from "lucide-react";
+import SlipInfoPanel from "./Slipinfopanel";
 
 interface SlipModalProps {
   isOpen: boolean;
   onClose: () => void;
   slipUrl: string | null;
+  orderId?: string;
 }
 
-export function SlipModal({ isOpen, onClose, slipUrl }: SlipModalProps) {
+export function SlipModal({ isOpen, onClose, slipUrl, orderId }: SlipModalProps) {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
@@ -25,6 +27,7 @@ export function SlipModal({ isOpen, onClose, slipUrl }: SlipModalProps) {
         </div>
         <div className="p-5 overflow-y-auto">
           {slipUrl && <img src={slipUrl} alt="สลิปโอนเงิน" className="w-full h-auto rounded-xl border border-slate-200" />}
+          {slipUrl && orderId && <div className="-mx-4 mt-2"><SlipInfoPanel orderId={orderId} /></div>}
         </div>
         <div className="p-5 border-t border-gray-100">
           <button type="button" onClick={onClose} className="w-full py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 text-sm font-medium">

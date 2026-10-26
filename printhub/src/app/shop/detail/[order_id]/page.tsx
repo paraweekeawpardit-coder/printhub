@@ -23,6 +23,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { SlipModal, ActionConfirmModal, RejectOrderModal, SlipRequiredModal } from "@/component/shop/OrderModals";
+import { formatThaiDateTime } from "../../../../lib/Datetime";
 
 // 🟢 ปรับ API_BASE ให้มี /api นำหน้าเสมอ
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -471,11 +472,11 @@ export default function OrderDetailPage() {
               <div className="space-y-3 text-sm">
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                   <p className="text-xs text-gray-400">วันที่สั่งซื้อ</p>
-                  <p className="font-medium text-gray-800 mt-0.5">{order.order_date ? new Date(order.order_date).toLocaleString("th-TH") : "-"}</p>
+                  <p className="font-medium text-gray-800 mt-0.5">{formatThaiDateTime(order.order_date)}</p>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                   <p className="text-xs text-gray-400">เวลานัดรับงาน</p>
-                  <p className="font-semibold text-blue-700 mt-0.5">{order.receive_date ? new Date(order.receive_date).toLocaleString("th-TH") : "-"}</p>
+                  <p className="font-semibold text-blue-700 mt-0.5">{formatThaiDateTime(order.receive_date)}</p>
                 </div>
               </div>
             </div>
@@ -484,7 +485,7 @@ export default function OrderDetailPage() {
       </div>
 
       {/* Modals */}
-      <SlipModal isOpen={showSlipModal} onClose={() => setShowSlipModal(false)} slipUrl={slipUrl} />
+      <SlipModal isOpen={showSlipModal} onClose={() => setShowSlipModal(false)} slipUrl={slipUrl} orderId={orderId} />
 
       {/* โมดอลปฏิเสธงาน (เลือก/พิมพ์เหตุผล) */}
       <RejectOrderModal
