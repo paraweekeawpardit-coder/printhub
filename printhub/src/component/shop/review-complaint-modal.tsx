@@ -27,10 +27,11 @@ export type ReviewItem = {
   rating?: number;
   score?: number;
   comment: string;
-  shop_reply?: string | null; // 🟢 รองรับข้อความตอบกลับจากร้านค้า
+  shop_reply?: string | null;
   reply_at?: string | null;
   image_url?: string | null;
   created_at: string;
+  has_reported?: boolean;
   customer?: {
     first_name: string;
     last_name: string;
@@ -55,8 +56,8 @@ export type ComplaintItem = {
   image_url?: string | null;
   created_at: string;
   updated_at?: string | null;
-  shop_name?: string | null; // 🟢 เพิ่ม property shop_name
-  shop?: {                   // 🟢 เพิ่ม property shop object
+  shop_name?: string | null;
+  shop?: {
     id?: string;
     name?: string;
     shop_name?: string;
@@ -185,8 +186,8 @@ type Props = {
   summary?: ReviewSummary;
   ratingCounts?: Record<number, number>;
   onOrderClick?: (id: string) => void;
-  onReplyReview?: (reviewId: string, replyText: string) => Promise<void>; // 🟢 ฟังก์ชันส่งการตอบกลับ
-  onReportReview?: (reviewId: string, reason: string) => Promise<void>;  // 🟢 ฟังก์ชันรายงานรีวิว
+  onReplyReview?: (reviewId: string, replyText: string) => Promise<void>;
+  onReportReview?: (reviewId: string, reason: string) => Promise<void>;
 };
 
 export default function ReviewComplaintModal({
@@ -202,15 +203,16 @@ export default function ReviewComplaintModal({
   const [selectedStar, setSelectedStar] = useState<number | "all">("all");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // 🟢 State สำหรับการตอบกลับรีวิว
   const [replyingReviewId, setReplyingReviewId] = useState<string | null>(null);
   const [replyInputText, setReplyInputText] = useState<string>("");
   const [isSubmittingReply, setIsSubmittingReply] = useState<boolean>(false);
 
-  // 🟢 State สำหรับการรายงานรีวิวที่ไม่เหมาะสม
   const [reportingReviewId, setReportingReviewId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState<string>("");
   const [isSubmittingReport, setIsSubmittingReport] = useState<boolean>(false);
+
+  // 🟢 State สำหรับจำรีวิวที่ถูกรายงานไปแล้วในฝั่งหน้าบ้าน
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
 
   const visibleComplaints = complaints.filter((c) => getReportStatus(c.status));
   const getRatingValue = (r: ReviewItem) => Number(r.rating ?? r.score ?? 0);
@@ -248,7 +250,6 @@ export default function ReviewComplaintModal({
     });
   };
 
-  // 🟢 Submit ตอบกลับรีวิว
   const handleSendReply = async (reviewId: string) => {
     if (!replyInputText.trim() || !onReplyReview) return;
     try {
@@ -263,12 +264,16 @@ export default function ReviewComplaintModal({
     }
   };
 
-  // 🟢 Submit รายงานรีวิว
+  // 🟢 เมื่อกดส่งรายงานสำเร็จ ให้บันทึกไอดีลง State ทันที
   const handleSendReport = async () => {
     if (!reportingReviewId || !reportReason.trim() || !onReportReview) return;
     try {
       setIsSubmittingReport(true);
       await onReportReview(reportingReviewId, reportReason.trim());
+
+      // บันทึกว่ารีวิวนี้ถูกรายงานแล้ว
+      setReportedIds((prev) => new Set(prev).add(reportingReviewId));
+
       setReportingReviewId(null);
       setReportReason("");
       alert("ส่งรายงานรีวิวที่ไม่เหมาะสมเรียบร้อยแล้ว");
@@ -293,7 +298,7 @@ export default function ReviewComplaintModal({
               className="rounded border border-slate-100 bg-white p-2 text-[11px] text-slate-600"
             >
               <span className="font-semibold text-slate-800">
-                • {item.category || "สิ่งพิมพ์"}{" "}
+                - {item.category || "สิ่งพิมพ์"}{" "}
                 {item.quantity ? `(จำนวน ${item.quantity} ชิ้น)` : ""}
               </span>
               {item.describe && (
@@ -322,6 +327,28 @@ export default function ReviewComplaintModal({
     );
   };
 
+  const currentReportingReview = reviews.find((r) => r.id === reportingReviewId);
+
+  // 🟢 เช็คว่ารีวิวนี้ถูกรายงานหรือยัง (เช็คจากทั้ง API และเช็คเทียบกับรายการร้องเรียน complaints)
+  const isAlreadyReported = (reviewId: string) => {
+    const rev = reviews.find((r) => r.id === reviewId);
+    if (!rev) return false;
+
+    // 1. เช็คจากฟิลด์ has_reported (ถ้า Backend ส่งมาแล้ว) หรือ State ที่เพิ่งกด
+    if (rev.has_reported || reportedIds.has(reviewId)) return true;
+
+    // 2. เช็คจากรายการ complaints (ถ้า order_id ของรีวิวนี้ ไปตรงกับ order_id ใน complaints แสดงว่ารายงานแล้ว)
+    const orderId = rev.print_order?.id;
+    if (orderId) {
+      const foundComplaint = complaints.some(
+        (c) => c.print_order?.id === orderId || (c as any).order_id === orderId
+      );
+      if (foundComplaint) return true;
+    }
+
+    return false;
+  };
+
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
       {/* Header & Tabs */}
@@ -340,8 +367,8 @@ export default function ReviewComplaintModal({
             type="button"
             onClick={() => setTab("reviews")}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${tab === "reviews"
-                ? "bg-white text-amber-600 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+              ? "bg-white text-amber-600 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
               }`}
           >
             <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
@@ -351,8 +378,8 @@ export default function ReviewComplaintModal({
             type="button"
             onClick={() => setTab("complaints")}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all ${tab === "complaints"
-                ? "bg-white text-rose-600 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+              ? "bg-white text-rose-600 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
               }`}
           >
             <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
@@ -374,8 +401,8 @@ export default function ReviewComplaintModal({
                   <Star
                     key={star}
                     className={`h-4 w-4 ${star <= Math.round(Number(avgRating))
-                        ? "fill-amber-400 text-amber-400"
-                        : "text-slate-300"
+                      ? "fill-amber-400 text-amber-400"
+                      : "text-slate-300"
                       }`}
                   />
                 ))}
@@ -425,8 +452,8 @@ export default function ReviewComplaintModal({
               type="button"
               onClick={() => setSelectedStar("all")}
               className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${selectedStar === "all"
-                  ? "bg-slate-800 text-white shadow-sm"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                ? "bg-slate-800 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
             >
               ทั้งหมด
@@ -437,15 +464,15 @@ export default function ReviewComplaintModal({
                 type="button"
                 onClick={() => setSelectedStar(star)}
                 className={`flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-medium transition-all ${selectedStar === star
-                    ? "bg-amber-500 text-white shadow-sm"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  ? "bg-amber-500 text-white shadow-sm"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
               >
                 <span>{star}</span>
                 <Star
                   className={`h-3 w-3 ${selectedStar === star
-                      ? "fill-white text-white"
-                      : "fill-amber-400 text-amber-400"
+                    ? "fill-white text-white"
+                    : "fill-amber-400 text-amber-400"
                     }`}
                 />
                 <span className="text-[10px] opacity-80">
@@ -460,6 +487,8 @@ export default function ReviewComplaintModal({
             <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
               {filteredReviews.map((r) => {
                 const scoreVal = getRatingValue(r);
+                const reported = isAlreadyReported(r.id);
+
                 return (
                   <div
                     key={r.id}
@@ -485,8 +514,8 @@ export default function ReviewComplaintModal({
                               <Star
                                 key={s}
                                 className={`h-3 w-3 ${s <= scoreVal
-                                    ? "fill-amber-400 text-amber-400"
-                                    : "text-slate-200"
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "text-slate-200"
                                   }`}
                               />
                             ))}
@@ -498,7 +527,8 @@ export default function ReviewComplaintModal({
                         <span className="text-[11px] text-slate-400">
                           {formatDate(r.created_at)}
                         </span>
-                        {/* 🟢 ปุ่มรายงานรีวิวที่ไม่เหมาะสม */}
+
+                        {/* 🟢 ปุ่มรายงานรีวิว */}
                         {onReportReview && (
                           <button
                             type="button"
@@ -506,8 +536,11 @@ export default function ReviewComplaintModal({
                               setReportingReviewId(r.id);
                               setReportReason("");
                             }}
-                            className="rounded p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-                            title="รายงานรีวิวนี้"
+                            className={`rounded p-1 transition ${isAlreadyReported(r.id) // 🟢 เปลี่ยนมาเช็คผ่านฟังก์ชันเช็คร่วมกับ state ที่กดรายงานแล้ว
+                              ? "text-rose-600 bg-rose-50 hover:bg-rose-100" // 🔴 สีแดงเมื่อรายงานแล้ว
+                              : "text-slate-400 hover:bg-rose-50 hover:text-rose-600" // ⚪ สีปกติ
+                              }`}
+                            title={isAlreadyReported(r.id) ? "คุณได้รายงานรีวิวนี้แล้ว" : "รายงานรีวิวนี้"}
                           >
                             <Flag className="h-3.5 w-3.5" />
                           </button>
@@ -537,7 +570,6 @@ export default function ReviewComplaintModal({
                       </div>
                     )}
 
-                    {/* 🟢 แสดงคำตอบของร้านค้า (ถ้ามีตอบไว้แล้ว) */}
                     {r.shop_reply && (
                       <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/50 p-2.5 text-xs text-blue-900">
                         <div className="flex items-center justify-between font-semibold text-blue-700">
@@ -555,7 +587,6 @@ export default function ReviewComplaintModal({
                       </div>
                     )}
 
-                    {/* 🟢 ปุ่มกดตอบกลับรีวิว */}
                     {onReplyReview && (
                       <div className="mt-3 flex justify-end">
                         {replyingReviewId === r.id ? (
@@ -615,7 +646,6 @@ export default function ReviewComplaintModal({
           )}
         </div>
       ) : (
-        /* ข้อร้องเรียน Scroll แนวตั้ง */
         <div className="space-y-4">
           {visibleComplaints.length > 0 ? (
             <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
@@ -684,7 +714,7 @@ export default function ReviewComplaintModal({
 
                     {getReportStatus(c.status)?.showDisputeNote && (
                       <p className="text-[11px] font-medium text-amber-700">
-                        • หากท่านมีข้อโต้แย้งกรุณาติดต่อแอดมินภายในวันที่{" "}
+                        - หากท่านมีข้อโต้แย้งกรุณาติดต่อแอดมินภายในวันที่{" "}
                         {formatDate(getReviewDeadline(c.updated_at)!)}
                       </p>
                     )}
@@ -723,10 +753,10 @@ export default function ReviewComplaintModal({
         </div>
       )}
 
-      {/* 🟢 Modal สำหรับกรอกเหตุผลรายงานรีวิวที่ไม่เหมาะสม */}
+      {/* 🟢 Modal สำหรับรายงานรีวิว: ถ้าเคยรายงานแล้วจะสลับเป็นกล่องเตือนทันที */}
       {reportingReviewId && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200"
           onClick={() => setReportingReviewId(null)}
         >
           <div
@@ -746,35 +776,59 @@ export default function ReviewComplaintModal({
               </button>
             </div>
 
-            <p className="mt-3 text-xs text-slate-600">
-              โปรดระบุเหตุผลในการรายงานรีวิวนี้ เพื่อให้แอดมินดำเนินการตรวจสอบ:
-            </p>
+            {isAlreadyReported(reportingReviewId) ? (
+              // 🛑 ถ้ารายงานแล้ว แสดงกล่องข้อความเตือน
+              <div className="mt-4 space-y-4">
+                <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+                  <AlertTriangle className="h-6 w-6 shrink-0 text-amber-600" />
+                  <p className="text-xs font-semibold leading-relaxed">
+                    คุณได้รายงานรีวิวไม่เหมาะสมนี้ไปแล้ว ไม่สามารถรายงานซ้ำได้
+                  </p>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setReportingReviewId(null)}
+                    className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-900"
+                  >
+                    ปิด
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* 🟢 ถ่ายังไม่รายงาน ให้แสดงฟอร์มกรอกเหตุผลปกติ */
+              <>
+                <p className="mt-3 text-xs text-slate-600">
+                  โปรดระบุเหตุผลในการรายงานรีวิวนี้ เพื่อให้แอดมินดำเนินการตรวจสอบ:
+                </p>
 
-            <textarea
-              rows={4}
-              value={reportReason}
-              onChange={(e) => setReportReason(e.target.value)}
-              placeholder="ระบุเหตุผล เช่น ใช้ถ้อยคำหยาบคาย, ข้อมูลเท็จ, ไม่เกี่ยวกับสินค้า..."
-              className="mt-2 w-full rounded-xl border border-slate-200 p-3 text-xs focus:border-rose-500 focus:outline-none"
-            />
+                <textarea
+                  rows={4}
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  placeholder="ระบุเหตุผล เช่น ใช้ถ้อยคำหยาบคาย, ข้อมูลเท็จ, ไม่เกี่ยวกับสินค้า..."
+                  className="mt-2 w-full rounded-xl border border-slate-200 p-3 text-xs focus:border-rose-500 focus:outline-none"
+                />
 
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setReportingReviewId(null)}
-                className="rounded-lg border border-slate-200 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                disabled={isSubmittingReport || !reportReason.trim()}
-                onClick={handleSendReport}
-                className="rounded-lg bg-rose-600 px-4 py-1.5 text-xs text-white hover:bg-rose-700 disabled:opacity-50"
-              >
-                {isSubmittingReport ? "กำลังส่ง..." : "ส่งรายงาน"}
-              </button>
-            </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReportingReviewId(null)}
+                    className="rounded-lg border border-slate-200 px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmittingReport || !reportReason.trim()}
+                    onClick={handleSendReport}
+                    className="rounded-lg bg-rose-600 px-4 py-1.5 text-xs text-white hover:bg-rose-700 disabled:opacity-50"
+                  >
+                    {isSubmittingReport ? "กำลังส่ง..." : "ส่งรายงาน"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

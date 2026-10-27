@@ -12,7 +12,8 @@ import {
   Star,
   AlertTriangle,
   CheckCircle2,
-  CalendarDays
+  CalendarDays,
+  XCircle,
 } from "lucide-react";
 import PaymentActionButton from "@/component/customer/payment/PaymentActionButton";
 import OrderCancellationAlert from "./OrderCancellationAlert";
@@ -27,6 +28,7 @@ interface CustomerOrderCardProps {
   onCancelClick?: (orderId: string, orderNo: string) => void;
   onReceivedClick?: (orderId: string, orderNo: string) => void;
   onReportClick?: (order: any) => void;
+  onCancelReportClick?: (reportId: string, orderNo: string) => void;
   onShowToast?: (msg: string) => void;
 }
 
@@ -38,6 +40,7 @@ export default function CustomerOrderCard({
   onCancelClick,
   onReceivedClick,
   onReportClick,
+  onCancelReportClick,
   onShowToast,
 }: CustomerOrderCardProps) {
   const router = useRouter();
@@ -55,16 +58,19 @@ export default function CustomerOrderCard({
 
   const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
 
-  // สถานะคำร้อง (ถ้าลูกค้าเคยกดรายงานปัญหา/ขอคืนเงิน) : pending | investigating | resolved_refund | rejected
-  const reportStatus: string | null = order?.report?.status
+  // 🌟 จุดแก้ไขสำคัญ: ถ้าสถานะคำร้องเป็น 'cancelled' ให้มองว่าเป็น null (ถือว่าไม่มีคำร้องค้างอยู่ ปุ่มขอคืนเงินจะกลับมา)
+  const rawReportStatus = order?.report?.status
     ? String(order.report.status).toLowerCase().trim()
     : null;
 
+  const reportStatus: string | null = rawReportStatus === "cancelled" ? null : rawReportStatus;
+  const reportId: string | null = order?.report?.id || null;
+
   // 🌟 จุดแก้สำคัญ: ถ้าสลิปโดนปฏิเสธ (isSlipRejected) ต้องถือว่า "ยังไม่มีสลิปที่ถูกต้อง" (hasPaidSlip = false)
   const hasPaidSlip = Boolean(
-    (!isSlipRejected && paymentData?.slip_url) || 
-    paymentStatus === "paid" || 
-    paymentStatus === "refunded" || 
+    (!isSlipRejected && paymentData?.slip_url) ||
+    paymentStatus === "paid" ||
+    paymentStatus === "refunded" ||
     paymentStatus === "pending_payout"
   );
 
@@ -85,14 +91,12 @@ export default function CustomerOrderCard({
     order?.status?.state ||
     (typeof order?.status === "string" ? order.status : "รอการชำระเงิน");
 
-  // ใน CustomerOrderCard.tsx
-  // ใน CustomerOrderCard.tsx
   let targetExpiryMs: number | null = null;
   if (order?.expires_at) {
-    const exp = parseSafeTime(order.expires_at); // 👈 ต้องครอบ parseSafeTime
+    const exp = parseSafeTime(order.expires_at);
     if (exp) targetExpiryMs = exp;
   } else if (order?.order_date) {
-    const oTime = parseSafeTime(order.order_date); // 👈 ต้องครอบ parseSafeTime
+    const oTime = parseSafeTime(order.order_date);
     if (oTime) targetExpiryMs = oTime + 10 * 60 * 1000;
   }
 
@@ -107,14 +111,13 @@ export default function CustomerOrderCard({
   }
 
   // แอดมินอนุมัติคืนเงินจากคำร้อง (report = resolved_refund): ใน DB แอดมินตั้งเป็น "ยกเลิกการพิมพ์"
-  // เพื่อให้เข้าหน้ารายการคืนเงิน แต่ฝั่งลูกค้าแสดงเป็น "รายการเสร็จสิ้น" เพราะงานพิมพ์เสร็จและรับของแล้ว
   if (reportStatus === "resolved_refund" && (state === "ยกเลิกการพิมพ์" || state === "ยกเลิก")) {
     state = "รายการเสร็จสิ้น";
   }
 
   const isCanceled = state === "ยกเลิกการพิมพ์";
   const isPendingPayment = (state === "รอการชำระเงิน" || isSlipRejected) && !isPaymentExpired && !isCanceled;
-  
+
   const isPending = state === "รอการดำเนินงาน" && !isSlipRejected && !isCanceled;
   const isPrinting = state === "กำลังพิมพ์" && !isCanceled;
   const isReady = state === "พิมพ์เสร็จสิ้น" && !isCanceled;
@@ -198,15 +201,14 @@ export default function CustomerOrderCard({
   // ป้ายสถานะคำร้อง (แสดงแทนปุ่ม "ขอคืนเงิน" และแทนกล่องแจ้งเตือนเมื่อแอดมินอนุมัติคืนเงิน)
   const reportBadge = reportStatus ? (
     <span
-      className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-xl border flex items-center gap-1 ${
-        reportStatus === "resolved_refund"
+      className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-xl border flex items-center gap-1 ${reportStatus === "resolved_refund"
           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
           : reportStatus === "rejected"
-          ? "bg-slate-50 text-slate-600 border-slate-200"
-          : reportStatus === "investigating"
-          ? "bg-blue-50 text-blue-700 border-blue-200"
-          : "bg-amber-50 text-amber-700 border-amber-200"
-      }`}
+            ? "bg-slate-50 text-slate-600 border-slate-200"
+            : reportStatus === "investigating"
+              ? "bg-blue-50 text-blue-700 border-blue-200"
+              : "bg-amber-50 text-amber-700 border-amber-200"
+        }`}
     >
       {reportStatus === "resolved_refund" ? (
         <CheckCircle2 className="w-3.5 h-3.5" />
@@ -216,10 +218,10 @@ export default function CustomerOrderCard({
       {reportStatus === "resolved_refund"
         ? "คืนเงินแล้ว"
         : reportStatus === "rejected"
-        ? "คำร้องไม่ได้รับอนุมัติ"
-        : reportStatus === "investigating"
-        ? "แอดมินกำลังพิจารณาคำร้อง"
-        : "ส่งคำร้องแล้ว รอดำเนินการ"}
+          ? "คำร้องไม่ได้รับอนุมัติ"
+          : reportStatus === "investigating"
+            ? "แอดมินกำลังพิจารณาคำร้อง"
+            : "ส่งคำร้องแล้ว รอดำเนินการ"}
     </span>
   ) : null;
 
@@ -330,7 +332,7 @@ export default function CustomerOrderCard({
 
           <div className="flex items-center justify-between md:justify-end gap-3.5">
             <div className="flex items-center gap-2 flex-wrap">
-              
+
               {/* 🌟 1. แสดงป้ายสลิปไม่ถูกต้อง "เฉพาะตอนที่ยังไม่หมดเวลา" เท่านั้น */}
               {isSlipRejected && !isCanceled && !isPaymentExpired && (
                 <span className="text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 px-2 py-1 rounded-xl flex items-center gap-1">
@@ -345,7 +347,6 @@ export default function CustomerOrderCard({
               )}
 
               {/* 🌟 3. ปุ่มยกเลิก: ซ่อนทันทีถ้าหมดเวลาแล้ว (เพราะสถานะกลายเป็นยกเลิกไปแล้ว) */}
-              {/* ยกเลิกได้: รอชำระเงิน (ยังไม่หมดเวลา) หรือ รอการดำเนินงาน (ไม่ว่าร้านตรวจสลิปแล้วหรือยัง) */}
               {!isCanceled && (isPending || isPendingPayment) && (
                 <button
                   type="button"
@@ -369,7 +370,7 @@ export default function CustomerOrderCard({
               )}
 
               {!isCanceled && isReceived && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
                   {/* 🌟 1. ปุ่มรีวิว: เปลี่ยนเส้นทางไปที่ /customer/orders/[order_id]/review */}
                   <button
                     type="button"
@@ -380,10 +381,21 @@ export default function CustomerOrderCard({
                     <span>รีวิว</span>
                   </button>
 
-                  {/* 🌟 2. ปุ่มขอคืนเงิน: ถ้าส่งคำร้องไปแล้ว แสดงสถานะคำร้องแทน (ดูรายละเอียดได้ที่แท็บข้อร้องเรียน) */}
+                  {/* 🌟 2. ปุ่มขอคืนเงิน / ยกเลิกคำขอคืนเงิน */}
                   {reportStatus ? (
                     <>
                       {reportBadge}
+                      {/* 🟢 ถ้าคำร้องยังอยู่ในสถานะ pending หรือ investigating ให้แสดงปุ่มยกเลิกการขอคืนเงิน */}
+                      {(reportStatus === "pending" || reportStatus === "investigating") && (
+                        <button
+                          type="button"
+                          onClick={() => onCancelReportClick?.(reportId || order.id, orderNumberStr)}
+                          className="px-2.5 py-1.5 border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 text-xs font-semibold rounded-xl flex items-center gap-1 transition cursor-pointer shadow-2xs"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>ยกเลิกการขอคืนเงิน</span>
+                        </button>
+                      )}
                       {reportStatus === "resolved_refund" && (
                         <RefundSlipButton slipUrl={order?.report?.refund_slip_url || refundSlipUrl} size="sm" />
                       )}

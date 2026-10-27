@@ -12,7 +12,6 @@ import FinancialTable, { Transaction } from "@/component/shop/financial-table";
 import OrderBreakdownModal from "@/component/shop/order-breakdown-modal";
 import ReviewComplaintModal from "@/component/shop/review-complaint-modal";
 
-// 🟢 กำหนด API_URL หลักให้รองรับทั้ง Environment Variable และ Fallback
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 const API_URL = `${rawApiUrl.replace(/\/+$/, "")}/api`;
 
@@ -154,8 +153,12 @@ export default function ShopPage() {
             .get(`${API_URL}/shop/getOrderStatusBreakdown`, { headers })
             .catch(() => ({ data: null })),
           axios
-            .get(`${API_URL}/shop/getComplaintsAndReviews`, { headers })
-            .catch(() => ({ data: null })),
+            .get(`${API_URL}/shop/getShopReviews/${shopId}`, { headers })
+            .catch(() =>
+              axios
+                .get(`${API_URL}/shop/getComplaintsAndReviews`, { headers })
+                .catch(() => ({ data: null }))
+            ),
           axios
             .get(`${API_URL}/shop/profile/${shopId}`, { headers })
             .catch(() =>
@@ -165,7 +168,6 @@ export default function ShopPage() {
             ),
         ]);
 
-        // 🌟 1. เช็กสถานะการโดนระงับของร้านค้า
         const profData = profileRes?.data?.data || profileRes?.data;
         if (profData && profData.status === "suspended") {
           setIsSuspended(true);
@@ -173,7 +175,6 @@ export default function ShopPage() {
           setIsSuspended(false);
         }
 
-        // 🌟 2. อัปเดตการแสดงผลการ์ดสรุป 3 ใบ
         const numVal = numRes?.data?.numWork ?? 0;
         const scoreVal = Number(scoreRes?.data?.score ?? 0);
         const totalReviewsVal = scoreRes?.data?.totalReviews ?? 0;
@@ -187,7 +188,6 @@ export default function ShopPage() {
         setTodayOrdersCount(orderCountVal);
         setTotalReviewsCount(totalReviewsVal);
 
-        // 🌟 3. อัปเดตข้อมูลตารางและรายละเอียดแต่ละส่วน
         setOrders(ordersRes?.data ?? []);
 
         if (financeRes?.data) {
@@ -214,7 +214,9 @@ export default function ShopPage() {
         }
 
         if (reviewRes?.data) {
-          setReviewData(reviewRes.data);
+          const revs = reviewRes.data.data || reviewRes.data.reviews || [];
+          const comps = reviewRes.data.complaints || [];
+          setReviewData({ reviews: revs, complaints: comps });
         } else {
           setReviewData({ reviews: [], complaints: [] });
         }
@@ -246,7 +248,6 @@ export default function ShopPage() {
     fetchDashboardData({ silent: true });
   };
 
-  // ปฏิเสธออเดอร์จากตารางสัดส่วนคำสั่งพิมพ์
   const handleRejectOrder = async (orderId: string, reason: string) => {
     if (isSuspended) throw new Error("บัญชีนี้ถูกระงับการใช้งาน");
 
@@ -269,11 +270,9 @@ export default function ShopPage() {
       );
     }
 
-    // โหลดข้อมูลใหม่ให้ตาราง/การ์ดอัปเดตตามสถานะล่าสุด
     await fetchDashboardData({ silent: true });
   };
 
-  // 🟢 ฟังก์ชันตอบกลับรีวิว (Reply Review)
   const handleReplyReview = async (reviewId: string, replyText: string) => {
     if (isSuspended) throw new Error("บัญชีนี้ถูกระงับการใช้งาน");
 
@@ -289,7 +288,6 @@ export default function ShopPage() {
           },
         }
       );
-      // รีเฟรชข้อมูลในระบบทันที
       await fetchDashboardData({ silent: true });
     } catch (err: any) {
       throw new Error(
@@ -298,15 +296,19 @@ export default function ShopPage() {
     }
   };
 
-  // 🟢 ฟังก์ชันรายงานรีวิวที่ไม่เหมาะสม (Report Review)
+  // 🟢 🟢 ปรับแก้การยิง API รายงานรีวิวให้ตรงกับที่ Backend รอรับ
   const handleReportReview = async (reviewId: string, reason: string) => {
     if (isSuspended) throw new Error("บัญชีนี้ถูกระงับการใช้งาน");
 
     const token = localStorage.getItem("token");
     try {
       await axios.post(
-        `${API_URL}/shop/reviews/${reviewId}/report`,
-        { reason },
+        `${API_URL}/shop/report-review`, // ยิงไปยัง endpoint รายงานรีวิว
+        {
+          review_id: reviewId,
+          shop_id: shopId,
+          description: reason,
+        },
         {
           headers: {
             shop_id: shopId,
@@ -314,11 +316,12 @@ export default function ShopPage() {
           },
         }
       );
-      // รีเฟรชข้อมูลในระบบทันที
+
+      // โหลดข้อมูลรีวิวใหม่เพื่อให้สถานะ has_reported: true แสดงขึ้นมา
       await fetchDashboardData({ silent: true });
     } catch (err: any) {
       throw new Error(
-        err?.response?.data?.error || "ไม่สามารถส่งรายงานได้ กรุณาลองใหม่อีกครั้ง"
+        err?.response?.data?.message || err?.response?.data?.error || "ไม่สามารถส่งรายงานได้ กรุณาลองใหม่อีกครั้ง"
       );
     }
   };
@@ -406,7 +409,6 @@ export default function ShopPage() {
 
         {activeView === "reviews" && (
           <div className="mb-10">
-            {/* 🟢 ส่ง Props ฟังก์ชันตอบและรายงานรีวิวไปยัง ReviewComplaintModal */}
             <ReviewComplaintModal
               reviews={reviewData.reviews}
               complaints={reviewData.complaints}
