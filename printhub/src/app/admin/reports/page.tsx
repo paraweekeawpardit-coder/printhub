@@ -14,13 +14,13 @@ export default function ReportsAdminPage() {
 
   // 🟢 อ่านค่าจาก URL เพื่อใช้เป็นค่าเริ่มต้น เมื่อกด Refresh จะได้อยู่ที่แท็บเดิม
   const initialCategory = (searchParams.get("category") as "refund" | "review") || "refund";
-  const initialFilter = (searchParams.get("filter") as "all" | "pending" | "investigating" | "resolved") || "all";
+  const initialFilter = (searchParams.get("filter") as "all" | "pending" | "investigating" | "resolved" | "cancelled") || "all";
 
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   
   const [category, setCategory] = useState<"refund" | "review">(initialCategory);
-  const [filter, setFilter] = useState<"all" | "pending" | "investigating" | "resolved">(initialFilter);
+  const [filter, setFilter] = useState<"all" | "pending" | "investigating" | "resolved" | "cancelled">(initialFilter);
   const [search, setSearch] = useState("");
   const [selectedImageReport, setSelectedImageReport] = useState<ReportItem | null>(null);
 
@@ -43,7 +43,7 @@ export default function ReportsAdminPage() {
     updateQueryParams(newCategory, "all");
   };
 
-  const handleFilterChange = (newFilter: "all" | "pending" | "investigating" | "resolved") => {
+  const handleFilterChange = (newFilter: "all" | "pending" | "investigating" | "resolved" | "cancelled") => {
     setFilter(newFilter);
     updateQueryParams(category, newFilter);
   };
@@ -99,6 +99,13 @@ export default function ReportsAdminPage() {
   };
 
   const handleAcceptReport = async (id: string) => {
+    // 🛡️ ป้องกันไม่ให้แอดมินกดรับเรื่องเคสที่ลูกค้ายกเลิกแล้ว
+    const targetReport = reports.find((r) => r.id === id);
+    if (targetReport?.status === "cancelled") {
+      alert("ไม่สามารถกดรับเรื่องได้ เนื่องจากลูกค้ายกเลิกคำร้องปัญหานี้แล้ว");
+      return;
+    }
+
     try {
       const res = await fetch(`${API_URL}/reports/verify`, {
         method: "PATCH",
@@ -212,6 +219,7 @@ export default function ReportsAdminPage() {
     return item.issue_type !== "รายงานรีวิวที่ไม่เหมาะสม" && !item.review_id;
   });
 
+  // 🔴 Filter Logic: แยกเคส cancelled ชัดเจน
   const filteredReports = categoryReports.filter((item) => {
     const matchesFilter =
       filter === "all"
@@ -220,7 +228,9 @@ export default function ReportsAdminPage() {
         ? item.status === "pending" || !item.status
         : filter === "investigating"
         ? item.status === "investigating"
-        : item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" || item.status === "rejected";
+        : filter === "resolved"
+        ? item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" || item.status === "rejected"
+        : item.status === "cancelled";
 
     const searchLower = search.toLowerCase();
     const matchesSearch =
@@ -232,11 +242,13 @@ export default function ReportsAdminPage() {
     return matchesFilter && matchesSearch;
   });
 
+  // 📊 คำนวณตัวเลขนับจำนวนแต่ละสถานะ
   const pendingCount = categoryReports.filter((r) => r.status === "pending" || !r.status).length;
   const investigatingCount = categoryReports.filter((r) => r.status === "investigating").length;
   const resolvedCount = categoryReports.filter(
     (r) => r.status === "resolved_refund" || r.status === "resolved_payout" || r.status === "resolved" || r.status === "rejected"
   ).length;
+  const cancelledCount = categoryReports.filter((r) => r.status === "cancelled").length;
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-4 sm:space-y-6 font-sans p-2 sm:p-6 lg:p-8">
@@ -324,6 +336,15 @@ export default function ReportsAdminPage() {
               }`}
             >
               ตัดสินเรียบร้อย ({resolvedCount})
+            </button>
+            {/* 🔴 ปุ่มกรองเคสยกเลิก */}
+            <button
+              onClick={() => handleFilterChange("cancelled")}
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                filter === "cancelled" ? "bg-slate-700 text-white shadow-2xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              ลูกค้ายกเลิกแล้ว ({cancelledCount})
             </button>
           </div>
 

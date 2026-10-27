@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, ChangeEvent } from "react";
-import { FileText, ExternalLink, Upload, X, Image as ImageIcon, AlertCircle } from "lucide-react";
+import { FileText, ExternalLink, Upload, X, Image as ImageIcon, AlertCircle, Ban } from "lucide-react";
 import supabase from "@/config/supabase";
 
 const ISSUE_TYPE_MAP: Record<string, string> = {
@@ -122,6 +122,7 @@ export default function ReportDetailModal({
   const totalPrice = report.total_price || 0;
   const isNoteValid = adminNote.trim().length > 0;
   const isPending = !report.status || report.status === "pending";
+  const isCancelled = report.status === "cancelled";
   const isResolved = report.status === "resolved_refund" || report.status === "rejected";
 
   const rawIssueKey = report.issue_type || report.category || "";
@@ -155,7 +156,7 @@ export default function ReportDetailModal({
   };
 
   const handleSubmit = async () => {
-    if (!isNoteValid || isPending || fileError) return;
+    if (isCancelled || !isNoteValid || isPending || fileError) return;
     try {
       setIsSubmitting(true);
       let finalAdminImageUrl: string | null = report.admin_image_url || null;
@@ -204,7 +205,7 @@ export default function ReportDetailModal({
   };
 
   const handleAccept = async () => {
-    if (!onAcceptReport) return;
+    if (isCancelled || !onAcceptReport) return;
     try {
       setIsSubmitting(true);
       await onAcceptReport(report.id);
@@ -253,14 +254,18 @@ export default function ReportDetailModal({
                 <span>ข้อมูลคำสั่งซื้อ</span>
                 <span
                   className={`text-[11px] sm:text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                    isPending
+                    isCancelled
+                      ? "bg-rose-100 text-rose-800 border border-rose-200"
+                      : isPending
                       ? "bg-amber-100 text-amber-800"
                       : report.status === "investigating"
                       ? "bg-blue-100 text-blue-800"
                       : "bg-emerald-100 text-emerald-800"
                   }`}
                 >
-                  {isPending
+                  {isCancelled
+                    ? "ลูกค้ายกเลิกแล้ว"
+                    : isPending
                     ? "รอดำเนินการ"
                     : report.status === "investigating"
                     ? "กำลังตรวจสอบ"
@@ -428,7 +433,20 @@ export default function ReportDetailModal({
           </div>
 
           {/* บล็อกส่วนที่ 3: คำตัดสินของแอดมิน */}
-          {isPending ? (
+          {isCancelled ? (
+            /* 🔴 บล็อกเตือน: กรณีลูกค้ายกเลิกคำร้องไปแล้ว */
+            <div className="bg-slate-100 p-4 sm:p-5 rounded-xl border border-slate-300 flex items-center gap-3">
+              <Ban className="w-5 h-5 text-slate-500 shrink-0" />
+              <div>
+                <h4 className="font-bold text-slate-800 text-xs sm:text-sm">
+                  รายงานปัญหานี้ถูกยกเลิกโดยลูกค้าแล้ว
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  ลูกค้ายกเลิกคำร้องปัญหานี้ก่อนแอดมินทำการตัดสิน จึงไม่ต้องดำเนินการใดๆ เพิ่มเติม
+                </p>
+              </div>
+            </div>
+          ) : isPending ? (
             <div className="bg-amber-50 p-4 sm:p-5 rounded-xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
               <div className="space-y-1">
                 <h4 className="font-bold text-amber-900 text-xs sm:text-sm flex items-center gap-1.5">
@@ -602,9 +620,9 @@ export default function ReportDetailModal({
             onClick={onClose}
             className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer text-center"
           >
-            {isPending || isResolved ? "ปิดหน้าต่าง" : "ยกเลิก"}
+            {isCancelled || isPending || isResolved ? "ปิดหน้าต่าง" : "ยกเลิก"}
           </button>
-          {!isPending && !isResolved && (
+          {!isCancelled && !isPending && !isResolved && (
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || !isNoteValid || !!fileError}

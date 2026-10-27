@@ -71,7 +71,6 @@ export default function ReportTable({
     let animationFrameId: number | null = null;
 
     const smoothScrollLoop = () => {
-      // ใช้ Lerp Formula (0.12 คือค่าความนุ่มลื่น ยิ่งน้อยยิ่งนุ่ม)
       const diff = targetScrollLeft - currentScrollLeft;
       if (Math.abs(diff) > 0.5) {
         currentScrollLeft += diff * 0.12;
@@ -95,7 +94,6 @@ export default function ReportTable({
         if (!isAtLeft && !isAtRight) {
           e.preventDefault();
 
-          // ปรับความเร็วการหมุนตามแรงกดเมาส์ (Multiplier = 1.2)
           targetScrollLeft = Math.max(
             0,
             Math.min(el.scrollWidth - el.clientWidth, targetScrollLeft + e.deltaY * 1.2)
@@ -116,7 +114,6 @@ export default function ReportTable({
     };
   }, [paginatedReports]);
 
-  // ฟังก์ชันสำหรับกดปุ่ม < > เลื่อนตารางแบบ Smooth
   const handleScrollClick = (direction: "left" | "right") => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -226,7 +223,12 @@ export default function ReportTable({
                 </span>
 
                 <div>
-                  {item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" ? (
+                  {item.status === "cancelled" ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                      ลูกค้ายกเลิกแล้ว
+                    </span>
+                  ) : item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                       {isReviewReport ? "จัดการเรียบร้อย" : "อนุมัติคืนเงิน"}
@@ -310,9 +312,15 @@ export default function ReportTable({
 
                   <button
                     onClick={() => onSelectReport(item)}
-                    className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 shadow-2xs transition-all cursor-pointer"
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer ${
+                      item.status === "cancelled"
+                        ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        : "bg-slate-900 text-white hover:bg-slate-800"
+                    }`}
                   >
-                    {item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" || item.status === "rejected"
+                    {item.status === "cancelled"
+                      ? "ดูรายละเอียด"
+                      : item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" || item.status === "rejected"
                       ? "ดูคำตัดสิน"
                       : "รายละเอียด"}
                   </button>
@@ -381,13 +389,18 @@ export default function ReportTable({
                     (item.order_id ? `#${item.order_id.slice(0, 8)}` : "-");
 
                 const displayReviewText = item.review_comment || item.comment || item.review_text;
-                const isAccepted = item.status !== "pending" && Boolean(item.updated_at);
+                const isAccepted = item.status !== "pending" && item.status !== "cancelled" && Boolean(item.updated_at);
                 const countdown = isAccepted ? getRemainingCountdown(item.updated_at) : null;
 
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 px-4 whitespace-nowrap">
-                      {item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" ? (
+                      {item.status === "cancelled" ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                          ลูกค้ายกเลิกแล้ว
+                        </span>
+                      ) : item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" ? (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                           {isReviewReport ? "จัดการเรียบร้อย" : "อนุมัติคืนเงิน"}
@@ -492,9 +505,15 @@ export default function ReportTable({
 
                         <button
                           onClick={() => onSelectReport(item)}
-                          className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition-all active:scale-95 cursor-pointer ${
+                            item.status === "cancelled"
+                              ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              : "bg-slate-900 text-white hover:bg-slate-800"
+                          }`}
                         >
-                          {item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" || item.status === "rejected"
+                          {item.status === "cancelled"
+                            ? "ดูรายละเอียด"
+                            : item.status === "resolved_refund" || item.status === "resolved_payout" || item.status === "resolved" || item.status === "rejected"
                             ? "ดูคำตัดสิน"
                             : "รายละเอียด"}
                         </button>
