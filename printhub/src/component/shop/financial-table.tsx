@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { TrendingUp, DollarSign, Calendar, Search, Eye, Clock, X } from "lucide-react";
+import { formatThaiDateTime } from "../../lib/Datetime";
 
 export type Transaction = {
   id: string; // uuid สำหรับคลิก
@@ -228,7 +229,7 @@ export default function FinancialTable({
                         className="cursor-pointer hover:bg-slate-50"
                       >
                         <td className="p-3 font-semibold text-slate-800">{orderLabel}</td>
-                        <td className="p-3 text-slate-400">{new Date(t.date).toLocaleDateString("th-TH")}</td>
+                        <td className="p-3 text-slate-400">{formatThaiDateTime(t.date)}</td>
                         <td className="p-3 text-right font-medium">฿{t.gross.toFixed(2)}</td>
                         <td className="p-3 text-right text-amber-600">-฿{t.fee.toFixed(2)}</td>
                         <td className="p-3 text-right font-bold text-emerald-600">฿{t.net.toFixed(2)}</td>

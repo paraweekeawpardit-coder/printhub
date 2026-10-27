@@ -55,6 +55,12 @@ export type ComplaintItem = {
   image_url?: string | null;
   created_at: string;
   updated_at?: string | null;
+  shop_name?: string | null; // 🟢 เพิ่ม property shop_name
+  shop?: {                   // 🟢 เพิ่ม property shop object
+    id?: string;
+    name?: string;
+    shop_name?: string;
+  } | null;
   customer?: {
     first_name: string;
     last_name: string;
@@ -540,7 +546,7 @@ export default function ReviewComplaintModal({
                             คำตอบรับจากร้านค้า
                           </span>
                           {r.reply_at && (
-                            <span className="text-[10px] text-blue-400 font-normal">
+                            <span className="text-[10px] font-normal text-blue-400">
                               {formatDate(r.reply_at)}
                             </span>
                           )}
@@ -553,7 +559,7 @@ export default function ReviewComplaintModal({
                     {onReplyReview && (
                       <div className="mt-3 flex justify-end">
                         {replyingReviewId === r.id ? (
-                          <div className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                          <div className="w-full space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                             <textarea
                               rows={2}
                               value={replyInputText}
@@ -652,9 +658,7 @@ export default function ReviewComplaintModal({
                       <User size={13} className="text-slate-500" />
                       ผู้แจ้งเรื่อง:{" "}
                       <span className="font-normal text-slate-600">
-                        {c.customer
-                          ? `${c.customer.first_name} ${c.customer.last_name}`
-                          : "ไม่ระบุชื่อ"}
+                        {c.shop?.name || c.shop?.shop_name || c.shop_name || "ไม่ระบุชื่อร้าน"}
                       </span>
                     </p>
 
@@ -774,10 +778,6 @@ export default function ReviewComplaintModal({
           </div>
         </div>
       )}
-
-      
     </div>
   );
-
-
 }

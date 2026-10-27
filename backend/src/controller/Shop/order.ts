@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import supabase from "../../config/supabase.js";
 import { syncAutoStatuses } from "./home.js";
+import { fixPickupTime } from "./Pickuptime.js";
 
 // ==========================================
 // Types
@@ -64,6 +65,11 @@ interface SupabaseOrderQueryResult {
 // Get Orders By Status (for a shop)
 // ==========================================
 
+// ✅ ชื่อสถานะใน DB อาจสะกด "รอการดำเนินการ" แต่ frontend ใช้ "รอการดำเนินงาน"
+//    แปลงให้เป็นชื่อเดียวกันก่อนนำไปเทียบกับ filter
+const normalizeStatus = (s: string): string =>
+  s === "รอการดำเนินการ" ? "รอการดำเนินงาน" : s;
+
 export const getOrdersByStatus = async (
   req: Request,
   res: Response
@@ -80,7 +86,10 @@ export const getOrdersByStatus = async (
 
     await syncAutoStatuses(shop_id);
 
-    let query = supabase
+    // ✅ ไม่ใช้ .eq("current_status.state", ...) แล้ว
+    //    เพราะ embedded resource ไม่ได้ตัด row ทิ้ง แค่ทำให้ current_status เป็น null
+    //    การกรองสถานะทำที่ .filter() ด้านล่างแทน
+    const query = supabase
       .from("print_order")
       .select(
         `
@@ -120,10 +129,6 @@ export const getOrdersByStatus = async (
       )
       .eq("shop_id", shop_id);
 
-    if (statusFilter !== "ทั้งหมด") {
-      query = query.eq("current_status.state", statusFilter);
-    }
-
     const { data: rawOrders, error } = await query.order("order_date", {
       ascending: false,
     });
@@ -136,8 +141,6 @@ export const getOrdersByStatus = async (
     }
 
     const orders = (rawOrders || []) as unknown as SupabaseOrderQueryResult[];
-    const now = Date.now();
-    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
     const processedOrders: ResultOrder[] = orders
       .map((order) => {
@@ -145,29 +148,10 @@ export const getOrdersByStatus = async (
         const currentStatus = Array.isArray(order.current_status) ? order.current_status[0] : order.current_status;
         const payment = Array.isArray(order.payment) ? order.payment[0] : order.payment;
 
-        let computedStatus = currentStatus?.state || "รอการดำเนินงาน";
-
-        const appointmentTimeStr = order.appointment_time || order.receive_date;
-
-        if (appointmentTimeStr) {
-          const appointmentTime = new Date(appointmentTimeStr).getTime();
-
-          if (!isNaN(appointmentTime)) {
-            const isPending =
-              computedStatus === "รอการดำเนินการ" ||
-              computedStatus === "รอการดำเนินงาน";
-            const isPendingOrPrinting = isPending || computedStatus === "กำลังพิมพ์";
-
-            if (isPendingOrPrinting && now > appointmentTime) {
-              computedStatus = "ยกเลิกการพิมพ์";
-            }
-
-            const isCompletedPrint = computedStatus === "พิมพ์เสร็จสิ้น";
-            if (isCompletedPrint && now > appointmentTime + ONE_DAY_MS) {
-              computedStatus = "รายการเสร็จสิ้น";
-            }
-          }
-        }
+        // ✅ ถ้าไม่มีสถานะจริง ๆ ไม่เดาว่าเป็น "รอการดำเนินงาน" อีกต่อไป
+        const computedStatus = normalizeStatus(
+          currentStatus?.state ?? "ไม่ทราบสถานะ"
+        );
 
         const items: OrderItemDetail[] = (order.print_order_item || []).map(
           (item) => ({
@@ -186,7 +170,7 @@ export const getOrdersByStatus = async (
           order_id: order.id,
           order_no: order.order_no,
           date: order.order_date,
-          description: (order as any).description || null, // เพิ่มฟิลด์หมายเหตุที่นี่
+          description: (order as any).description || null,
           reject_reason: order.reject_reason || null,
           customer_name: `${customer?.first_name ?? ""} ${customer?.last_name ?? ""
             }`.trim() || "ลูกค้าทั่วไป",
@@ -194,7 +178,7 @@ export const getOrdersByStatus = async (
           amount: Number(order.total_amount || order.total_price || 0),
           items,
           pickup_time:
-            order.appointment_time || order.receive_date || order.order_date || null,
+            fixPickupTime(order.appointment_time) || order.receive_date || order.order_date || null,
           payment: payment
             ? {
               id: payment.id,
@@ -206,6 +190,8 @@ export const getOrdersByStatus = async (
       })
       .filter((order) => {
         if (order.status === "รอการชำระเงิน") return false;
+        // ถ้าไม่อยากให้ออเดอร์ไม่มีสถานะโผล่ในแท็บ "ทั้งหมด" ให้เปิดบรรทัดนี้
+        // if (order.status === "ไม่ทราบสถานะ") return false;
         if (statusFilter !== "ทั้งหมด" && order.status !== statusFilter) return false;
         return true;
       });
@@ -257,13 +243,18 @@ export const updateOrderStatus = async (
 ): Promise<Response> => {
   try {
     const { orderId } = req.params;
-    const { newStatus } = req.body;
+    // ✅ frontend ส่งมาเป็น status_name (รองรับ newStatus แบบเดิมด้วย)
+    const newStatus = req.body.status_name ?? req.body.newStatus;
     const shop_id = (req.headers.shop_id ||
       req.query.shop_id ||
       req.body.shop_id) as string;
 
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
+    }
+
+    if (!newStatus) {
+      return res.status(400).json({ error: "status_name is required" });
     }
 
     const { data: shop, error: shopError } = await supabase
@@ -413,7 +404,7 @@ export const getOrderById = async (
       order_id: order.id,
       order_no: order.order_no,
       date: order.order_date,
-      appointment_time: order.appointment_time || order.receive_date,
+      appointment_time: fixPickupTime(order.appointment_time) || order.receive_date,
       reject_reason: (order as any).reject_reason || null,
       customer_name: `${customer?.first_name ?? ""} ${customer?.last_name ?? ""
         }`.trim(),
