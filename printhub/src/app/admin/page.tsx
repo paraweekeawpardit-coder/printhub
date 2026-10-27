@@ -151,10 +151,10 @@ export default function AdminHomePage() {
           href="/admin/customers"
         />
         <StatCard
-          title="ร้านค้าที่เปิดอยู่"
+          title="ร้านค้าทั้งหมด"
           value={stats.totalActiveShops?.toLocaleString()}
           unit="ร้าน"
-          subtitle="เปิดให้บริการปกติ"
+          subtitle="ร้านค้าทั้งหมดในระบบ"
           href="/admin/shops?tab=all"
         />
         <StatCard

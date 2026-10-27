@@ -116,10 +116,23 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
     fetchOwnerFinanceData("all", todayStr, currentMonthStr);
   };
 
+  // 🔤 กรองและเรียงลำดับร้านค้า: ภาษาไทยขึ้นก่อน (ก-ฮ) -> ตามด้วยภาษาอังกฤษ (A-Z)
   const filteredShopRevenues = useMemo(() => {
-    if (selectedShopId === "all") return shopRevenues;
-    return shopRevenues.filter((shop) => shop.id === selectedShopId);
+    const list = selectedShopId === "all"
+      ? [...shopRevenues]
+      : shopRevenues.filter((shop) => shop.id === selectedShopId);
+
+    return list.sort((a, b) =>
+      a.shop_name.localeCompare(b.shop_name, "th", { numeric: true })
+    );
   }, [shopRevenues, selectedShopId]);
+
+  // 🔤 ดึงรายชื่อร้านค้าทั้งหมดเรียงตามภาษาไทยสำหรับ Dropdown Select
+  const sortedShopOptions = useMemo(() => {
+    return [...shopRevenues].sort((a, b) =>
+      a.shop_name.localeCompare(b.shop_name, "th", { numeric: true })
+    );
+  }, [shopRevenues]);
 
   const filteredOrders = useMemo(() => {
     if (selectedShopId === "all") return allOrders;
@@ -139,24 +152,74 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
     return filteredOrders.slice(start, start + itemsPerPage);
   }, [filteredOrders, currentPage, itemsPerPage]);
 
+  // คำนวณ 3 อันดับร้านที่ทำค่าธรรมเนียมให้ระบบสูงสุด
+  const topShops = useMemo(() => {
+    return [...shopRevenues]
+      .sort((a, b) => b.platformFee - a.platformFee)
+      .slice(0, 3);
+  }, [shopRevenues]);
+
+  // คำนวณเปอร์เซ็นต์สัดส่วนรายได้จริงสำหรับแสดงในกราฟ
+  const platformIncomePercent = useMemo(() => {
+    if (!finance.totalGrossVolume || finance.totalGrossVolume === 0) return 0;
+    return Math.min(100, (finance.totalPlatformIncome / finance.totalGrossVolume) * 100);
+  }, [finance]);
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-slate-900">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23" />
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    <div className="space-y-6 font-sans relative min-h-[500px]">
+      {/* 🔴 Overlay โหลดข้อมูลคลุมทั้ง Dashboard เมื่อเกิดการ Loading */}
+      {loading && (
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-xs z-50 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all">
+          <div className="flex items-center gap-3 bg-[#353A4C] text-white px-5 py-3 rounded-2xl shadow-xl">
+            <svg className="w-5 h-5 animate-spin text-[#AED5F5]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
             </svg>
-            <h2 className="text-xl font-bold">ภาพรวมการเงินระบบ PrintHub (Owner)</h2>
+            <span className="text-sm font-bold tracking-wide">กำลังโหลดและอัปเดตข้อมูลระบบ...</span>
+          </div>
+        </div>
+      )}
+
+      {/* 👈 ปุ่มออกจากสิทธิ์ ย้ายอยู่นอกการ์ด (ด้านบนสุด ซ้ายมือ) */}
+      {onLogout && (
+        <div className="flex items-center justify-between pb-1">
+          <button
+            onClick={onLogout}
+            className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-2xs group"
+          >
+            <svg 
+              className="w-4 h-4 text-slate-500 group-hover:text-slate-900 transition-transform group-hover:-translate-x-0.5" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2.5" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            >
+              <path d="M19 12H5" />
+              <path d="M12 19l-7-7 7-7" />
+            </svg>
+            <span>ออกจากสิทธิ์ Owner</span>
+          </button>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <img 
+              src="/logo_printhub.png" 
+              alt="PrintHub Logo" 
+              className="w-8 h-8 object-contain" 
+            />
+            <h2 className="text-xl font-bold text-[#353A4C]">ภาพรวมการเงินระบบ PrintHub (Owner)</h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">สรุปข้อมูลส่วนแบ่งแพลตฟอร์ม เงินหมุนเวียน และยอดโอนร้านค้าจากระบบจริง</p>
         </div>
 
         {/* Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* ล็อกไม่ให้เลือกวันในอนาคตด้วย max={todayStr} */}
           {timeRange === "today" && (
             <input
               type="date"
@@ -171,7 +234,6 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
             />
           )}
 
-          {/* ล็อกไม่ให้เลือกเดือนในอนาคตด้วย max={currentMonthStr} */}
           {timeRange === "month" && (
             <input
               type="month"
@@ -193,7 +255,7 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
                 fetchOwnerFinanceData("today", selectedDate, selectedMonth);
               }}
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                timeRange === "today" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                timeRange === "today" ? "bg-[#353A4C] text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               รายวัน
@@ -204,7 +266,7 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
                 fetchOwnerFinanceData("month", selectedDate, selectedMonth);
               }}
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                timeRange === "month" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                timeRange === "month" ? "bg-[#353A4C] text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               รายเดือน
@@ -215,7 +277,7 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
                 fetchOwnerFinanceData("all", selectedDate, selectedMonth);
               }}
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                timeRange === "all" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                timeRange === "all" ? "bg-[#353A4C] text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               ทั้งหมด
@@ -225,7 +287,7 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
           <button
             onClick={() => fetchOwnerFinanceData(timeRange, selectedDate, selectedMonth)}
             disabled={loading}
-            className="flex items-center gap-1.5 text-xs bg-slate-900 hover:bg-slate-800 disabled:bg-slate-700 text-white px-3.5 py-2 rounded-xl font-medium transition-all cursor-pointer shadow-xs active:scale-95"
+            className="flex items-center gap-1.5 text-xs bg-[#367ADF] hover:bg-[#394988] disabled:bg-slate-400 text-white px-3.5 py-2 rounded-xl font-medium transition-all cursor-pointer shadow-2xs active:scale-95"
           >
             <svg
               className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
@@ -248,57 +310,163 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
           >
             ล้างตัวกรอง
           </button>
-
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-1.5 text-xs bg-red-50 hover:bg-red-100 text-red-600 px-3.5 py-2 rounded-xl font-medium transition-all cursor-pointer"
-            >
-              ออกจากสิทธิ์
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Cards */}
+      {/* Cards - ปรับแต่งสีด้วย PO Palette */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <StatCard
-          title="รายได้ส่วนแบ่งเว็บทั้งหมด"
-          value={loading ? "..." : finance.totalPlatformIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          unit="บาท"
-          subtitle="รวมจากค่าธรรมเนียม 8% และ Small Order Fee"
-        />
-        <StatCard
-          title="เงินหมุนเวียนในระบบ"
-          value={loading ? "..." : finance.totalGrossVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          unit="บาท"
-          subtitle="รวมยอดชำระจริงทั้งหมดจากลูกค้า"
-        />
-        <StatCard
-          title="เงินรอโอนให้ร้านค้า"
-          value={loading ? "..." : finance.pendingPayout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          unit="บาท"
-          subtitle="รวมยอดสุทธิหลังหักค่าธรรมเนียม รอเคลียริ่งรอบโอน"
-        />
+        {/* การ์ด 1: รายได้ส่วนแบ่งเว็บ */}
+        <div className="bg-gradient-to-br from-[#AED5F5]/30 to-white p-5 rounded-2xl border border-[#367ADF]/40 shadow-2xs flex flex-col justify-between">
+          <div>
+            <span className="text-xs font-bold text-[#394988] uppercase tracking-wider">รายได้ส่วนแบ่งเว็บทั้งหมด</span>
+            <div className="my-2 flex items-baseline gap-1">
+              <span className="text-3xl font-black font-mono text-[#367ADF] tracking-tight">
+                ฿{finance.totalPlatformIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-[#AED5F5]/60">
+            <p className="text-[11px] text-slate-500 font-medium">รวมจากค่าธรรมเนียม 8% และ Small Order Fee</p>
+          </div>
+        </div>
+
+        {/* การ์ด 2: เงินหมุนเวียน */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div>
+            <span className="text-xs font-semibold text-slate-500">เงินหมุนเวียนในระบบ</span>
+            <div className="my-2 flex items-baseline gap-1">
+              <span className="text-3xl font-black font-mono text-slate-900 tracking-tight">
+                ฿{finance.totalGrossVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-slate-100">
+            <p className="text-[11px] text-slate-400 font-medium">รวมยอดชำระจริงทั้งหมดจากลูกค้า</p>
+          </div>
+        </div>
+
+        {/* การ์ด 3: เงินรอโอนร้านค้า */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div>
+            <span className="text-xs font-semibold text-slate-500">เงินรอโอนให้ร้านค้า</span>
+            <div className="my-2 flex items-baseline gap-1">
+              <span className="text-3xl font-black font-mono text-slate-800 tracking-tight">
+                ฿{finance.pendingPayout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-slate-100">
+            <p className="text-[11px] text-slate-400 font-medium">รวมยอดสุทธิหลังหักค่าธรรมเนียม รอเคลียริ่งรอบโอน</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 📊 Analytics Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* กราฟสัดส่วนการกระจายรายได้จริง */}
+        <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-[#353A4C]">สัดส่วนการกระจายรายได้แพลตฟอร์ม</h3>
+              <p className="text-xs text-slate-400 mt-0.5">เปรียบเทียบสัดส่วนเงินเข้าระบบ (Platform Fee) กับเงินที่โอนให้ร้านค้า</p>
+            </div>
+            <span className="text-[11px] font-bold text-[#367ADF] bg-[#AED5F5]/30 px-3 py-1 rounded-full">
+              {timeRange === "today" ? "วันนี้" : timeRange === "month" ? "เดือนนี้" : "ทั้งหมด"}
+            </span>
+          </div>
+
+          <div className="space-y-5 my-auto">
+            {/* Visual Bar Graph */}
+            <div>
+              <div className="flex justify-between text-xs font-bold mb-1.5">
+                <span className="text-[#367ADF]">รายได้เข้าเว็บ ({platformIncomePercent.toFixed(1)}%)</span>
+                <span className="text-slate-600">ยอดโอนร้านค้าสุทธิ ({(100 - platformIncomePercent).toFixed(1)}%)</span>
+              </div>
+              <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex p-0.5 border border-slate-200">
+                <div 
+                  className="bg-[#367ADF] h-full rounded-l-full transition-all duration-700 shadow-2xs" 
+                  style={{ width: `${platformIncomePercent}%` }}
+                />
+                <div 
+                  className="bg-[#353A4C] h-full rounded-r-full transition-all duration-700" 
+                  style={{ width: `${100 - platformIncomePercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Metrics Breakdown */}
+            <div className="grid grid-cols-2 gap-4 pt-2">
+              <div className="bg-[#AED5F5]/20 p-3 rounded-xl border border-[#AED5F5]/50">
+                <span className="text-[11px] font-semibold text-[#394988] block">รายได้เข้าเว็บ (Platform Income)</span>
+                <span className="text-base font-extrabold font-mono text-[#367ADF]">
+                  ฿{finance.totalPlatformIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-[11px] font-semibold text-slate-500 block">ยอดโอนร้านค้าสุทธิ (Net Payout)</span>
+                <span className="text-base font-extrabold font-mono text-slate-800">
+                  ฿{finance.pendingPayout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+            <span>หมุนเวียนรวม: ฿{finance.totalGrossVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span>สถานะระบบ: ปกติ</span>
+          </div>
+        </div>
+
+        {/* 🏆 Top Partner Shops */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4 flex flex-col justify-between">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-[#353A4C]">Top Partner Shops</h3>
+            <p className="text-xs text-slate-400 mt-0.5">3 อันดับร้านค้าที่สร้างค่าธรรมเนียมสูงสุด</p>
+          </div>
+
+          <div className="space-y-4 my-auto">
+            {topShops.length > 0 ? (
+              topShops.map((shop, idx) => {
+                const maxFee = topShops[0]?.platformFee || 1;
+                const barWidth = Math.min(100, (shop.platformFee / (maxFee || 1)) * 100);
+
+                return (
+                  <div key={shop.id} className="space-y-1.5">
+                    <div className="flex justify-between items-center text-xs font-semibold">
+                      <span className="truncate max-w-[170px] text-slate-800">
+                        <span className="text-[#367ADF] font-bold mr-1">#{idx + 1}</span> {shop.shop_name}
+                      </span>
+                      <span className="font-mono text-[#367ADF] font-bold">
+                        ฿{shop.platformFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-[#367ADF] h-full rounded-full transition-all duration-500"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-6 text-slate-400 text-xs">
+                ไม่พบข้อมูลร้านค้าในช่วงเวลานี้
+              </div>
+            )}
+          </div>
+
+          <p className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100">
+            คำนวณจากค่าธรรมเนียมสุทธิที่เข้าสู่ระบบจริง
+          </p>
+        </div>
       </div>
 
       {/* Table Section */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs relative">
-        {loading && (
-          <div className="absolute inset-0 bg-white/60 backdrop-blur-3xs z-10 flex items-center justify-center">
-            <div className="flex items-center gap-2 bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-md">
-              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-                <path d="M21 3v5h-5" />
-              </svg>
-              <span>กำลังดึงข้อมูลล่าสุด...</span>
-            </div>
-          </div>
-        )}
-
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
         <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">สรุปรายได้ระบบ (Revenue Breakdown)</h3>
+            <h3 className="text-sm font-bold text-[#353A4C]">สรุปรายได้ระบบ (Revenue Breakdown)</h3>
             <p className="text-xs text-slate-500 mt-0.5">สลับการแสดงผลแบบรวมร้านค้าหรือแยกตามรายออเดอร์ได้</p>
           </div>
 
@@ -307,7 +475,7 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
               <button
                 onClick={() => setViewMode("byShop")}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  viewMode === "byShop" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  viewMode === "byShop" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 รวมตามร้านค้า ({shopRevenues.length})
@@ -315,20 +483,21 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
               <button
                 onClick={() => setViewMode("byOrder")}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  viewMode === "byOrder" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  viewMode === "byOrder" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 แยกรายออเดอร์ ({allOrders.length})
               </button>
             </div>
 
+            {/* 🔤 Dropdown เลือกดูร้านค้าแบบเรียงตาม ก-ฮ */}
             <select
               value={selectedShopId}
               onChange={(e) => setSelectedShopId(e.target.value)}
               className="bg-slate-100 text-xs px-3 py-1.5 rounded-xl border border-slate-200 font-semibold text-slate-700 outline-none cursor-pointer hover:bg-slate-200 transition-all"
             >
               <option value="all">ร้านค้าทั้งหมด</option>
-              {shopRevenues.map((shop) => (
+              {sortedShopOptions.map((shop) => (
                 <option key={shop.id} value={shop.id}>
                   {shop.shop_name}
                 </option>
@@ -401,7 +570,7 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
                     <tr key={order.payment_id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="p-3.5 pl-5">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-blue-600">#{order.order_no}</span>
+                          <span className="font-mono font-bold text-[#367ADF]">#{order.order_no}</span>
                           {order.is_small_order ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
                               Small Order
@@ -457,7 +626,7 @@ export default function OwnerDashboard({ onLogout }: OwnerDashboardProps) {
                 onClick={() => setCurrentPage(page)}
                 className={`w-8 h-8 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   currentPage === page
-                    ? "bg-blue-600 text-white shadow-xs"
+                    ? "bg-[#353A4C] text-white shadow-2xs"
                     : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
                 }`}
               >

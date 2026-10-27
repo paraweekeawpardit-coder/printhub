@@ -6,6 +6,11 @@ import * as Home from "../controller/Shop/home.js";
 import * as Detail from "../controller/Shop/detail.js";
 import * as Order from "../controller/Shop/order.js";
 import * as Setting from "../controller/Shop/setting.js";
+// ส่วน import ด้านบนสุด (ปรับ path ให้ตรงกับที่วาง slip.ts)
+import { getSlipInfo } from "../controller/Shop/Slip.js";
+
+// ส่วนประกาศ route วางใกล้ๆ route /orders/:id/verify-payment
+
 
 import { authenticate, requireShop } from "../middleware/Auth.js";
 import {
@@ -87,5 +92,7 @@ router.post("/services", ...shopOnly, Setting.saveShopServices); // shop_id อ�
 // ===== Reviews & Complaints Actions =====
 router.post("/reviews/:reviewId/reply", ...shopOnly, Home.replyReview);
 router.post("/reviews/:reviewId/report", ...shopOnly, Home.reportReview);
+
+router.get("/orders/:id/slip-info", getSlipInfo);
 
 export default router;

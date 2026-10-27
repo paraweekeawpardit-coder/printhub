@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { io, Socket } from "socket.io-client";
+import io from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { supabase } from "@/config/supabase";
 import { Paperclip, X, Lock, Loader2, Download, ExternalLink, Trash2, Ban } from "lucide-react";
 

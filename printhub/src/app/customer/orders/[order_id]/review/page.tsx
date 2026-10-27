@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, ChangeEvent } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { splitSpecText } from "../../../../../component/customer/pageSelection";
 import {
   Star,
   Copy,
@@ -11,6 +12,14 @@ import {
   AlertCircle,
   CheckCircle2,
 } from "lucide-react";
+
+// order_date เก็บเป็นเวลา UTC แต่ไม่มี "Z" ต่อท้าย ต้องเติมเองก่อนแปลง ไม่งั้นเบราว์เซอร์จะอ่านเป็นเวลาไทยและคลาดไป 7 ชม.
+const parseUtcDate = (value: string) => {
+  let cleaned = String(value).trim().replace(" ", "T");
+  if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(cleaned)) cleaned += "Z";
+  return new Date(cleaned);
+};
+
 
 interface OrderItem {
   id?: string | number;
@@ -362,7 +371,8 @@ export default function OrderReviewPage() {
             <p className="text-xs text-slate-400 mt-0.5">
               สั่งซื้อเมื่อ:{" "}
               {orderData?.order_date
-                ? new Date(orderData.order_date).toLocaleString("th-TH", {
+                ? parseUtcDate(orderData.order_date).toLocaleString("th-TH", {
+                      timeZone: "Asia/Bangkok",
                   day: "numeric",
                   month: "numeric",
                   year: "numeric",
@@ -408,9 +418,9 @@ export default function OrderReviewPage() {
                           <span className="text-slate-700 font-medium">
                             {idx + 1}. {item.category || "งานพิมพ์"} <span className="text-slate-400 font-normal">(x{item.quantity})</span>
                           </span>
-                          {item.describe && (
+                          {splitSpecText(item.describe).length > 0 && (
                             <span className="text-[10px] text-slate-400">
-                              {item.describe}
+                              {splitSpecText(item.describe).join(" | ")}
                             </span>
                           )}
                         </div>

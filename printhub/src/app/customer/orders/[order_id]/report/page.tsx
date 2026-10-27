@@ -10,6 +10,14 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
+// order_date เก็บเป็นเวลา UTC แต่ไม่มี "Z" ต่อท้าย ต้องเติมเองก่อนแปลง ไม่งั้นเบราว์เซอร์จะอ่านเป็นเวลาไทยและคลาดไป 7 ชม.
+const parseUtcDate = (value: string) => {
+  let cleaned = String(value).trim().replace(" ", "T");
+  if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(cleaned)) cleaned += "Z";
+  return new Date(cleaned);
+};
+
+
 interface OrderItem {
   id?: string | number;
   quantity: number;
@@ -374,7 +382,8 @@ export default function RefundRequestPage() {
                 <p className="text-xs text-slate-400 mt-0.5">
                   สั่งซื้อเมื่อ:{" "}
                   {orderData?.order_date
-                    ? new Date(orderData.order_date).toLocaleString("th-TH", {
+                    ? parseUtcDate(orderData.order_date).toLocaleString("th-TH", {
+                      timeZone: "Asia/Bangkok",
                       day: "numeric",
                       month: "numeric",
                       year: "numeric",
