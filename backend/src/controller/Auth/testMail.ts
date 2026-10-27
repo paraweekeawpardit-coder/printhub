@@ -7,7 +7,7 @@ import bcrypt from "bcrypt";
 import { passwordPolicyError } from "./Validator.js";
 
 // โดเมนจริงของหน้าเว็บ (ใช้เป็นค่า default เมื่อไม่ได้ตั้ง FRONTEND_URL)
-const DEFAULT_FRONTEND_URL = "https://printhub.cskmitl.com";
+const DEFAULT_FRONTEND_URL = "https://printhub.cskmitl.com/";
 
 // สร้าง transporter ตอนเรียกใช้จริง (ไม่ใช่ตอน import ไฟล์)
 // เดิมสร้างตอน import: ถ้า dotenv ยังไม่ถูกโหลด ค่า user/pass จะเป็น undefined แล้วส่งเมลไม่ได้
