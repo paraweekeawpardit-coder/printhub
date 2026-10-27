@@ -36,19 +36,7 @@ export const getCart = async (req: Request, res: Response) => {
         id,
         customer_id,
         shop_id,
-        cart_item (
-          id,
-          category,
-          selected_size,
-          color_type,
-          paper_type,
-          finishing_option,
-          quantity,
-          unit_price,
-          subtotal,
-          file_url,
-          page_count
-        )
+        cart_item (*)
       `)
       .eq("customer_id", customerId);
 
@@ -175,6 +163,7 @@ export const addToCart = async (req: Request, res: Response) => {
       file_url,
       total_pages,
       page_count,
+      page_selection,
     } = req.body;
 
     const actualCustomerId = (req as any).user?.id || customer_id;
@@ -241,6 +230,8 @@ export const addToCart = async (req: Request, res: Response) => {
       // subtotal: calculatedSubtotal,
       page_count: calculatedPages,
       total_pages: calculatedPages,
+      // หน้าที่เลือกพิมพ์ (JSON) ใส่เฉพาะเมื่อลูกค้าเลือกบางหน้า
+      ...(page_selection ? { page_selection } : {}),
     };
 
     console.log("กำลัง Insert cart_item:", itemPayload);

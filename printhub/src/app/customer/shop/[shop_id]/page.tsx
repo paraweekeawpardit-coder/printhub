@@ -8,6 +8,7 @@ import NavBar from "../../../../component/customer/NavBar";
 import ShopHeaderCard from "../../../../component/customer/shop/ShopHeaderCard";
 import ServiceMenuGrid, { ServiceType } from "../../../../component/customer/shop/ServiceMenuGrid";
 import ServiceOptionModal from "../../../../component/customer/shop/ServiceOptionModal";
+import { formatPageSelection } from "../../../../component/customer/pageSelection";
 import ShopCartDrawer, { CartItem } from "../../../../component/customer/shop/ShopCartDrawer";
 import ShopCartBottomBar from "../../../../component/customer/shop/ShopCartBottomBar";
 import ShopBackButton from "../../../../component/customer/shop/ShopBackButton";
@@ -155,6 +156,8 @@ export default function ShopMainPage() {
         subtotal: itemPayload.subtotal || unitPrice * qty,
         total_pages: extractedPages,
         page_count: extractedPages,
+        // หน้าที่เลือกพิมพ์ (JSON) — ส่งเฉพาะเมื่อลูกค้าเลือกบางหน้า
+        ...(itemPayload.page_selection ? { page_selection: itemPayload.page_selection } : {}),
       };
 
       // หากเป็นการแก้ไข ให้ลบรายการเดิมออกก่อนแล้วเพิ่มตัวใหม่
@@ -283,7 +286,13 @@ export default function ShopMainPage() {
       return {
         fileName: item.category || "งานพิมพ์เอกสาร",
         // สเปกรวมเป็นบรรทัดเดียว (เหมือน describe ที่ backend บันทึก)
-        paperSize: [item.selected_size, item.color_type, item.paper_type, item.finishing_option]
+        paperSize: [
+          item.selected_size,
+          item.color_type,
+          item.paper_type,
+          item.finishing_option,
+          formatPageSelection(item.page_selection),
+        ]
           .filter(Boolean)
           .join(" | "),
         colorType: "",

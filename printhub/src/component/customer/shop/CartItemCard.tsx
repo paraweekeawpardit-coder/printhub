@@ -3,6 +3,7 @@
 import React from "react";
 import { Trash2, Pencil, Paperclip, ExternalLink } from "lucide-react";
 import { CartItem } from "./ShopCartDrawer";
+import { pageSelectionTags } from "../pageSelection";
 
 interface CartItemCardProps {
   item: CartItem;
@@ -37,7 +38,13 @@ export default function CartItemCard({
     : [];
 
   // ไม่แสดงค่า "ไม่มี" (ลูกค้าไม่ได้เลือกตัวเลือกนั้น)
-  const specs = [item.selected_size, item.color_type, item.paper_type, item.finishing_option].filter(
+  const specs = [
+    item.selected_size,
+    item.color_type,
+    item.paper_type,
+    item.finishing_option,
+    ...pageSelectionTags((item as any).page_selection),
+  ].filter(
     (s) => s && String(s).trim() && String(s).trim() !== "ไม่มี"
   );
 
@@ -78,7 +85,10 @@ export default function CartItemCard({
               className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-50 hover:bg-blue-50 border border-slate-100 hover:border-blue-200 text-[11px] text-slate-700 hover:text-blue-700 transition group"
             >
               <Paperclip className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 shrink-0" />
-              <span className="truncate flex-1 min-w-0">{fileNameFromUrl(url, `ไฟล์ที่ ${fIdx + 1}`)}</span>
+              <span className="truncate flex-1 min-w-0">
+                {fileUrls.length > 1 && <span className="font-semibold">ไฟล์ {fIdx + 1}: </span>}
+                {fileNameFromUrl(url, `ไฟล์ที่ ${fIdx + 1}`)}
+              </span>
               <ExternalLink className="w-3 h-3 text-slate-300 group-hover:text-blue-500 shrink-0" />
             </a>
           ))}

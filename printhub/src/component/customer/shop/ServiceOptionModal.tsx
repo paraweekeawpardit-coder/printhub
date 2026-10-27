@@ -8,6 +8,7 @@ import supabase from "@/config/supabase";
 import DocumentUploadPreview, { UploadedFileInfo } from "./DocumentUploadPreview";
 import ServiceOptionForm from "./ServiceOptionForm";
 import ServiceOptionFooter from "./ServiceOptionFooter";
+import { compactPages, parsePageRange, readPageSelection, FilePageSelection } from "../pageSelection";
 
 let pdfjsLib: any = null;
 if (typeof window !== "undefined") {
@@ -117,6 +118,10 @@ export default function ServiceOptionModal({
         .map((u: string) => u.trim())
         .filter(Boolean);
 
+      // หน้าที่เลือกพิมพ์ไว้เดิม (เรียงตามลำดับไฟล์)
+      const savedSelection = readPageSelection(initialItem.page_selection);
+      const hasSavedSelection = savedSelection.length === urls.length;
+
       const existingItems: UploadedFileInfo[] = urls.map((url: string, index: number) => {
         const cleanName =
           url.split("/").pop()?.split("?")[0] ||
@@ -128,14 +133,18 @@ export default function ServiceOptionModal({
         const pageCount =
           urls.length > 1 ? Math.max(1, Math.round(totalP / urls.length)) : totalP;
 
+        const saved = hasSavedSelection ? savedSelection[index] : null;
+
         return {
           file: new File([""], cleanName, {
             type: isPdf ? "application/pdf" : "image/jpeg",
           }),
           previewUrl: url,
-          pageCount,
+          pageCount: saved?.pages_total ? Number(saved.pages_total) : pageCount,
           isPdf,
           isImage,
+          printAll: saved ? saved.print_all !== false : true,
+          pageRange: saved && saved.print_all === false ? saved.range : "",
         };
       });
 
@@ -150,18 +159,40 @@ export default function ServiceOptionModal({
     return requiredGroups.filter((g) => !modalOptions[g]);
   }, [requiredGroups, modalOptions]);
 
+  // เลือกหน้าที่ต้องการพิมพ์ (เฉพาะงานเอกสาร ไฟล์ที่มีมากกว่า 1 หน้า)
+  const isCustomPages = (f: UploadedFileInfo) =>
+    isMultiPageService && f.pageCount > 1 && f.printAll === false;
+
+  const pageInfo = useMemo(
+    () =>
+      uploadedFiles.map((f) => {
+        if (!isCustomPages(f)) return { error: "", selected: f.pageCount, pages: [] as number[] };
+        const { pages, error } = parsePageRange(f.pageRange || "", f.pageCount);
+        return { error, selected: error ? 0 : pages.length, pages };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [uploadedFiles, isMultiPageService]
+  );
+  const hasPageError = pageInfo.some((p) => p.error);
+
+  const handleChangePageSelection = (index: number, patch: { printAll?: boolean; pageRange?: string }) => {
+    setUploadedFiles((prev) => prev.map((f, i) => (i === index ? { ...f, ...patch } : f)));
+  };
+
   const hasExistingFile = Boolean(initialItem?.file_url);
   const canAddToCart =
     (uploadedFiles.length > 0 || hasExistingFile) &&
     missingGroups.length === 0 &&
+    !hasPageError &&
     !isUploading;
 
+  // จำนวนหน้าที่จะพิมพ์จริง (นับเฉพาะหน้าที่เลือก)
   const totalPages = useMemo(() => {
     if (uploadedFiles.length === 0) {
       return Number(initialItem?.total_pages || initialItem?.page_count) || 1;
     }
-    return uploadedFiles.reduce((sum, f) => sum + f.pageCount, 0);
-  }, [uploadedFiles, initialItem]);
+    return pageInfo.reduce((sum, p) => sum + p.selected, 0);
+  }, [uploadedFiles, initialItem, pageInfo]);
 
   const handleToggleOption = (group: string, opt: OptionItem) => {
     setModalOptions((prev) => {
@@ -364,6 +395,25 @@ export default function ServiceOptionModal({
           ? finalFileUrls.join(", ")
           : initialItem?.file_url || "";
 
+      // หน้าที่เลือกพิมพ์ เรียงตามลำดับเดียวกับ file_url (ไฟล์เดิมก่อน แล้วตามด้วยไฟล์ใหม่)
+      const indexed = uploadedFiles.map((f, i) => ({ f, i }));
+      const orderedFiles = [
+        ...indexed.filter(({ f }) => f.file.size === 0),
+        ...indexed.filter(({ f }) => f.file.size > 0),
+      ];
+      const selectionList: FilePageSelection[] = orderedFiles.map(({ f, i }) => {
+        const custom = isCustomPages(f);
+        return {
+          pages_total: f.pageCount,
+          print_all: !custom,
+          range: custom ? compactPages(pageInfo[i].pages) : "",
+          selected: pageInfo[i].selected,
+        };
+      });
+      const pageSelection = selectionList.some((sel) => !sel.print_all)
+        ? JSON.stringify(selectionList)
+        : null;
+
       const submitFn = mode === "buy" && onBuyNow ? onBuyNow : onAddToCart;
       submitFn({
         category: serviceTypeName,
@@ -381,6 +431,7 @@ export default function ServiceOptionModal({
         page_count: totalPages,
         total_pages: totalPages,
         pages_per_set: totalPages,
+        page_selection: pageSelection,
       });
     } catch (err: any) {
       setFileError(err.message || "เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
@@ -426,6 +477,9 @@ export default function ServiceOptionModal({
             isMultiPageService={isMultiPageService}
             onFileChange={handleFileChange}
             onRemoveFile={handleRemoveFile}
+            onChangePageSelection={handleChangePageSelection}
+            pageErrors={pageInfo.map((p) => p.error)}
+            selectedPageCounts={pageInfo.map((p) => p.selected)}
           />
 
           <ServiceOptionForm
@@ -446,6 +500,7 @@ export default function ServiceOptionModal({
           hasUploadedFiles={uploadedFiles.length > 0 || hasExistingFile}
           missingGroups={missingGroups}
           canAddToCart={canAddToCart}
+          blockingMessage={hasPageError ? "กรุณาระบุหน้าที่ต้องการพิมพ์ให้ถูกต้องเพื่อดูราคา" : ""}
           isUploading={isUploading}
           onSubmit={() => handleSubmit("cart")}
           // ตอนแก้ไขรายการในตะกร้า ไม่มีปุ่มสั่งทันที

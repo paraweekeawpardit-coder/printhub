@@ -6,7 +6,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Printer, CheckCircle2, Loader2, Check } from "lucide-react";
 
@@ -165,9 +165,10 @@ export default function CustomerDashboardView({
     return dbState || "รอการชำระเงิน";
   };
 
-  const fetchDashboardData = useCallback(async (cid: string) => {
+  // silent = ดึงข้อมูลใหม่เบื้องหลัง (ไม่ขึ้นหน้าโหลด ไม่ปิด popup / แท็บที่เลือกอยู่)
+  const fetchDashboardData = useCallback(async (cid: string, silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetch(`http://localhost:5000/api/customer/dashboard?customer_id=${cid}`, {
         cache: "no-store",
       });
@@ -182,7 +183,7 @@ export default function CustomerDashboardView({
     } catch (err) {
       console.error("Load dashboard error:", err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -195,11 +196,33 @@ export default function CustomerDashboardView({
     fetchDashboardData(cid);
   }, [router, fetchDashboardData]);
 
+  // อัปเดตสถานะอัตโนมัติ: ดึงใหม่ทุก 20 วินาที (เฉพาะตอนเปิดแท็บนี้อยู่) และทันทีที่กลับมาที่แท็บ
+  useEffect(() => {
+    const cid = localStorage.getItem("customer_id") || localStorage.getItem("id");
+    if (!cid || cid.startsWith("customer_")) return;
+
+    const refresh = () => {
+      if (document.visibilityState === "visible") fetchDashboardData(cid, true);
+    };
+    const timer = window.setInterval(refresh, 20000);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [fetchDashboardData]);
+
+  // ไฮไลต์ออเดอร์แค่ครั้งแรก (ไม่ให้เลื่อนหน้าซ้ำทุกครั้งที่ข้อมูลอัปเดต)
+  const highlightDoneRef = useRef(false);
+
   // ปรับกรอบไฮไลต์เมื่อมี highlightOrderId เข้ามา
   useEffect(() => {
-    if (!loading && highlightOrderId && orders.length > 0) {
+    if (!loading && highlightOrderId && orders.length > 0 && !highlightDoneRef.current) {
       const targetOrder = orders.find((o) => String(o.id) === String(highlightOrderId));
       if (targetOrder) {
+        highlightDoneRef.current = true;
         setTimeout(() => {
           const element = document.getElementById(`order-${highlightOrderId}`);
           if (element) {
