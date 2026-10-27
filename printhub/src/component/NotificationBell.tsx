@@ -10,7 +10,6 @@ interface NotificationBellProps {
   role: "customer" | "shop" | "admin";
 }
 
-// ฟังก์ชันช่วยลบอิโมจิสายฟ้าออกจากข้อความ Title เพื่อไม่ให้แสดงซ้ำกับไอคอน
 const cleanTitle = (title: string = "") => {
   return title.replace(/⚡/g, "").trim();
 };
@@ -21,7 +20,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
   
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ดึง notifications, unreadCount, loading, markAsRead และ markAllAsRead จาก Hook
   const notificationHook = useNotifications(userId, role);
   const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = notificationHook;
 
@@ -49,7 +47,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     };
   }, [isOpen]);
 
-  // ฟังก์ชันเมื่อคลิกที่การแจ้งเตือนแต่ละรายการ
   const handleNotificationClick = async (noti: any) => {
     if (!noti.is_read) {
       await markAsRead(noti.id);
@@ -57,7 +54,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
     setIsOpen(false);
 
-    // 1. ถ้ามี link ตรงๆ ให้เด้งไป link นั้น
     if (noti.link) {
       router.push(noti.link);
       return;
@@ -65,26 +61,35 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
     const orderId = noti.order_id;
     const type = noti.type;
+    const title = noti.title || "";
+    const message = noti.message || "";
 
-    // 2. Routing แยกตาม Role
+    // 🟢 Routing แยกตาม Role และคำค้นหาในข้อความ
     if (role === "admin") {
       if (
         type === "shop_appeal" ||
         type === "contact_admin" ||
-        noti.title?.includes("ปลดระงับ") ||
-        noti.message?.includes("ปลดระงับ")
+        title.includes("ปลดระงับ") ||
+        message.includes("ปลดระงับ")
       ) {
         router.push("/admin/shops?tab=appeals");
       } else if (
+        title.includes("รีวิว") || 
+        message.includes("รีวิว")
+      ) {
+        // 🟢 กรณีเป็นรายงานรีวิวไม่เหมาะสม ให้ไปที่ category=review
+        router.push("/admin/reports?category=review");
+      } else if (
+        type === "report" ||
         type === "report_issue" || 
-        noti.title?.includes("ร้องเรียน") || 
-        noti.title?.includes("รายงาน") ||
-        noti.title?.includes("แจ้งปัญหา")
+        title.includes("ร้องเรียน") || 
+        title.includes("รายงาน") ||
+        title.includes("แจ้งปัญหา")
       ) {
         if (orderId) {
-          router.push(`/admin/reports?search=${orderId}`);
+          router.push(`/admin/reports?category=refund&search=${orderId}`);
         } else {
-          router.push("/admin/reports");
+          router.push("/admin/reports?category=refund");
         }
       } else {
         router.push("/admin/support");
@@ -100,7 +105,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     }
   };
 
-  // ฟังก์ชันสำหรับกด "อ่านทั้งหมด"
   const handleMarkAllRead = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (unreadCount === 0) return;
@@ -110,7 +114,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     }
   };
 
-  // ฟังก์ชันแปลงเวลา
   const formatDate = (dateStr: string) => {
     try {
       if (!dateStr) return "";
@@ -138,7 +141,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* ปุ่มกระดิ่ง */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`relative p-2 rounded-full transition-all cursor-pointer focus:outline-none ${
@@ -156,10 +158,8 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
         )}
       </button>
 
-      {/* Dropdown แสดงรายการแจ้งเตือน */}
       {isOpen && (
         <div className="fixed right-3 left-3 sm:left-auto sm:right-0 sm:absolute top-16 sm:top-full mt-0 sm:mt-2 sm:w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 text-slate-800 overflow-hidden font-sans">
-          {/* Header ด้านบนพร้อมปุ่มอ่านทั้งหมด */}
           <div className="p-3.5 border-b border-slate-100 font-bold text-xs sm:text-sm flex justify-between items-center bg-slate-50/80">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <span className="text-slate-800">การแจ้งเตือน</span>

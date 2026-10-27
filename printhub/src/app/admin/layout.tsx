@@ -12,11 +12,10 @@ const kanit = Kanit({
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <div className={`min-h-screen bg-slate-50 ${kanit.className} flex flex-col overflow-x-hidden`}>
-      {/* Component Navbar */}
+    /* 🟢 กำหนด overflow-x-hidden เพื่อล็อคขอบจอใหญ่ ไม่ให้เกิด Scrollbar ล่างสุด */
+    <div className={`min-h-screen w-full bg-slate-50 ${kanit.className} flex flex-col overflow-x-hidden`}>
       <AdminNavbar />
 
-      {/* Main Container: ปรับ Padding ให้เหมาะกับทั้งมือถือและจอคอม */}
       <main className="w-full mx-auto max-w-7xl px-2.5 sm:px-6 py-4 sm:py-8 flex-1">
         {children}
       </main>

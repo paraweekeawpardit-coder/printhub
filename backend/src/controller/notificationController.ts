@@ -5,25 +5,30 @@ export const getNotifications = async (req: Request, res: Response) => {
   try {
     const { userId, role } = req.query;
 
-    // 🟢 1. เช็ก role เพื่อกำหนดคอลัมน์ที่จะ query ให้ถูกต้อง
-    let columnCheck = "customer_id";
-    if (role === "shop") {
-      columnCheck = "shop_id";
-    } else if (role === "admin") {
-      columnCheck = "admin_id";
-    }
-
-    // 🟢 2. สร้าง Query ดึงข้อมูล
     let query = supabase
       .from("notifications")
       .select("*")
       .order("created_at", { ascending: false });
 
-    // หากเป็น admin และไม่มี userId ส่งมา ให้ดึงแจ้งเตือนทั้งหมดของแอดมิน (not null)
-    if (role === "admin" && (!userId || userId === "null" || userId === "undefined")) {
-      query = query.not("admin_id", "is", null);
+    // 🟢 กรณีเป็น admin: ดึงแจ้งเตือนของตัวเอง + แจ้งเตือนกลางทั้งหมด (admin_id เป็น null หรือประเภท report/appeal)
+    if (role === "admin") {
+      if (userId && userId !== "null" && userId !== "undefined") {
+        query = query.or(
+          `admin_id.eq.${userId},admin_id.is.null,type.eq.report,type.eq.report_issue,type.eq.shop_appeal`
+        );
+      } else {
+        query = query.or(
+          `admin_id.not.is.null,admin_id.is.null,type.eq.report,type.eq.report_issue,type.eq.shop_appeal`
+        );
+      }
+    } else if (role === "shop") {
+      // 🟢 ฝั่งร้านค้า: ดึงเฉพาะ notification ที่มี shop_id ตรงกับ userId
+      // และประเภทไม่ใช่แจ้งเตือนแอดมิน (report_issue)
+      query = query
+        .eq("shop_id", userId as string)
+        .neq("type", "report_issue");
     } else {
-      query = query.eq(columnCheck, userId as string);
+      query = query.eq("customer_id", userId as string);
     }
 
     const { data, error } = await query;

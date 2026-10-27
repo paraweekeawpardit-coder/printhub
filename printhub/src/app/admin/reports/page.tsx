@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ReportStats from "../../../component/admin/ReportStats";
 import ReportTable, { ReportItem } from "../../../component/admin/ReportTable";
 import ReportImageModal from "../../../component/admin/ReportImageModal";
@@ -8,22 +9,44 @@ import ReportDetailModal, { ReportDetailItem } from "../../../component/admin/Re
 import ReviewReportDetailModal, { ReviewReportDetailItem } from "../../../component/admin/ReviewReportDetailModal";
 
 export default function ReportsAdminPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // 🟢 อ่านค่าจาก URL เพื่อใช้เป็นค่าเริ่มต้น เมื่อกด Refresh จะได้อยู่ที่แท็บเดิม
+  const initialCategory = (searchParams.get("category") as "refund" | "review") || "refund";
+  const initialFilter = (searchParams.get("filter") as "all" | "pending" | "investigating" | "resolved") || "all";
+
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   
-  // State สลับประเภทการรายงาน (ขอคืนเงิน vs รายงานรีวิว)
-  const [category, setCategory] = useState<"refund" | "review">("refund");
-  
-  // State กรองสถานะ
-  const [filter, setFilter] = useState<"all" | "pending" | "investigating" | "resolved">("all");
+  const [category, setCategory] = useState<"refund" | "review">(initialCategory);
+  const [filter, setFilter] = useState<"all" | "pending" | "investigating" | "resolved">(initialFilter);
   const [search, setSearch] = useState("");
   const [selectedImageReport, setSelectedImageReport] = useState<ReportItem | null>(null);
 
-  // Modal State แยกตามประเภทรายงาน
   const [selectedDetailReport, setSelectedDetailReport] = useState<ReportDetailItem | null>(null);
   const [selectedReviewReport, setSelectedReviewReport] = useState<ReviewReportDetailItem | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
+
+  // 🟢 ฟังก์ชันสำหรับอัปเดต URL เมื่อมีการเปลี่ยน Category หรือ Filter
+  const updateQueryParams = (newCategory: "refund" | "review", newFilter: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("category", newCategory);
+    params.set("filter", newFilter);
+    router.replace(`/admin/reports?${params.toString()}`, { scroll: false });
+  };
+
+  const handleCategoryChange = (newCategory: "refund" | "review") => {
+    setCategory(newCategory);
+    setFilter("all");
+    updateQueryParams(newCategory, "all");
+  };
+
+  const handleFilterChange = (newFilter: "all" | "pending" | "investigating" | "resolved") => {
+    setFilter(newFilter);
+    updateQueryParams(category, newFilter);
+  };
 
   const fetchReports = useCallback(async () => {
     try {
@@ -35,7 +58,29 @@ export default function ReportsAdminPage() {
       }
 
       const data = await res.json();
-      setReports(Array.isArray(data) ? data : []);
+      
+      const formattedData = (Array.isArray(data) ? data : []).map((item: any) => {
+        const reviewText =
+          item.review_comment ||
+          item.comment ||
+          item.review_text ||
+          item.review?.comment ||
+          item.review?.review_comment ||
+          "";
+
+        return {
+          ...item,
+          review_comment: reviewText,
+          customer_name:
+            item.customer_name ||
+            (item.customer ? `${item.customer.first_name || ""} ${item.customer.last_name || ""}`.trim() : "") ||
+            item.customer?.name ||
+            "-",
+          shop_name: item.shop_name || item.print_shop?.shop_name || item.shop?.shop_name || "-",
+        };
+      });
+
+      setReports(formattedData);
     } catch (error) {
       console.error("Error fetching reports from API:", error);
       setReports([]);
@@ -48,7 +93,11 @@ export default function ReportsAdminPage() {
     fetchReports();
   }, [fetchReports]);
 
-  // ปุ่มกดรับเรื่องพิจารณา
+  const handleOpenChat = (targetType: "customer" | "shop", targetId?: string) => {
+    if (!targetId) return;
+    window.open(`/admin/support?type=${targetType}&id=${targetId}`, "_blank");
+  };
+
   const handleAcceptReport = async (id: string) => {
     try {
       const res = await fetch(`${API_URL}/reports/verify`, {
@@ -58,13 +107,20 @@ export default function ReportsAdminPage() {
       });
 
       if (!res.ok) throw new Error("Accept report failed");
+
+      if (selectedDetailReport && selectedDetailReport.id === id) {
+        setSelectedDetailReport((prev) => (prev ? { ...prev, status: "investigating" } : null));
+      }
+      if (selectedReviewReport && selectedReviewReport.id === id) {
+        setSelectedReviewReport((prev) => (prev ? { ...prev, status: "investigating" } : null));
+      }
+
       fetchReports();
     } catch (error) {
       console.error("Error accepting report:", error);
     }
   };
 
-  // บันทึกคำตัดสินรายงานคำสั่งซื้อ/คืนเงิน
   const handleResolveOrderReport = async (
     reportId: string,
     decision: "approved" | "rejected" | "resolved_refund" | "resolved_payout" | "hide_review",
@@ -92,24 +148,32 @@ export default function ReportsAdminPage() {
     }
   };
 
-  // บันทึกคำตัดสินรายงานรีวิวไม่เหมาะสม
   const handleResolveReviewReport = async (
     reportId: string,
     decision: "hide_review" | "rejected",
     adminNote: string
   ) => {
     try {
+      const currentReport = reports.find((r) => r.id === reportId) as any;
+      const resolveDecision = decision === "hide_review" ? "hide_review" : "rejected";
+
       const res = await fetch(`${API_URL}/reports/resolve`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           report_id: reportId,
-          decision,
+          decision: resolveDecision,
           admin_note: adminNote,
+          refund_amount: 0,
+          review_id: currentReport?.review_id || currentReport?.review?.id,
         }),
       });
 
-      if (!res.ok) throw new Error("Resolve review report failed");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Backend Error Response:", errorData);
+        throw new Error(errorData.message || "Resolve review report failed");
+      }
 
       setSelectedReviewReport(null);
       fetchReports();
@@ -118,17 +182,29 @@ export default function ReportsAdminPage() {
     }
   };
 
-  // เปิด Modal รายละเอียดตามหมวดหมู่ประเภทรายงานที่เลือก
   const handleSelectReport = (report: ReportItem) => {
+    const rawReport = report as any;
     const isReview = report.issue_type === "รายงานรีวิวที่ไม่เหมาะสม" || Boolean(report.review_id);
+
     if (isReview) {
-      setSelectedReviewReport(report as unknown as ReviewReportDetailItem);
+      const reviewText =
+        rawReport.review_comment ||
+        rawReport.comment ||
+        rawReport.review_text ||
+        rawReport.review?.comment ||
+        "";
+
+      const reviewDetailItem: ReviewReportDetailItem = {
+        ...rawReport,
+        review_comment: reviewText,
+      };
+
+      setSelectedReviewReport(reviewDetailItem);
     } else {
       setSelectedDetailReport(report as unknown as ReportDetailItem);
     }
   };
 
-  // แยกรายการรายงานตามหมวดหมู่
   const categoryReports = reports.filter((item) => {
     if (category === "review") {
       return item.issue_type === "รายงานรีวิวที่ไม่เหมาะสม" || Boolean(item.review_id);
@@ -136,7 +212,6 @@ export default function ReportsAdminPage() {
     return item.issue_type !== "รายงานรีวิวที่ไม่เหมาะสม" && !item.review_id;
   });
 
-  // กรองตามสถานะและคำค้นหา
   const filteredReports = categoryReports.filter((item) => {
     const matchesFilter =
       filter === "all"
@@ -157,7 +232,6 @@ export default function ReportsAdminPage() {
     return matchesFilter && matchesSearch;
   });
 
-  // นับจำนวนสถิติตามหมวดหมู่
   const pendingCount = categoryReports.filter((r) => r.status === "pending" || !r.status).length;
   const investigatingCount = categoryReports.filter((r) => r.status === "investigating").length;
   const resolvedCount = categoryReports.filter(
@@ -165,8 +239,8 @@ export default function ReportsAdminPage() {
   ).length;
 
   return (
-    <div className="space-y-4 sm:space-y-6 font-sans p-2 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-4 sm:space-y-6 font-sans p-2 sm:p-6 lg:p-8">
+      <div className="w-full min-w-0 max-w-full space-y-4 sm:space-y-6">
         
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs">
@@ -179,13 +253,9 @@ export default function ReportsAdminPage() {
             </p>
           </div>
 
-          {/* Tab เลือกหมวดหมู่การรายงานหลัก (Responsive) */}
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full lg:w-auto gap-1">
             <button
-              onClick={() => {
-                setCategory("refund");
-                setFilter("all");
-              }}
+              onClick={() => handleCategoryChange("refund")}
               className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer text-center ${
                 category === "refund"
                   ? "bg-white text-slate-900 shadow-2xs"
@@ -198,10 +268,7 @@ export default function ReportsAdminPage() {
               <span>ขอคืนเงิน / ออเดอร์</span>
             </button>
             <button
-              onClick={() => {
-                setCategory("review");
-                setFilter("all");
-              }}
+              onClick={() => handleCategoryChange("review")}
               className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer text-center ${
                 category === "review"
                   ? "bg-white text-slate-900 shadow-2xs"
@@ -225,10 +292,9 @@ export default function ReportsAdminPage() {
 
         {/* Filter and Search Bar */}
         <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-          {/* Scrollable Filter Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
             <button
-              onClick={() => setFilter("all")}
+              onClick={() => handleFilterChange("all")}
               className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                 filter === "all" ? "bg-slate-900 text-white shadow-2xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
@@ -236,7 +302,7 @@ export default function ReportsAdminPage() {
               ทั้งหมด ({categoryReports.length})
             </button>
             <button
-              onClick={() => setFilter("pending")}
+              onClick={() => handleFilterChange("pending")}
               className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                 filter === "pending" ? "bg-amber-500 text-white shadow-2xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
@@ -244,7 +310,7 @@ export default function ReportsAdminPage() {
               รอดำเนินการ ({pendingCount})
             </button>
             <button
-              onClick={() => setFilter("investigating")}
+              onClick={() => handleFilterChange("investigating")}
               className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                 filter === "investigating" ? "bg-blue-600 text-white shadow-2xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
@@ -252,7 +318,7 @@ export default function ReportsAdminPage() {
               กำลังตรวจสอบ ({investigatingCount})
             </button>
             <button
-              onClick={() => setFilter("resolved")}
+              onClick={() => handleFilterChange("resolved")}
               className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                 filter === "resolved" ? "bg-emerald-600 text-white shadow-2xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
@@ -272,15 +338,17 @@ export default function ReportsAdminPage() {
           </div>
         </div>
 
-        {/* Data Table Component */}
-        <ReportTable
-          reports={filteredReports}
-          loading={loading}
-          category={category}
-          onSelectReport={handleSelectReport}
-          onAcceptReport={handleAcceptReport}
-          onOpenImage={(report) => setSelectedImageReport(report)}
-        />
+        {/* Component ตารางรายงาน */}
+        <div className="w-full min-w-0 max-w-full overflow-hidden">
+          <ReportTable
+            reports={filteredReports}
+            loading={loading}
+            category={category}
+            onSelectReport={handleSelectReport}
+            onAcceptReport={handleAcceptReport}
+            onOpenImage={(report) => setSelectedImageReport(report)}
+          />
+        </div>
 
         {/* Image Preview Modal */}
         <ReportImageModal
@@ -288,7 +356,7 @@ export default function ReportsAdminPage() {
           onClose={() => setSelectedImageReport(null)}
         />
 
-        {/* Order Report Detail Modal (สำหรับคืนเงิน/คำสั่งซื้อ) */}
+        {/* Order Report Detail Modal */}
         <ReportDetailModal
           report={selectedDetailReport}
           onClose={() => setSelectedDetailReport(null)}
@@ -296,11 +364,13 @@ export default function ReportsAdminPage() {
           onResolve={handleResolveOrderReport}
         />
 
-        {/* Review Report Detail Modal (สำหรับรายงานรีวิวไม่เหมาะสม) */}
+        {/* Review Report Detail Modal */}
         <ReviewReportDetailModal
           report={selectedReviewReport}
           onClose={() => setSelectedReviewReport(null)}
+          onAcceptReport={handleAcceptReport}
           onResolve={handleResolveReviewReport}
+          onOpenChat={handleOpenChat}
         />
 
       </div>

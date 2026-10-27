@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { RotateCw } from "lucide-react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 
+// 🟢 Import Shop type จาก ShopCard
 import { Shop } from "@/component/admin/ShopCard";
 import ShopDetailModal from "@/component/admin/ShopDetailModal";
 import { BankChangeRequest } from "@/component/admin/BankRequestCard";
@@ -86,7 +87,6 @@ function ShopsContent() {
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Filters & Pagination for All Shops Tab
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "APPROVED" | "SUSPENDED">("ALL");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "name_asc" | "name_desc">("newest");

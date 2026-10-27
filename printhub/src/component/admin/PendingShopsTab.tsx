@@ -2,39 +2,39 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
+// 🟢 Import ShopCard และ Shop type
 import ShopCard, { Shop } from "../../component/admin/ShopCard";
 import PaginationBar from "../../component/admin/PaginationBar";
 
 interface PendingShopsTabProps {
-  shops: Shop[];
+  shops?: Shop[]; // 🟢 ใส่ ? ป้องกัน undefined
   onVerify: (shop_id: string | number, action: "approve" | "reject") => void;
   onSelectShop: (shop: Shop) => void;
 }
 
 export default function PendingShopsTab({
-  shops,
+  shops = [], // 🟢 กำหนดค่าเริ่มต้นเป็น Array เปล่า
   onVerify,
   onSelectShop,
 }: PendingShopsTabProps) {
-  // State และการตั้งค่าระบบ Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 9; // แสดงผลหน้าละ 9 การ์ด
+  const itemsPerPage = 9;
 
-  // รีเซ็ตไปที่หน้า 1 เมื่อจำนวนรายการเปลี่ยน
+  const safeShops = Array.isArray(shops) ? shops : [];
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [shops.length]);
+  }, [safeShops.length]);
 
-  const totalItems = shops.length;
+  const totalItems = safeShops.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
 
-  // ตัดแบ่งข้อมูลเฉพาะของหน้าปัจจุบัน
   const paginatedShops = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    return shops.slice(startIndex, startIndex + itemsPerPage);
-  }, [shops, currentPage, itemsPerPage]);
+    return safeShops.slice(startIndex, startIndex + itemsPerPage);
+  }, [safeShops, currentPage, itemsPerPage]);
 
-  if (shops.length === 0) {
+  if (safeShops.length === 0) {
     return (
       <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-dashed border-slate-300 shadow-2xs font-sans">
         <div className="w-12 h-12 sm:w-14 sm:h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
@@ -52,7 +52,6 @@ export default function PendingShopsTab({
 
   return (
     <div className="space-y-3.5 sm:space-y-4 font-sans">
-      {/* ข้อความบอกจำนวนรายการ */}
       <div className="flex items-center justify-between text-xs sm:text-sm text-slate-500 font-medium px-1">
         <span>
           คำขอสมัครใหม่รอการตรวจสอบทั้งหมด <strong className="text-slate-800">{totalItems}</strong> รายการ
@@ -64,11 +63,10 @@ export default function PendingShopsTab({
         )}
       </div>
 
-      {/* แสดงการ์ดรายการร้านค้า */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-6">
         {paginatedShops.map((shop, i) => (
           <ShopCard
-            key={shop.id || (shop as any)._id || i}
+            key={shop.id || shop._id || i}
             shop={shop}
             onVerify={onVerify}
             onSelectShop={onSelectShop}
@@ -76,7 +74,6 @@ export default function PendingShopsTab({
         ))}
       </div>
 
-      {/* แสดงปุ่ม PaginationBar เมื่อมีรายการมากกว่า 1 หน้า */}
       {totalPages > 1 && (
         <div className="pt-2">
           <PaginationBar

@@ -213,8 +213,20 @@ export default function ShopPage() {
           });
         }
 
+        // 🟢 4. กรองรีวิวที่ถูกซ่อน (is_hidden === true) ออกจาก reviewData ก่อนบันทึกลง State
         if (reviewRes?.data) {
-          setReviewData(reviewRes.data);
+          const rawReviews = Array.isArray(reviewRes.data.reviews) ? reviewRes.data.reviews : [];
+          const rawComplaints = Array.isArray(reviewRes.data.complaints) ? reviewRes.data.complaints : [];
+
+          // คัดเฉพาะรีวิวที่ไม่ได้ถูกซ่อน และยังมีคอมเมนต์อยู่
+          const visibleReviews = rawReviews.filter(
+            (r: any) => !r.is_hidden && r.comment !== null && r.comment !== undefined
+          );
+
+          setReviewData({
+            reviews: visibleReviews,
+            complaints: rawComplaints,
+          });
         } else {
           setReviewData({ reviews: [], complaints: [] });
         }
@@ -269,7 +281,6 @@ export default function ShopPage() {
       );
     }
 
-    // โหลดข้อมูลใหม่ให้ตาราง/การ์ดอัปเดตตามสถานะล่าสุด
     await fetchDashboardData({ silent: true });
   };
 
@@ -289,7 +300,6 @@ export default function ShopPage() {
           },
         }
       );
-      // รีเฟรชข้อมูลในระบบทันที
       await fetchDashboardData({ silent: true });
     } catch (err: any) {
       throw new Error(
@@ -314,7 +324,6 @@ export default function ShopPage() {
           },
         }
       );
-      // รีเฟรชข้อมูลในระบบทันที
       await fetchDashboardData({ silent: true });
     } catch (err: any) {
       throw new Error(
@@ -406,7 +415,6 @@ export default function ShopPage() {
 
         {activeView === "reviews" && (
           <div className="mb-10">
-            {/* 🟢 ส่ง Props ฟังก์ชันตอบและรายงานรีวิวไปยัง ReviewComplaintModal */}
             <ReviewComplaintModal
               reviews={reviewData.reviews}
               complaints={reviewData.complaints}

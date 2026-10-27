@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { 
   Search, 
   User, 
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import io from "socket.io-client";
+import { useSearchParams } from "next/navigation";
 import ChatBox from "@/component/ChatBox"; 
 import { supabase } from "@/config/supabase";
 
@@ -27,7 +28,11 @@ interface SupportRoom {
   unreadCount?: number;
 }
 
-export default function AdminSupportPage() {
+function AdminSupportContent() {
+  const searchParams = useSearchParams();
+  const targetType = searchParams.get("type"); // "customer" | "shop"
+  const targetId = searchParams.get("id");     // ID ของลูกค้า หรือ ร้านค้า
+
   const [rooms, setRooms] = useState<SupportRoom[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<SupportRoom | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,17 +111,36 @@ export default function AdminSupportPage() {
       formattedRooms.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 
       setRooms(formattedRooms);
+      return formattedRooms;
     } catch (err) {
       console.error("Error loading support rooms:", err);
       setRooms([]);
+      return [];
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchRooms();
-  }, []);
+    fetchRooms().then((loadedRooms) => {
+      // 🟢 ตรวจหาและเลือกห้องแชตตาม URL Query Params อัตโนมัติเมื่อโหลดหน้าเสร็จ
+      if (targetId && targetType) {
+        const expectedRoomId = targetType === "shop" 
+          ? `support_shop_${targetId}` 
+          : `support_customer_${targetId}`;
+
+        const matchedRoom = loadedRooms.find(
+          (r) => r.roomId === expectedRoomId || r.senderId === targetId
+        );
+
+        if (matchedRoom) {
+          setSelectedRoom(matchedRoom);
+          if (targetType === "customer") setFilterType("customer");
+          if (targetType === "shop") setFilterType("shop");
+        }
+      }
+    });
+  }, [targetId, targetType]);
 
   // Realtime Socket.io — ดักฟังข้อความใหม่
   useEffect(() => {
@@ -208,7 +232,7 @@ export default function AdminSupportPage() {
       {/* Main Container */}
       <div className="flex-1 bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col md:flex-row min-h-0">
         
-        {/* 👈 ฝั่งซ้าย: รายชื่อผู้ติดต่อ (แสดงบนมือถือเมื่อยังไม่ได้เลือกห้อง) */}
+        {/* 👈 ฝั่งซ้าย: รายชื่อผู้ติดต่อ */}
         <div 
           className={`w-full md:w-80 lg:w-96 border-r border-slate-200 flex-col bg-slate-50/50 shrink-0 h-full min-h-0 ${
             selectedRoom ? "hidden md:flex" : "flex"
@@ -328,7 +352,7 @@ export default function AdminSupportPage() {
           </div>
         </div>
 
-        {/* 👉 ฝั่งขวา: กล่องแชต (แสดงเมื่อเลือกห้องแชตแล้ว หรือบนจอใหญ่) */}
+        {/* 👉 ฝั่งขวา: กล่องแชต */}
         <div 
           className={`flex-1 flex-col bg-white h-full min-w-0 overflow-hidden ${
             selectedRoom ? "flex" : "hidden md:flex"
@@ -339,7 +363,6 @@ export default function AdminSupportPage() {
               {/* Header ฝั่งขวาพร้อมปุ่มย้อนกลับบนมือถือ */}
               <div className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
                 <div className="flex items-center gap-2.5 sm:gap-3">
-                  {/* ปุ่มย้อนกลับสำหรับจอมือถือ */}
                   <button
                     onClick={() => setSelectedRoom(null)}
                     className="md:hidden p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
@@ -393,5 +416,13 @@ export default function AdminSupportPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function AdminSupportPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">กำลังโหลดระบบแชต...</div>}>
+      <AdminSupportContent />
+    </Suspense>
   );
 }
