@@ -157,11 +157,18 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
     // ออเดอร์ที่แอดมินอนุมัติคืนเงินจากคำร้อง นับเป็นรายการเสร็จสิ้นในฝั่งลูกค้า
     const completedCount = orderList.filter((o: any) => o.current_status?.state === "รายการเสร็จสิ้น" || o.report?.status === "resolved_refund").length;
 
+    // กล่องสถิติ "ข้อพิพาท/ขอคืนเงิน - รอการตรวจสอบ" นับเฉพาะคำร้องที่ยังรอแอดมิน
+    // (ไม่นับที่คืนเงินแล้ว / ไม่อนุมัติ / ลูกค้ายกเลิกเอง)
+    const pendingReportCount = reportList.filter((r: any) => {
+      const st = String(r.status || "pending").toLowerCase();
+      return st === "pending" || st === "investigating";
+    }).length;
+
     return res.status(200).json({
       success: true,
       data: {
         customer: { fullName: `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || customer.contact || "ลูกค้า" },
-        stats: { inProgress: inProgressCount, ready: readyCount, completed: completedCount, reports: reportList.length },
+        stats: { inProgress: inProgressCount, ready: readyCount, completed: completedCount, reports: pendingReportCount },
         orders: orderList, reports: reportList,
       },
     });
