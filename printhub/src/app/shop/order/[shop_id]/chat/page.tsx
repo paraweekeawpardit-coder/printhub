@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useParams, useRouter } from "next/navigation";
-import { MessageSquare, Lock, Search, X } from "lucide-react";
+import { MessageSquare, Lock, Search, X, ArrowLeft } from "lucide-react";
 import axios from "axios";
 import io from "socket.io-client";
 import ChatBox from "@/component/ChatBox";
@@ -104,7 +104,6 @@ export default function ShopChatPage() {
     try {
       setLoading(true);
 
-      // 🟢 เพิ่ม .eq("shop_id", rawShopId) เพื่อสโคปเฉพาะของร้านนี้เท่านั้น
       const { data: orders, error: orderErr } = await supabase
         .from("print_order")
         .select(`
@@ -117,14 +116,13 @@ export default function ShopChatPage() {
           status:current_status_id ( state ),
           customer:customer_id ( first_name, last_name )
         `)
-        .eq("shop_id", rawShopId); // 👈 แก้ไขจุดนี้เพื่อป้องกันข้อมูลร้านอื่นหลุด
+        .eq("shop_id", rawShopId);
 
       if (orderErr) {
         console.error("Order fetch error:", orderErr);
         return;
       }
 
-      // ดึงสรุปข้อความแชตจาก Express (MongoDB Collection messages)
       let mongoMap: Record<string, any> = {};
       try {
         const mongoRes = await axios.get(`${API_BASE}/api/chat/shop/rooms/${rawShopId}`);
@@ -156,7 +154,6 @@ export default function ShopChatPage() {
           };
         });
 
-        // 🟢 เรียงลำดับจากข้อความล่าสุดขึ้นบนสุด
         list.sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
 
         setOrderChats(list);
@@ -184,7 +181,7 @@ export default function ShopChatPage() {
     fetchShopChats();
   }, [rawOrderId, searchParams, rawShopId]);
 
-  // 🟢 2. Realtime Socket.io ดักฟัง receive_message แล้วดันขึ้นบนสุด + นับ Unread Count
+  // 🟢 2. Realtime Socket.io
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ["websocket", "polling"] });
 
@@ -310,10 +307,14 @@ export default function ShopChatPage() {
         </div>
       )}
 
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex gap-4 min-h-0 overflow-hidden">
+      <div className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-6 flex gap-4 min-h-0 overflow-hidden">
         
         {/* ================= ฝั่งซ้าย: รายการกล่องข้อความทั้งหมด ================= */}
-        <div className="w-1/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex flex-col min-h-0 overflow-hidden">
+        <div 
+          className={`w-full md:w-1/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex flex-col min-h-0 overflow-hidden ${
+            selectedOrderId ? "hidden md:flex" : "flex"
+          }`}
+        >
           <div className="flex justify-between items-center mb-3 px-1 shrink-0">
             <h2 className="text-base font-bold text-slate-800">
               กล่องข้อความทั้งหมด ({filteredOrderChats.length})
@@ -410,18 +411,30 @@ export default function ShopChatPage() {
         </div>
 
         {/* ================= ฝั่งขวา: ห้องแชต (ChatBox) ================= */}
-        <div className="w-2/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col min-h-0 overflow-hidden">
+        <div 
+          className={`w-full md:w-2/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col min-h-0 overflow-hidden ${
+            selectedOrderId ? "flex" : "hidden md:flex"
+          }`}
+        >
           {selectedOrderId ? (
             <>
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                <div>
+              <div className="p-3 sm:p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                <div className="flex items-center gap-2">
+                  {/* ปุ่มย้อนกลับสำหรับมือถือ */}
+                  <button
+                    onClick={() => setSelectedOrderId("")}
+                    className="md:hidden p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                    title="ย้อนกลับ"
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
                   <h3 className="font-bold text-slate-800 text-sm md:text-base">
                     ออเดอร์ #{currentSelectedOrder?.order_no || selectedOrderId.slice(0, 8)}
                   </h3>
                 </div>
                 {statusName && (
                   <span
-                    className={`text-xs font-medium px-3 py-1 rounded-lg border ${getStatusBadgeStyle(
+                    className={`text-xs font-medium px-2.5 py-1 rounded-lg border ${getStatusBadgeStyle(
                       statusName
                     )}`}
                   >

@@ -38,10 +38,12 @@ import {
 import {
   getCustomerDashboard,
   createReport,
-  checkOrderStatusReported
+  checkOrderStatusReported ,
+    cancelReport,
 } from '../controller/customerController.js';
 
 import { getCustomerProfile, updateCustomerProfile, changeCustomerPassword, uploadCustomerAvatar } from '../controller/settingController.js';
+
 
 const router = express.Router();
 
@@ -98,6 +100,9 @@ router.get("/dashboard", getCustomerDashboard);
 // Route ปรับสถานะออเดอร์
 router.put("/order/:id/cancel", cancelOrder);
 router.put("/order/:id/confirm-received", confirmReceivedOrder);
+
+// 🌟 Route สำหรับยกเลิกคำขอคืนเงิน / ข้อร้องเรียน
+router.put('/report/:id/cancel', cancelReport);
 
 // สร้าง Supabase client ฝั่ง Backend
 const supabase = createClient(

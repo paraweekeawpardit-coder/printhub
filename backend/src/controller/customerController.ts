@@ -94,7 +94,7 @@ export const getCustomerDashboard = async (req: Request, res: Response) => {
       if (isSlipRejected && order.current_status?.state !== "ยกเลิกการพิมพ์") {
         if (order.current_status) order.current_status.state = "รอการชำระเงิน";
       }
-        
+
 
       // เส้นตายชำระเงินต้องไม่เกินเวลานัดรับ (ใช้กับออเดอร์ที่ยังรอชำระเงิน รวมถึงสลิปโดนปฏิเสธ)
       // ส่งเส้นตายจริงกลับไปใน expires_at ให้หน้าเว็บนับถอยหลังถึงเวลานัดรับ (ไม่เขียนลง DB)
@@ -261,7 +261,7 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
       .select("id");
 
     const paymentId = payList?.[0]?.id || null;
-    const inProgressStatusId = "8c416cf8-140c-4563-a912-6a4a6c0a4d9f"; 
+    const inProgressStatusId = "8c416cf8-140c-4563-a912-6a4a6c0a4d9f";
 
     const { data: wsDataList } = await supabase.from("work_status").insert([{ order_id: targetOrderId, status_id: inProgressStatusId }]).select("id");
     const wsId = wsDataList?.[0]?.id || null;
@@ -445,5 +445,36 @@ export const getShopReviews = async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("Error in getShopReviews:", err);
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+// ตัวอย่างฟังก์ชัน cancelReport ใน Controller
+export const cancelReport = async (req: Request, res: Response) => {
+  try {
+    const reportId = req.params.id;
+
+    // อัปเดตสถานะในตาราง complaints หรือ reports ของ Supabase
+    const { data, error } = await supabase
+      .from('report') // หรือชื่อตารางเก็บคำร้องของคุณ
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('id', reportId)
+      .select();
+
+    if (error) {
+      throw error;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "ยกเลิกคำขอคืนเงินสำเร็จ",
+      data,
+    });
+  } catch (err: any) {
+    console.error("Cancel report error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "เกิดข้อผิดพลาดในการยกเลิกคำขอคืนเงิน",
+    });
   }
 };

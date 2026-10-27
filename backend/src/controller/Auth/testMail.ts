@@ -6,6 +6,9 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { passwordPolicyError } from "./Validator.js";
 
+// โดเมนจริงของหน้าเว็บ (ใช้เป็นค่า default เมื่อไม่ได้ตั้ง FRONTEND_URL)
+const DEFAULT_FRONTEND_URL = "https://printhub.cskmitl.com";
+
 // สร้าง transporter ตอนเรียกใช้จริง (ไม่ใช่ตอน import ไฟล์)
 // เดิมสร้างตอน import: ถ้า dotenv ยังไม่ถูกโหลด ค่า user/pass จะเป็น undefined แล้วส่งเมลไม่ได้
 let cachedTransporter: Transporter | null = null;
@@ -35,6 +38,28 @@ function getTransporter(): Transporter {
   });
 
   return cachedTransporter;
+}
+
+// อ่าน URL ของหน้าเว็บ
+// - ถ้าตั้ง FRONTEND_URL ไว้ -> ใช้ค่านั้น
+// - ถ้าไม่ตั้งและรันแบบ development -> localhost:3000
+// - นอกนั้น (cloud/production) -> https://printhub.cskmitl.com
+// จะได้ไม่มีทางส่งลิงก์ localhost ออกไปจาก server จริงอีก
+function getFrontendUrl(): string {
+  const fromEnv = process.env.FRONTEND_URL?.trim();
+
+  let url: string;
+  if (fromEnv) {
+    url = fromEnv;
+  } else if (process.env.NODE_ENV === "development") {
+    url = "http://localhost:3000";
+  } else {
+    url = DEFAULT_FRONTEND_URL;
+  }
+
+  // กันลืมใส่ https:// และตัด / ท้ายออก
+  const withProtocol = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  return withProtocol.replace(/\/+$/, "");
 }
 
 // escape ตัวอักษรพิเศษของ LIKE (% _ \) เพื่อใช้ ilike เทียบอีเมลแบบไม่สนตัวพิมพ์เล็ก/ใหญ่
@@ -182,7 +207,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<Respo
     const resetToken = createResetToken(userId, userType, passwordHash);
 
     // 5. ส่งอีเมลผ่าน Nodemailer
-    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+    const frontendUrl = getFrontendUrl();
     const resetUrl = `${frontendUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     const transporter = getTransporter();
@@ -203,7 +228,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<Respo
     });
 
     console.log(
-      `[forgotPassword] ส่งเมลถึง ${maskEmail(targetEmail)} (${userType}) messageId=${info.messageId} accepted=${JSON.stringify(info.accepted)} rejected=${JSON.stringify(info.rejected)}`
+      `[forgotPassword] ส่งเมลถึง ${maskEmail(targetEmail)} (${userType}) messageId=${info.messageId} accepted=${JSON.stringify(info.accepted)} rejected=${JSON.stringify(info.rejected)} link=${frontendUrl}/reset-password`
     );
 
     return res.status(200).json({

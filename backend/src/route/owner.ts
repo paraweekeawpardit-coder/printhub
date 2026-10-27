@@ -1,3 +1,4 @@
+import { getShopReviews, reportReview } from "../controller/reviewController.js";
 import express from 'express';
 import { 
   getOwnerStats, 
@@ -15,5 +16,8 @@ router.get('/shops/:shopId/orders', getOwnerShopOrders);
 
 // POST: เข้าสู่ระบบ Owner ด้วย Email + Password (เปลี่ยนจาก /verify-pin)
 router.post('/login', loginOwner);
+
+// เส้นทางสำหรับร้านค้ารายงานรีวิว
+router.post('/shop/report-review', reportReview);
 
 export default router;

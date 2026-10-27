@@ -15,6 +15,9 @@ export interface UploadedFileInfo {
   pageCount: number;
   isPdf: boolean;
   isImage: boolean;
+  // เลือกหน้าที่ต้องการพิมพ์ (เฉพาะไฟล์หลายหน้า): ไม่กำหนด/true = ทุกหน้า
+  printAll?: boolean;
+  pageRange?: string;
 }
 
 interface DocumentUploadPreviewProps {
@@ -28,6 +31,10 @@ interface DocumentUploadPreviewProps {
   isMultiPageService: boolean; // 👈 เพิ่มตัวแปรนี้เพื่อเช็คประเภทบริการ
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveFile: (index: number) => void;
+  // เลือกหน้าที่ต้องการพิมพ์ต่อไฟล์
+  onChangePageSelection?: (index: number, patch: { printAll?: boolean; pageRange?: string }) => void;
+  pageErrors?: string[];
+  selectedPageCounts?: number[];
 }
 
 export default function DocumentUploadPreview({
@@ -41,6 +48,9 @@ export default function DocumentUploadPreview({
   isMultiPageService,
   onFileChange,
   onRemoveFile,
+  onChangePageSelection,
+  pageErrors = [],
+  selectedPageCounts = [],
 }: DocumentUploadPreviewProps) {
   const currentPreviewFile = uploadedFiles[activePreviewIndex];
 
@@ -137,40 +147,105 @@ export default function DocumentUploadPreview({
             </span>
           </div>
 
-          <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
-            {uploadedFiles.map((item, idx) => (
-              <div
-                key={idx}
-                onClick={() => setActivePreviewIndex(idx)}
-                className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer transition ${
-                  activePreviewIndex === idx
-                    ? "bg-blue-50 border-blue-400 font-semibold shadow-2xs"
-                    : "bg-white border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <FileText className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="truncate text-slate-800">{item.file.name}</span>
-                </div>
+          <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+            {uploadedFiles.map((item, idx) => {
+              // เลือกหน้าได้เฉพาะงานเอกสาร และไฟล์ที่มีมากกว่า 1 หน้า
+              const canChoosePages = isMultiPageService && item.pageCount > 1 && Boolean(onChangePageSelection);
+              const isCustom = canChoosePages && item.printAll === false;
+              const pageError = pageErrors[idx] || "";
+              const selectedCount = selectedPageCounts[idx] ?? item.pageCount;
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
-                    {item.pageCount} หน้า
-                  </span>
-                  <button
-                    type="button"
-                    disabled={isUploading}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveFile(idx);
-                    }}
-                    className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+              return (
+                <div
+                  key={idx}
+                  className={`rounded-xl border text-xs transition ${
+                    activePreviewIndex === idx
+                      ? "bg-blue-50 border-blue-400 shadow-2xs"
+                      : "bg-white border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <div
+                    onClick={() => setActivePreviewIndex(idx)}
+                    className="flex items-center justify-between p-2 cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                    <div className="flex items-center gap-2 truncate">
+                      <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className={`truncate text-slate-800 ${activePreviewIndex === idx ? "font-semibold" : ""}`}>
+                        {item.file.name}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
+                        {isCustom && !pageError ? `พิมพ์ ${selectedCount}/${item.pageCount} หน้า` : `${item.pageCount} หน้า`}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isUploading}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveFile(idx);
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* เลือกหน้าที่ต้องการพิมพ์ */}
+                  {canChoosePages && (
+                    <div className="px-2 pb-2 pl-8 space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] font-semibold text-slate-600">หน้าที่ต้องการพิมพ์:</span>
+                        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+                          <button
+                            type="button"
+                            disabled={isUploading}
+                            onClick={() => onChangePageSelection!(idx, { printAll: true })}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                              !isCustom ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            ทุกหน้า
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isUploading}
+                            onClick={() => onChangePageSelection!(idx, { printAll: false })}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                              isCustom ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            เลือกหน้า
+                          </button>
+                        </div>
+                        {isCustom && (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            disabled={isUploading}
+                            value={item.pageRange || ""}
+                            onChange={(e) => onChangePageSelection!(idx, { pageRange: e.target.value })}
+                            placeholder={`เช่น 1-3, 5 (มี ${item.pageCount} หน้า)`}
+                            className={`flex-1 min-w-[160px] px-2.5 py-1 rounded-lg border bg-white text-[11px] outline-none transition ${
+                              pageError
+                                ? "border-rose-400 focus:border-rose-500"
+                                : "border-slate-200 focus:border-blue-500"
+                            }`}
+                          />
+                        )}
+                      </div>
+                      {isCustom && pageError && (
+                        <p className="text-[11px] text-rose-500 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 shrink-0" /> {pageError}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

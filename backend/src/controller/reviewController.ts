@@ -133,7 +133,6 @@ export const submitOrderReview = async (
       });
     }
 
-    // ตรวจสอบ Order โดยใช้ Array
     const { data: orders, error: orderError } = await supabase
       .from("print_order")
       .select(`
@@ -170,7 +169,6 @@ export const submitOrderReview = async (
       });
     }
 
-    // ตรวจสอบรีวิวซ้ำ
     const { data: existingReviews, error: existingReviewError } =
       await supabase
         .from("review")
@@ -295,7 +293,6 @@ export const submitOrderReport = async (
       });
     }
 
-    // 🛑 ตรวจสอบการส่งรายงานซ้ำ
     const { data: existingReports, error: checkError } = await supabase
       .from("report")
       .select("id")
@@ -373,10 +370,7 @@ export const submitOrderReport = async (
       imageUrl = publicUrlData.publicUrl;
     }
 
-    // ==========================================
-    // บันทึกรายงานลง Database
-    // ==========================================
-    const { data: createdReport, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from("report")
       .insert([
         {
@@ -401,9 +395,6 @@ export const submitOrderReport = async (
       throw insertError;
     }
 
-    // 🟢 ==========================================
-    // สร้างการแจ้งเตือนไปยังแอดมินทุกคน (System Admin & Super Admin)
-    // ==========================================
     try {
       const { data: adminUsers } = await supabase
         .from("admin")
@@ -442,24 +433,31 @@ export const submitOrderReport = async (
 };
 
 // ==========================================
-// 4. ดึงรายการรีวิวทั้งหมดของร้านค้า (ดึงชื่อ-นามสกุลจริง รายการสินค้า และข้อความตอบกลับจากร้านค้า)
+// 4. ดึงรายการรีวิวทั้งหมดของร้านค้า
 // ==========================================
 export const getShopReviews = async (req: Request, res: Response) => {
   try {
     const { shopId } = req.params;
 
-    if (!shopId) {
-      return res.status(400).json({
-        success: false,
-        message: "ไม่พบรหัสร้านค้า",
-      });
-    }
+    // 1. ดึงรายงานทั้งหมดของร้านนี้
+    const { data: shopReports } = await supabase
+      .from("report")
+      .select("review_id, order_id")
+      .eq("shop_id", shopId);
 
-    // 🟢 ดึงข้อมูลจากตาราง review เพิ่ม shop_reply และ reply_at
+    // เก็บ ID รีวิวและ Order ID ที่เคยถูกรายงานแล้ว
+    const reportedReviewIds = new Set(
+      shopReports?.map((r: any) => r.review_id).filter(Boolean) || []
+    );
+    const reportedOrderIds = new Set(
+      shopReports?.map((r: any) => r.order_id).filter(Boolean) || []
+    );
+
     const { data: reviews, error } = await supabase
       .from("review")
       .select(`
         id,
+        order_id,
         score,
         comment,
         image_url,
@@ -481,76 +479,108 @@ export const getShopReviews = async (req: Request, res: Response) => {
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false });
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
-    const rawReviews = reviews || [];
-    const total_reviews = rawReviews.length;
-
-    let sumScore = 0;
-    const rating_counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-
-    const formattedReviews = rawReviews.map((rev: any) => {
-      const scoreNum = Number(rev.score || 0);
-      sumScore += scoreNum;
-
-      if (scoreNum >= 1 && scoreNum <= 5) {
-        rating_counts[scoreNum] = (rating_counts[scoreNum] || 0) + 1;
-      }
-
-      const cust = rev.customer;
-      let customerName = "ลูกค้าผู้ใช้บริการ";
-
-      if (cust) {
-        const firstName = cust.first_name || "";
-        const lastName = cust.last_name || "";
-        const fullName = `${firstName} ${lastName}`.trim();
-        if (fullName) {
-          customerName = fullName;
-        }
-      }
+    const formattedReviews = (reviews || []).map((rev: any) => {
+      // 🟢 เช็คว่ารีวิวนี้หรือออเดอร์นี้เคยถูกรายงานไปหรือยัง
+      const hasReported =
+        reportedReviewIds.has(rev.id) ||
+        (rev.order_id && reportedOrderIds.has(rev.order_id));
 
       return {
         id: rev.id,
-        score: scoreNum,
+        score: Number(rev.score || 0),
         comment: rev.comment,
         image_url: rev.image_url,
         created_at: rev.created_at,
-        shop_reply: rev.shop_reply || null, // 🟢 แนบคำตอบรับจากร้านค้า
-        reply_at: rev.reply_at || null,     // 🟢 แนบเวลาตอบกลับ
-        customer_name: customerName,
-        customer: cust,
+        shop_reply: rev.shop_reply || null,
+        reply_at: rev.reply_at || null,
+        customer: rev.customer,
         print_order: rev.print_order,
+        has_reported: hasReported, // 🟢 ส่งค่านี้กลับไปให้ Frontend ใช้เปลี่ยนสีธง
       };
     });
-
-    const average_rating =
-      total_reviews > 0 ? Number((sumScore / total_reviews).toFixed(1)) : 0;
-
-    const rating_breakdown = [5, 4, 3, 2, 1].map((stars) => ({
-      stars,
-      count: rating_counts[stars] || 0,
-      percentage:
-        total_reviews > 0
-          ? Number(((rating_counts[stars] / total_reviews) * 100).toFixed(1))
-          : 0,
-    }));
 
     return res.status(200).json({
       success: true,
       data: formattedReviews,
-      summary: {
-        average_rating,
-        total_reviews,
-        rating_breakdown,
-      },
     });
   } catch (error: any) {
-    console.error("❌ getShopReviews Error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==========================================
+// 5. ร้านค้ารายงานรีวิวที่ไม่เหมาะสม
+// ==========================================
+export const reportReview = async (req: Request, res: Response) => {
+  try {
+    const { review_id, shop_id, description, order_id } = req.body;
+
+    if (!review_id) {
+      return res.status(400).json({
+        success: false,
+        message: "ไม่พบรหัสรีวิวที่ต้องการรายงาน",
+      });
+    }
+
+    if (!shop_id) {
+      return res.status(400).json({
+        success: false,
+        message: "ไม่พบข้อมูลร้านค้า",
+      });
+    }
+
+    if (!description || !description.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "กรุณาระบุเหตุผลในการรายงานรีวิว",
+      });
+    }
+
+    const { data: existingReports, error: checkError } = await supabase
+      .from("report")
+      .select("id")
+      .eq("review_id", review_id)
+      .eq("shop_id", shop_id);
+
+    if (checkError) {
+      throw checkError;
+    }
+
+    if (existingReports && existingReports.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "คุณได้รายงานรีวิวนี้ไปเรียบร้อยแล้ว ไม่สามารถรายงานซ้ำได้",
+      });
+    }
+
+    const { error: insertError } = await supabase
+      .from("report")
+      .insert([
+        {
+          review_id: review_id,
+          shop_id: shop_id,
+          order_id: order_id || null,
+          description: description.trim(),
+          issue_type: "review_issue",
+          status: "pending",
+        },
+      ]);
+
+    if (insertError) {
+      throw insertError;
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "ส่งรายงานรีวิวไม่เหมาะสมสำเร็จ",
+    });
+  } catch (error: any) {
+    console.error("❌ reportReview Error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "เกิดข้อผิดพลาดในการดึงข้อมูลรีวิว",
+      message: error.message || "เกิดข้อผิดพลาดในการรายงานรีวิว",
     });
   }
 };

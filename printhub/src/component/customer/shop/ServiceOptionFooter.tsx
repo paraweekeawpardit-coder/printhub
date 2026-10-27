@@ -16,6 +16,7 @@ interface ServiceOptionFooterProps {
   hasUploadedFiles: boolean;
   missingGroups: string[];
   canAddToCart: boolean;
+  blockingMessage?: string; // เงื่อนไขอื่นที่ยังไม่ครบ (เช่น หน้าที่ต้องการพิมพ์กรอกผิด)
   isUploading: boolean;
   onSubmit: () => void;
   onBuyNow?: () => void; // ไม่ส่งมา = ไม่แสดงปุ่มสั่งทันที (เช่น ตอนแก้ไขรายการในตะกร้า)
@@ -30,26 +31,44 @@ export default function ServiceOptionFooter({
   hasUploadedFiles,
   missingGroups,
   canAddToCart,
+  blockingMessage = "",
   isUploading,
   onSubmit,
   onBuyNow,
   submittingMode = null,
 }: ServiceOptionFooterProps) {
+  // คำนวณราคาเมื่อเลือกสเปกที่จำเป็นครบ และอัปโหลดไฟล์แล้วเท่านั้น (TC14)
+  const isPriceReady = hasUploadedFiles && missingGroups.length === 0 && !blockingMessage;
+  const pendingHint = hasUploadedFiles && missingGroups.length === 0 && blockingMessage
+    ? blockingMessage
+    : !hasUploadedFiles
+    ? missingGroups.length > 0
+      ? `อัปโหลดไฟล์ และเลือก ${missingGroups.join(", ")} ให้ครบเพื่อดูราคา`
+      : "อัปโหลดไฟล์เพื่อคำนวณราคา"
+    : `กรุณาเลือก ${missingGroups.join(", ")} ให้ครบเพื่อดูราคา`;
+
   return (
     <div className="p-4 sm:px-6 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
       <div>
-        <span className="text-[11px] text-slate-400 block">
-          {isMultiPageService
-            ? `ราคาคำนวณ (${totalPages} หน้า × ${quantity} ชุด)`
-            : "ราคาคำนวณสุทธิ"}
-        </span>
-        <span className="text-base font-extrabold text-blue-600">
-          ฿{finalTotalPrice.toFixed(2)}
-        </span>
-        {hasUploadedFiles && missingGroups.length > 0 && (
-          <span className="text-[10px] text-amber-600 font-medium block mt-0.5">
-            * กรุณาเลือก: {missingGroups.join(", ")}
-          </span>
+        {isPriceReady ? (
+          <>
+            <span className="text-[11px] text-slate-400 block">
+              {isMultiPageService
+                ? `ราคาคำนวณ (${totalPages} หน้า × ${quantity} ชุด)`
+                : "ราคาคำนวณสุทธิ"}
+            </span>
+            <span className="text-base font-extrabold text-blue-600">
+              ฿{finalTotalPrice.toFixed(2)}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-[11px] text-slate-400 block">ราคาคำนวณ</span>
+            <span className="text-base font-extrabold text-slate-300">฿ -</span>
+            <span className="text-[10px] text-amber-600 font-medium block mt-0.5">
+              * {pendingHint}
+            </span>
+          </>
         )}
       </div>
 
