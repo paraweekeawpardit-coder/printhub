@@ -222,37 +222,37 @@ export default function ReportDetailModal({
     (report.order_id ? `#${report.order_id.slice(0, 8)}` : "-");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-hidden font-sans">
-      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-2 sm:p-4 overflow-hidden font-sans">
+      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh]">
         
         {/* Modal Header */}
-        <div className="bg-slate-900 px-6 py-4 text-white flex justify-between items-center shrink-0">
-          <div>
-            <h2 className="text-lg font-bold">
+        <div className="bg-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex justify-between items-center shrink-0">
+          <div className="pr-2">
+            <h2 className="text-base sm:text-lg font-bold leading-snug">
               รายละเอียดรายงานปัญหาและการตัดสินเคส
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
               Ticket ID: {report.id} • ยื่นเรื่องเมื่อ: {formatDate(report.created_at)}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            className="text-slate-400 hover:text-white text-base sm:text-lg font-bold p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             ✕
           </button>
         </div>
 
         {/* Modal Content */}
-        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1">
           {/* บล็อกส่วนที่ 1: ข้อมูลคำสั่งซื้อ (ซ้าย) & หลักฐานจากผู้แจ้ง (ขวา) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {/* ข้อมูลคำสั่งซื้อ */}
-            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-3">
-              <h3 className="font-bold text-slate-800 text-sm border-b border-slate-200 pb-2 flex justify-between items-center">
+            <div className="bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-200 space-y-3">
+              <h3 className="font-bold text-slate-800 text-xs sm:text-sm border-b border-slate-200 pb-2 flex justify-between items-center">
                 <span>ข้อมูลคำสั่งซื้อ</span>
                 <span
-                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                  className={`text-[11px] sm:text-xs font-semibold px-2.5 py-0.5 rounded-full ${
                     isPending
                       ? "bg-amber-100 text-amber-800"
                       : report.status === "investigating"
@@ -271,11 +271,11 @@ export default function ReportDetailModal({
               </h3>
 
               <div className="text-xs space-y-2 text-slate-700">
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="text-slate-500">หมายเลข Order:</span>
                   <span className="font-bold text-slate-900">{displayOrderNo}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="text-slate-500">ยอดรวมออเดอร์:</span>
                   <span className="font-bold text-emerald-600">
                     ฿{totalPrice.toLocaleString()}
@@ -295,13 +295,13 @@ export default function ReportDetailModal({
             </div>
 
             {/* หลักฐานรูปภาพจากผู้แจ้ง */}
-            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-2 flex flex-col justify-between">
-              <h3 className="font-bold text-slate-800 text-sm border-b border-slate-200 pb-2">
+            <div className="bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-200 space-y-2 flex flex-col justify-between">
+              <h3 className="font-bold text-slate-800 text-xs sm:text-sm border-b border-slate-200 pb-2">
                 หลักฐานรูปภาพจากผู้แจ้งปัญหา
               </h3>
 
               {report.image_url ? (
-                <div className="relative group rounded-lg overflow-hidden border border-slate-300 bg-black/5 flex items-center justify-center max-h-48">
+                <div className="relative group rounded-lg overflow-hidden border border-slate-300 bg-black/5 flex items-center justify-center min-h-[120px] max-h-48">
                   <img
                     src={report.image_url}
                     alt="Evidence"
@@ -320,42 +320,42 @@ export default function ReportDetailModal({
                   </a>
                 </div>
               ) : (
-                <div className="h-36 flex items-center justify-center text-slate-400 text-xs bg-white rounded-lg border border-dashed border-slate-300">
+                <div className="h-28 sm:h-36 flex items-center justify-center text-slate-400 text-xs bg-white rounded-lg border border-dashed border-slate-300">
                   ไม่มีรูปภาพหลักฐานแนบมา
                 </div>
               )}
             </div>
           </div>
 
-          {/* 🟢 บล็อกส่วนที่ 2 (จัดกลุ่มใหญ่): รวมรายละเอียดการรายงาน + หมายเหตุสั่งซื้อ + สินค้า + ไฟล์งานต้นฉบับ */}
-          <div className="bg-slate-50/80 p-5 rounded-xl border border-slate-200 space-y-4">
-            <h3 className="font-bold text-slate-800 text-sm border-b border-slate-200 pb-2">
+          {/* บล็อกส่วนที่ 2: รวมรายละเอียดการรายงาน + หมายเหตุสั่งซื้อ + สินค้า + ไฟล์งานต้นฉบับ */}
+          <div className="bg-slate-50/80 p-4 sm:p-5 rounded-xl border border-slate-200 space-y-4">
+            <h3 className="font-bold text-slate-800 text-xs sm:text-sm border-b border-slate-200 pb-2">
               รายละเอียดรายงานปัญหาและข้อมูลออเดอร์
             </h3>
 
             {/* 1. ประเภทและรายละเอียดปัญหาที่แจ้งเข้ามา */}
-            <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200 text-xs space-y-2">
-              <div className="flex items-center gap-2">
+            <div className="bg-amber-50/70 p-3.5 sm:p-4 rounded-xl border border-amber-200 text-xs space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-bold text-amber-900">ประเภทปัญหา:</span>
-                <span className="px-2.5 py-1 rounded-md bg-amber-200/70 font-semibold text-amber-950 border border-amber-300/50">
+                <span className="px-2.5 py-0.5 sm:py-1 rounded-md bg-amber-200/70 font-semibold text-amber-950 border border-amber-300/50">
                   {issueCategoryDisplay}
                 </span>
               </div>
               <div>
                 <p className="font-bold text-amber-900 mb-1">รายละเอียดปัญหาที่แจ้งเข้ามา:</p>
-                <p className="text-amber-900 leading-relaxed font-medium bg-white/70 p-2.5 rounded-lg border border-amber-200/60">
+                <p className="text-amber-900 leading-relaxed font-medium bg-white/70 p-2.5 rounded-lg border border-amber-200/60 break-words">
                   {report.description || "ไม่ได้ระบุรายละเอียด"}
                 </p>
               </div>
             </div>
 
-            {/* 🟢 2. หมายเหตุสั่งซื้อเพิ่มเติมจากลูกค้า (ดึงมาจาก print_order.description) */}
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs space-y-1">
+            {/* 2. หมายเหตุสั่งซื้อเพิ่มเติมจากลูกค้า */}
+            <div className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200 text-xs space-y-1">
               <p className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-slate-600" />
+                <FileText className="w-3.5 h-3.5 text-slate-600 shrink-0" />
                 <span>หมายเหตุเพิ่มเติมจากการสั่งซื้อ (Order Note):</span>
               </p>
-              <p className={`pl-5 font-medium leading-relaxed ${report.order_description ? "text-slate-900" : "text-slate-400 italic"}`}>
+              <p className={`pl-5 font-medium leading-relaxed break-words ${report.order_description ? "text-slate-900" : "text-slate-400 italic"}`}>
                 {report.order_description ? report.order_description : "ลูกค้าไม่ได้ใส่รายละเอียดส่วนนี้"}
               </p>
             </div>
@@ -371,12 +371,12 @@ export default function ReportDetailModal({
                     <div key={item.id || idx} className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                       <div className="space-y-1">
                         <p className="font-bold text-slate-900">{item.item_name || `รายการที่ ${idx + 1}`}</p>
-                        <p className="text-slate-600 text-[11px]">
+                        <p className="text-slate-600 text-[11px] break-words">
                           {item.details ? `รายละเอียดสเปก: ${item.details}` : "ไม่มีรายละเอียดเพิ่มเติม"}
                           {item.page_count && item.page_count > 1 ? ` (${item.page_count} หน้า)` : ""}
                         </p>
                       </div>
-                      <div className="text-right flex sm:flex-col items-center sm:items-end justify-between gap-2">
+                      <div className="text-left sm:text-right flex sm:flex-col items-center sm:items-end justify-between gap-2 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
                         <span className="font-semibold text-slate-700">จำนวน: {item.quantity || 1} ชุด</span>
                         <span className="font-bold text-slate-900">
                           {item.price && item.price > 0 
@@ -394,15 +394,15 @@ export default function ReportDetailModal({
 
             {/* 4. ไฟล์งานต้นฉบับจากลูกค้า */}
             {report.order_files && report.order_files.length > 0 && (
-              <div className="bg-blue-50/50 p-3.5 rounded-xl border border-blue-200 text-xs space-y-2">
+              <div className="bg-blue-50/50 p-3 sm:p-3.5 rounded-xl border border-blue-200 text-xs space-y-2">
                 <p className="font-bold text-blue-900 text-xs flex items-center gap-1.5 border-b border-blue-200/60 pb-1.5">
-                  <FileText className="w-4 h-4 text-blue-600" />
+                  <FileText className="w-4 h-4 text-blue-600 shrink-0" />
                   <span>ไฟล์งานต้นฉบับจากลูกค้า (สำหรับแอดมินตรวจสอบ):</span>
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {report.order_files.map((file, idx) => (
-                    <div key={file.id || idx} className="bg-white p-2.5 rounded-lg border border-blue-100 flex items-center justify-between">
-                      <div className="truncate pr-2">
+                    <div key={file.id || idx} className="bg-white p-2.5 rounded-lg border border-blue-100 flex items-center justify-between gap-2">
+                      <div className="truncate pr-1">
                         <p className="font-semibold text-slate-800 truncate text-[11px]">{file.filename}</p>
                         <p className="text-[10px] text-slate-400">
                           {file.file_size_mb ? `${file.file_size_mb} MB` : ""}
@@ -429,13 +429,13 @@ export default function ReportDetailModal({
 
           {/* บล็อกส่วนที่ 3: คำตัดสินของแอดมิน */}
           {isPending ? (
-            <div className="bg-amber-50 p-5 rounded-xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="bg-amber-50 p-4 sm:p-5 rounded-xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
               <div className="space-y-1">
-                <h4 className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                <h4 className="font-bold text-amber-900 text-xs sm:text-sm flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                   ยังไม่ได้กดรับเรื่องพิจารณา
                 </h4>
-                <p className="text-xs text-amber-700">
+                <p className="text-xs text-amber-700 leading-relaxed">
                   กรุณากดรับเรื่องพิจารณาเพื่อเปลี่ยนสถานะเป็น "กำลังตรวจสอบ" และเริ่มนับเวลา 2 วันก่อนทำการตัดสินเคส
                 </p>
               </div>
@@ -443,41 +443,41 @@ export default function ReportDetailModal({
                 <button
                   onClick={handleAccept}
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm whitespace-nowrap transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm whitespace-nowrap transition-all cursor-pointer text-center"
                 >
                   {isSubmitting ? "กำลังบันทึก..." : "กดรับเรื่องพิจารณา"}
                 </button>
               )}
             </div>
           ) : (
-            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-4">
-              <h3 className="font-bold text-slate-900 text-sm border-b border-slate-200 pb-2">
+            <div className="bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-200 space-y-4">
+              <h3 className="font-bold text-slate-900 text-xs sm:text-sm border-b border-slate-200 pb-2">
                 คำตัดสินของแอดมิน (Admin Decision)
               </h3>
 
               {!isResolved ? (
                 <>
-                  <div className="flex flex-wrap gap-6 text-xs font-medium">
-                    <label className="flex items-center gap-2 cursor-pointer text-emerald-700">
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-6 text-xs font-medium">
+                    <label className="flex items-start sm:items-center gap-2 cursor-pointer text-emerald-700">
                       <input
                         type="radio"
                         name="decision"
                         value="approved"
                         checked={decision === "approved"}
                         onChange={() => setDecision("approved")}
-                        className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
+                        className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 mt-0.5 sm:mt-0"
                       />
                       <span className="font-bold">อนุมัติคืนเงินเต็มจำนวน (ส่งไปยังรายการคืนเงิน)</span>
                     </label>
 
-                    <label className="flex items-center gap-2 cursor-pointer text-rose-700">
+                    <label className="flex items-start sm:items-center gap-2 cursor-pointer text-rose-700">
                       <input
                         type="radio"
                         name="decision"
                         value="rejected"
                         checked={decision === "rejected"}
                         onChange={() => setDecision("rejected")}
-                        className="w-4 h-4 text-rose-600 focus:ring-rose-500 accent-rose-600"
+                        className="w-4 h-4 text-rose-600 focus:ring-rose-500 accent-rose-600 mt-0.5 sm:mt-0"
                       />
                       <span className="font-bold">ปฏิเสธคำร้อง (ส่งยอดเข้าโอนเงินให้ร้าน)</span>
                     </label>
@@ -513,11 +513,11 @@ export default function ReportDetailModal({
                     )}
                   </div>
 
-                  {/* แนบรูปภาพหลักฐานการตัดสิน (Optional) พร้อม Validation */}
+                  {/* แนบรูปภาพหลักฐานการตัดสิน (Optional) */}
                   <div className="space-y-1.5 pt-1">
                     <label className="block text-xs font-semibold text-slate-700">
                       รูปภาพหลักฐานการตัดสิน (ไม่จำเป็นต้องใส่)
-                      <span className="text-slate-400 font-normal ml-1">
+                      <span className="block sm:inline text-slate-400 font-normal sm:ml-1">
                         (รองรับ JPG, PNG, WEBP ไม่เกิน 5MB / สูงสุด 1 รูป)
                       </span>
                     </label>
@@ -544,7 +544,7 @@ export default function ReportDetailModal({
                       </div>
                     ) : (
                       <div className="flex items-center gap-3">
-                        <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm">
+                        <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 sm:py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm w-full sm:w-auto justify-center sm:justify-start">
                           <Upload className="w-3.5 h-3.5 text-slate-500" />
                           <span>เลือกไฟล์รูปภาพหลักฐาน...</span>
                           <input
@@ -570,7 +570,7 @@ export default function ReportDetailModal({
                     <p className="font-semibold text-slate-900 mb-1">
                       หมายเหตุการตัดสินที่บันทึกไว้:
                     </p>
-                    <p className="p-3 bg-white rounded-lg border border-slate-200 text-slate-800">
+                    <p className="p-3 bg-white rounded-lg border border-slate-200 text-slate-800 leading-relaxed break-words">
                       {report.admin_note || "ไม่ได้ระบุหมายเหตุ"}
                     </p>
                   </div>
@@ -597,10 +597,10 @@ export default function ReportDetailModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex justify-end gap-3 shrink-0">
+        <div className="bg-slate-100 px-4 sm:px-6 py-3 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer text-center"
           >
             {isPending || isResolved ? "ปิดหน้าต่าง" : "ยกเลิก"}
           </button>
@@ -608,11 +608,11 @@ export default function ReportDetailModal({
             <button
               onClick={handleSubmit}
               disabled={isSubmitting || !isNoteValid || !!fileError}
-              className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all cursor-pointer ${
+              className={`w-full sm:w-auto px-5 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all cursor-pointer ${
                 decision === "approved"
                   ? "bg-emerald-600 hover:bg-emerald-700"
                   : "bg-rose-600 hover:bg-rose-700"
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              } disabled:opacity-50 disabled:cursor-not-allowed text-center`}
             >
               {isSubmitting ? "กำลังบันทึก..." : "ยืนยันการตัดสิน"}
             </button>

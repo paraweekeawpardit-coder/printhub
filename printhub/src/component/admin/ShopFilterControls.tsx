@@ -27,9 +27,9 @@ export default function ShopFilterControls({
   onResetFilters,
 }: ShopFilterControlsProps) {
   return (
-    <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 font-sans">
       {/* Search Box */}
-      <div className="relative flex-1">
+      <div className="relative flex-1 w-full">
         <Search
           size={18}
           className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
@@ -39,13 +39,13 @@ export default function ShopFilterControls({
           placeholder="ค้นหาชื่อร้าน, เจ้าของ, เบอร์โทร, อีเมล..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full h-10 pl-10 pr-9 bg-white border border-slate-300 rounded-lg text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 placeholder:text-slate-400 text-slate-800"
+          className="w-full h-10 pl-10 pr-9 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 placeholder:text-slate-400 text-slate-800"
         />
         {searchTerm && (
           <button
             type="button"
             onClick={() => setSearchTerm("")}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-full transition hover:bg-slate-100"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-full transition hover:bg-slate-100 cursor-pointer"
             title="ล้างข้อความค้นหา"
           >
             <X size={15} />
@@ -54,11 +54,11 @@ export default function ShopFilterControls({
       </div>
 
       {/* Filter and Sort Group */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
         
-        {/* 📌 ตัวกรองสถานะการอนุมัติ (is_verify) - เพิ่มมาเพื่อแก้ปัญหาเฉพาะจุด */}
+        {/* ตัวกรองสถานะการอนุมัติ (is_verify) */}
         {setVerifyFilter && (
-          <div className="relative">
+          <div className="relative w-full lg:w-auto">
             <ShieldCheck
               size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none z-10"
@@ -66,7 +66,7 @@ export default function ShopFilterControls({
             <select
               value={verifyFilter}
               onChange={(e) => setVerifyFilter(e.target.value as any)}
-              className="h-10 pl-9 pr-8 bg-white border border-slate-300 rounded-lg text-xs md:text-sm text-slate-700 outline-none cursor-pointer focus:border-sky-500 focus:ring-2 focus:ring-sky-100 appearance-none relative z-0"
+              className="w-full h-10 pl-9 pr-8 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-700 outline-none cursor-pointer focus:border-sky-500 focus:ring-2 focus:ring-sky-100 appearance-none relative z-0"
             >
               <option value="ALL">การอนุมัติทั้งหมด</option>
               <option value="VERIFIED">อนุมัติแล้ว (Verified)</option>
@@ -77,7 +77,7 @@ export default function ShopFilterControls({
         )}
 
         {/* ตัวกรองสถานะการใช้งาน (Status) */}
-        <div className="relative">
+        <div className="relative w-full lg:w-auto">
           <Filter
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none z-10"
@@ -85,7 +85,7 @@ export default function ShopFilterControls({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="h-10 pl-9 pr-8 bg-white border border-slate-300 rounded-lg text-xs md:text-sm text-slate-700 outline-none cursor-pointer focus:border-sky-500 focus:ring-2 focus:ring-sky-100 appearance-none relative z-0"
+            className="w-full h-10 pl-9 pr-8 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-700 outline-none cursor-pointer focus:border-sky-500 focus:ring-2 focus:ring-sky-100 appearance-none relative z-0"
           >
             <option value="ALL">สถานะทั้งหมด</option>
             <option value="APPROVED">เปิดใช้งานปกติ</option>
@@ -95,7 +95,7 @@ export default function ShopFilterControls({
         </div>
 
         {/* ตัวเลือกการจัดเรียง (Sort) */}
-        <div className="relative">
+        <div className="relative w-full lg:w-auto">
           <ArrowUpDown
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none z-10"
@@ -103,7 +103,7 @@ export default function ShopFilterControls({
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="h-10 pl-9 pr-8 bg-white border border-slate-300 rounded-lg text-xs md:text-sm text-slate-700 outline-none cursor-pointer focus:border-sky-500 focus:ring-2 focus:ring-sky-100 appearance-none relative z-0"
+            className="w-full h-10 pl-9 pr-8 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-700 outline-none cursor-pointer focus:border-sky-500 focus:ring-2 focus:ring-sky-100 appearance-none relative z-0"
           >
             <option value="newest">อนุมัติล่าสุด - เก่าสุด</option>
             <option value="oldest">เก่าสุด - อนุมัติล่าสุด</option>
@@ -117,7 +117,7 @@ export default function ShopFilterControls({
         <button
           type="button"
           onClick={onResetFilters}
-          className="h-10 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs md:text-sm font-medium rounded-lg flex items-center gap-1.5 transition active:scale-95 border border-slate-300 cursor-pointer shrink-0"
+          className="h-10 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 border border-slate-300 cursor-pointer shrink-0 w-full sm:w-auto"
           title="ล้างคำค้นหาและตัวกรองทั้งหมด"
         >
           <RotateCcw size={15} className="text-slate-500" />

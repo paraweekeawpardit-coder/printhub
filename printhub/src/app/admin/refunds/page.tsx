@@ -50,7 +50,7 @@ export default function RefundsAdminPage() {
     return fullName || "ลูกค้าทั่วไป";
   }, []);
 
-  // 🟢 ปรับปรุงให้แปลงเวลา +7 ผ่าน formatThaiDate
+  // แปลงเวลา +7 ผ่าน formatThaiDate
   const getOrderDate = (item: RefundItem) => {
     const rawDate = item.canceled_at || item.order_date || item.created_at;
     if (!rawDate) return "-";
@@ -153,25 +153,25 @@ export default function RefundsAdminPage() {
   const pendingCount = refunds.length - completedCount;
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 sm:p-8 font-sans text-slate-800">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <main className="min-h-screen bg-slate-50 p-3 sm:p-6 lg:p-8 font-sans text-slate-800">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-snug">
               ระบบดำเนินการคืนเงิน (Refunds)
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
               จัดการรายการยกเลิกออเดอร์ และตรวจสอบประวัติการโอนเงินคืน
             </p>
           </div>
 
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto">
             <button
               onClick={() => setActiveTab("PENDING")}
-              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer text-center ${
                 activeTab === "PENDING"
-                  ? "bg-white text-slate-900 shadow-sm"
+                  ? "bg-white text-slate-900 shadow-xs"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
@@ -179,9 +179,9 @@ export default function RefundsAdminPage() {
             </button>
             <button
               onClick={() => setActiveTab("REFUNDED")}
-              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer text-center ${
                 activeTab === "REFUNDED"
-                  ? "bg-white text-emerald-700 shadow-sm"
+                  ? "bg-white text-emerald-700 shadow-xs"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
@@ -191,10 +191,10 @@ export default function RefundsAdminPage() {
         </div>
 
         {/* Search Bar */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 sm:gap-4">
           <div className="relative w-full sm:w-96">
             <svg
-              className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+              className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -210,8 +210,8 @@ export default function RefundsAdminPage() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ค้นหา Order ID (#197), ชื่อลูกค้า, เลขบัญชี หรือร้านค้า..."
-              className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-800 placeholder:text-slate-400"
+              placeholder="ค้นหา Order ID (#197), ชื่อลูกค้า, หรือร้านค้า..."
+              className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-800 placeholder:text-slate-400"
             />
             {searchTerm && (
               <button
@@ -222,13 +222,13 @@ export default function RefundsAdminPage() {
               </button>
             )}
           </div>
-          <div className="text-xs text-slate-500 font-medium">
+          <div className="text-xs text-slate-500 font-medium text-right sm:text-left">
             พบข้อมูลทั้งหมด <span className="font-bold text-slate-900">{filteredRefunds.length}</span> รายการ
           </div>
         </div>
 
         {/* Refund Table Component */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <RefundsTable
             refunds={filteredRefunds}
             loading={loading}

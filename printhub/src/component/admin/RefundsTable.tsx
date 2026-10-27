@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import PaginationBar from "./PaginationBar"; // 🟢 Import PaginationBar Component
+import PaginationBar from "./PaginationBar";
 
 export interface PaymentDetail {
   id?: string;
@@ -107,12 +107,10 @@ export default function RefundsTable({
   getOrderAmount,
   getCustomerName,
   getOrderDate,
-  itemsPerPage = 10, // 🟢 กำหนดให้แสดงผลหน้าละ 10 รายการ
+  itemsPerPage = 10,
 }: RefundsTableProps) {
-  // 🟢 State สำหรับจัดการระบบ Pagination
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // รีเซ็ตหน้ากลับไปหน้า 1 เมื่อมีการค้นหา สลับแท็บ หรือรายการข้อมูลเปลี่ยน
   useEffect(() => {
     setCurrentPage(1);
   }, [refunds.length, activeTab, searchTerm]);
@@ -120,7 +118,6 @@ export default function RefundsTable({
   const totalItems = refunds.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
 
-  // 🟢 ตัดแบ่งรายการคืนเงินเฉพาะของหน้าปัจจุบัน
   const paginatedRefunds = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return refunds.slice(startIndex, startIndex + itemsPerPage);
@@ -176,7 +173,7 @@ export default function RefundsTable({
 
   if (loading) {
     return (
-      <div className="p-8 text-center text-slate-500 font-medium">
+      <div className="p-8 text-center text-slate-500 font-medium text-xs sm:text-sm">
         กำลังโหลดรายการคืนเงิน...
       </div>
     );
@@ -184,7 +181,7 @@ export default function RefundsTable({
 
   if (refunds.length === 0) {
     return (
-      <div className="p-12 text-center text-slate-400 font-medium">
+      <div className="p-12 text-center text-slate-400 font-medium text-xs sm:text-sm">
         {searchTerm
           ? `ไม่พบรายการที่ตรงกับคำค้นหา "${searchTerm}"`
           : activeTab === "PENDING"
@@ -195,8 +192,121 @@ export default function RefundsTable({
   }
 
   return (
-    <div className="space-y-4 font-sans">
-      <div className="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-sm">
+    <div className="space-y-4 font-sans p-2 sm:p-0">
+      {/* 📱 Mobile Card View (แสดงเฉพาะจอมือถือ) */}
+      <div className="block md:hidden space-y-3">
+        {paginatedRefunds.map((item) => {
+          const payObj = getPaymentObj(item);
+          const originalSlip = item.original_slip_url || payObj?.slip_url;
+          const refundSlip = item.refund_slip_url || payObj?.refund_slip_url;
+          const canceledDate = item.canceled_at || item.order_date || item.created_at;
+          const completedRefundDate = item.refunded_at || payObj?.payout_date || null;
+          const urgency = getRefundUrgency(canceledDate);
+          const customerContact = item.customer?.contact;
+
+          return (
+            <div
+              key={item.id}
+              className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3"
+            >
+              {/* Header Card */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <span className="font-mono font-bold text-blue-600 text-xs">
+                  #{item.order_no || item.id.slice(0, 8)}
+                </span>
+                {activeTab === "REFUNDED" ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                    คืนเงินแล้ว
+                  </span>
+                ) : (
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${urgency.color}`}
+                  >
+                    {urgency.label}
+                  </span>
+                )}
+              </div>
+
+              {/* Customer & Shop Details */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[10px] block">ลูกค้า</span>
+                  <span className="font-bold text-slate-800 truncate block">
+                    {getCustomerName(item)}
+                  </span>
+                  {customerContact && (
+                    <span className="text-[10px] text-slate-500 font-mono block">
+                      {customerContact}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">ร้านค้า</span>
+                  <span className="font-medium text-slate-700 truncate block">
+                    {item.shop?.shop_name || "-"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Refund Amount Box */}
+              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between">
+                <div>
+                  <span className="text-slate-400 text-[10px] block">ยอดเงินคืน</span>
+                  <span className="font-extrabold text-emerald-600 text-base">
+                    ฿{getOrderAmount(item).toLocaleString("th-TH", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-400 text-[10px] block">
+                    {activeTab === "REFUNDED" ? "วันที่คืนเงินสำเร็จ" : "วันที่ยกเลิก"}
+                  </span>
+                  <span className="text-[11px] font-medium text-slate-600">
+                    {formatThaiDate(activeTab === "REFUNDED" ? completedRefundDate : canceledDate)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions & Slips */}
+              <div className="flex items-center justify-between pt-1">
+                {originalSlip ? (
+                  <button
+                    type="button"
+                    onClick={() => onViewSlip(originalSlip)}
+                    className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 font-medium cursor-pointer"
+                  >
+                    สลิปเดิมลูกค้า
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-slate-400 italic">ไม่มีสลิปเดิม</span>
+                )}
+
+                {activeTab === "PENDING" ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectRefund(item)}
+                    className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                  >
+                    โอนเงินคืน
+                  </button>
+                ) : (
+                  refundSlip && (
+                    <button
+                      type="button"
+                      onClick={() => onViewSlip(refundSlip)}
+                      className="text-xs text-blue-600 font-semibold cursor-pointer hover:underline"
+                    >
+                      ดูสลิปโอนคืน
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 💻 Desktop Table View (แสดงบนจอคอม) */}
+      <div className="hidden md:block overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-2xs">
         <table className="w-full text-left border-collapse text-sm">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold text-xs uppercase tracking-wider">
@@ -240,12 +350,10 @@ export default function RefundsTable({
                   key={item.id}
                   className="hover:bg-slate-50/60 transition-colors"
                 >
-                  {/* ออเดอร์ */}
                   <td className="py-4 px-4 font-mono font-bold text-blue-600 text-xs whitespace-nowrap">
                     #{item.order_no || item.id.slice(0, 8)}
                   </td>
 
-                  {/* ผู้รับเงินคืน / ช่องทาง */}
                   <td className="py-4 px-4">
                     <div className="font-bold text-slate-800 text-xs mb-1">
                       {getCustomerName(item)}
@@ -275,12 +383,10 @@ export default function RefundsTable({
                     </div>
                   </td>
 
-                  {/* ร้านค้า */}
                   <td className="py-4 px-4 text-xs font-medium text-slate-700 whitespace-nowrap">
                     {item.shop?.shop_name || "-"}
                   </td>
 
-                  {/* ยอดเงินคืน */}
                   <td className="py-4 px-4 font-bold text-emerald-600 text-base whitespace-nowrap">
                     ฿
                     {getOrderAmount(item).toLocaleString("th-TH", {
@@ -288,7 +394,6 @@ export default function RefundsTable({
                     })}
                   </td>
 
-                  {/* หลักฐานการชำระ */}
                   <td className="py-4 px-4 whitespace-nowrap">
                     {originalSlip ? (
                       <button
@@ -318,12 +423,10 @@ export default function RefundsTable({
                     )}
                   </td>
 
-                  {/* วันที่ยกเลิก */}
                   <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-500">
                     {formatThaiDate(canceledDate)}
                   </td>
 
-                  {/* SLA คืนเงิน / วันที่โอนคืนสำเร็จ */}
                   {activeTab === "REFUNDED" ? (
                     <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600 font-medium">
                       {formatThaiDate(completedRefundDate)}
@@ -338,13 +441,12 @@ export default function RefundsTable({
                     </td>
                   )}
 
-                  {/* ดำเนินการ */}
                   <td className="py-4 px-4 text-center whitespace-nowrap">
                     {activeTab === "PENDING" ? (
                       <button
                         type="button"
                         onClick={() => onSelectRefund(item)}
-                        className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 shadow-sm transition-all active:scale-95 cursor-pointer"
+                        className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
                       >
                         โอนเงินคืน
                       </button>
@@ -372,7 +474,7 @@ export default function RefundsTable({
         </table>
       </div>
 
-      {/* 🟢 แสดงปุ่มเปลี่ยนหน้า Pagination ด้านล่างตารางเมื่อรายการมากกว่า 1 หน้า */}
+      {/* Pagination Bar */}
       {totalPages > 1 && (
         <div className="pt-2">
           <PaginationBar

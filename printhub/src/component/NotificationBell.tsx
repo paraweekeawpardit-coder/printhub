@@ -2,13 +2,18 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, Zap } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 
 interface NotificationBellProps {
   userId?: string;
   role: "customer" | "shop" | "admin";
 }
+
+// ฟังก์ชันช่วยลบอิโมจิสายฟ้าออกจากข้อความ Title เพื่อไม่ให้แสดงซ้ำกับไอคอน
+const cleanTitle = (title: string = "") => {
+  return title.replace(/⚡/g, "").trim();
+};
 
 export default function NotificationBell({ userId, role }: NotificationBellProps) {
   const router = useRouter();
@@ -44,7 +49,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     };
   }, [isOpen]);
 
-  // 🟢 ฟังก์ชันเมื่อคลิกที่การแจ้งเตือนแต่ละรายการ
+  // ฟังก์ชันเมื่อคลิกที่การแจ้งเตือนแต่ละรายการ
   const handleNotificationClick = async (noti: any) => {
     if (!noti.is_read) {
       await markAsRead(noti.id);
@@ -63,7 +68,6 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
     // 2. Routing แยกตาม Role
     if (role === "admin") {
-      // 🟢 เช็กเรื่องคำขอปลดระงับร้านค้า ให้วาร์ปไปหน้า /admin/shops?tab=appeals
       if (
         type === "shop_appeal" ||
         type === "contact_admin" ||
@@ -106,12 +110,11 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
     }
   };
 
-  // 🟢 ฟังก์ชันแปลงเวลาที่เพิ่มการปรับ UTC เป็น GMT+7 (เวลาไทย)
+  // ฟังก์ชันแปลงเวลา
   const formatDate = (dateStr: string) => {
     try {
       if (!dateStr) return "";
 
-      // ถ้า ISO String ที่ส่งมาจาก DB ไม่มี 'Z' ลงท้าย และไม่มี timezone offset ให้เติม 'Z' เพื่อให้ Date parser รับรู้ว่าเป็นเวลา UTC
       let formattedStr = dateStr;
       if (!formattedStr.endsWith("Z") && !formattedStr.includes("+")) {
         formattedStr += "Z";
@@ -126,7 +129,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
         year: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
-        timeZone: "Asia/Bangkok", // 🟢 บังคับใช้โซนเวลาประเทศไทย (GMT+7)
+        timeZone: "Asia/Bangkok",
       });
     } catch {
       return "";
@@ -147,7 +150,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
       >
         <Bell size={22} strokeWidth={2.2} />
         {unreadCount > 0 && (
-          <span className="absolute top-0.5 right-0.5 bg-rose-500 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-sm animate-pulse">
+          <span className="absolute top-0.5 right-0.5 bg-rose-500 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-2xs animate-pulse">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -155,12 +158,12 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
 
       {/* Dropdown แสดงรายการแจ้งเตือน */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 text-slate-800 overflow-hidden">
+        <div className="fixed right-3 left-3 sm:left-auto sm:right-0 sm:absolute top-16 sm:top-full mt-0 sm:mt-2 sm:w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 text-slate-800 overflow-hidden font-sans">
           {/* Header ด้านบนพร้อมปุ่มอ่านทั้งหมด */}
-          <div className="p-3.5 border-b border-slate-100 font-bold text-sm flex justify-between items-center bg-slate-50/80">
-            <div className="flex items-center gap-2">
+          <div className="p-3.5 border-b border-slate-100 font-bold text-xs sm:text-sm flex justify-between items-center bg-slate-50/80">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <span className="text-slate-800">การแจ้งเตือน</span>
-              <span className="text-[11px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+              <span className="text-[10px] sm:text-[11px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-medium">
                 {notifications.length}
               </span>
             </div>
@@ -176,7 +179,7 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+          <div className="max-h-[60vh] sm:max-h-80 overflow-y-auto divide-y divide-slate-100">
             {loading ? (
               <div className="p-6 text-center text-xs text-slate-400">
                 กำลังโหลด...
@@ -186,28 +189,40 @@ export default function NotificationBell({ userId, role }: NotificationBellProps
                 ไม่มีการแจ้งเตือน
               </div>
             ) : (
-              notifications.map((noti) => (
-                <div
-                  key={noti.id}
-                  onClick={() => handleNotificationClick(noti)}
-                  className={`p-3.5 cursor-pointer text-xs hover:bg-slate-50 transition-colors ${
-                    !noti.is_read ? "bg-blue-50/60 font-semibold" : "bg-white opacity-75"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <p className="font-bold text-slate-800">{noti.title}</p>
-                    {!noti.is_read && (
-                      <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0 mt-1"></span>
-                    )}
+              notifications.map((noti) => {
+                const isUrgent = noti.title?.includes("เร่ง") || noti.type === "urgent";
+                const displayTitle = cleanTitle(noti.title);
+
+                return (
+                  <div
+                    key={noti.id}
+                    onClick={() => handleNotificationClick(noti)}
+                    className={`p-3.5 cursor-pointer text-xs hover:bg-slate-50 transition-colors ${
+                      !noti.is_read ? "bg-blue-50/60 font-semibold" : "bg-white opacity-75"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-1 gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {isUrgent && (
+                          <Zap size={14} className="text-amber-500 fill-amber-500 shrink-0" />
+                        )}
+                        <p className="font-bold text-slate-800 leading-snug truncate">
+                          {displayTitle}
+                        </p>
+                      </div>
+                      {!noti.is_read && (
+                        <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0 mt-1"></span>
+                      )}
+                    </div>
+                    <p className="text-slate-600 leading-relaxed mb-1.5 font-normal">
+                      {noti.message}
+                    </p>
+                    <span className="text-[10px] text-slate-400 block font-normal">
+                      {formatDate(noti.created_at)}
+                    </span>
                   </div>
-                  <p className="text-slate-600 leading-relaxed mb-1.5 font-normal">
-                    {noti.message}
-                  </p>
-                  <span className="text-[10px] text-slate-400 block font-normal">
-                    {formatDate(noti.created_at)}
-                  </span>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

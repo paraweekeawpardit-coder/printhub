@@ -6,7 +6,8 @@ import {
   User, 
   Store, 
   Headset, 
-  MessageSquare 
+  MessageSquare,
+  ArrowLeft
 } from "lucide-react";
 import axios from "axios";
 import io from "socket.io-client";
@@ -28,13 +29,12 @@ interface SupportRoom {
 
 export default function AdminSupportPage() {
   const [rooms, setRooms] = useState<SupportRoom[]>([]);
-  // 🟢 1. ตั้งค่าเริ่มต้นฝั่งขวาว่างไว้เหมือนร้านค้า (ไม่ auto select ห้องแรก)
   const [selectedRoom, setSelectedRoom] = useState<SupportRoom | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | "customer" | "shop">("all");
   const [loading, setLoading] = useState(true);
 
-  // 🟢 2. ดึงข้อมูล User/Shop จาก Supabase ผสานประวัติแชต MongoDB
+  // ดึงข้อมูล User/Shop จาก Supabase ผสานประวัติแชต MongoDB
   const fetchRooms = async () => {
     try {
       setLoading(true);
@@ -54,7 +54,6 @@ export default function AdminSupportPage() {
         mongoList.forEach((m: any) => {
           if (m._id) {
             mongoMap[m._id] = m;
-            // แมตช์เผื่อ ID ที่บันทึกด้วย support_cust_
             const altKey = m._id.replace("support_customer_", "support_cust_");
             mongoMap[altKey] = m;
           }
@@ -103,11 +102,10 @@ export default function AdminSupportPage() {
         });
       }
 
-      // 🟢 เรียงลำดับแชตล่าสุดขึ้นบนสุดเสมอ
+      // เรียงลำดับแชตล่าสุดขึ้นบนสุดเสมอ
       formattedRooms.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 
       setRooms(formattedRooms);
-      // 💡 เอาโค้ด setSelectedRoom(formattedRooms[0]) ออกเพื่อให้ฝั่งขวาว่างในตอนแรก
     } catch (err) {
       console.error("Error loading support rooms:", err);
       setRooms([]);
@@ -120,7 +118,7 @@ export default function AdminSupportPage() {
     fetchRooms();
   }, []);
 
-  // 🟢 3. Realtime Socket.io — ดักฟังข้อความใหม่ รองรับทั้ง support_cust_ และ support_customer_
+  // Realtime Socket.io — ดักฟังข้อความใหม่
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ["websocket", "polling"] });
 
@@ -128,7 +126,6 @@ export default function AdminSupportPage() {
       const rawRoomId = newMsg.roomId || newMsg.room_id || newMsg.orderId;
       if (!rawRoomId || !rawRoomId.startsWith("support_")) return;
 
-      // แปลง ID ให้ตรงกับโครงสร้างใน State
       const targetRoomId = rawRoomId.replace("support_cust_", "support_customer_");
 
       setRooms((prevRooms) => {
@@ -153,7 +150,6 @@ export default function AdminSupportPage() {
           };
 
           const remainingRooms = prevRooms.filter((_, idx) => idx !== roomIndex);
-          // ดันขึ้นอันดับ 1 บนสุด
           return [updatedRoom, ...remainingRooms];
         } else {
           fetchRooms();
@@ -167,7 +163,7 @@ export default function AdminSupportPage() {
     };
   }, [selectedRoom]);
 
-  // 🟢 4. คลิกเลือกห้องแชต -> เคลียร์ Unread Badge สีเขียวทันที
+  // คลิกเลือกห้องแชต -> เคลียร์ Unread Badge
   const handleSelectRoom = (room: SupportRoom) => {
     setSelectedRoom(room);
 
@@ -182,7 +178,7 @@ export default function AdminSupportPage() {
     });
   };
 
-  // 5. ค้นหาและกรองรายการห้องแชต
+  // ค้นหาและกรองรายการห้องแชต
   const filteredRooms = useMemo(() => {
     return rooms.filter((room) => {
       const matchesSearch =
@@ -194,29 +190,32 @@ export default function AdminSupportPage() {
   }, [rooms, searchQuery, filterType]);
 
   return (
-    <div className="w-full h-[calc(100vh-64px)] p-4 sm:p-6 flex flex-col bg-[#F8FAFC] overflow-hidden box-border font-sans">
+    <div className="w-full h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)] p-2 sm:p-4 md:p-6 flex flex-col bg-[#F8FAFC] overflow-hidden box-border font-sans">
       
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between shrink-0">
+      <div className="mb-2 sm:mb-4 flex items-center justify-between shrink-0 px-1">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2.5">
-            <Headset className="text-[#0F2942]" size={26} />
-            ศูนย์รับเรื่องช่วยเหลือ (Admin Support)
+          <h1 className="text-lg sm:text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Headset className="text-[#0F2942] shrink-0 w-5 h-5 sm:w-6 sm:h-6" />
+            <span className="truncate">ศูนย์รับเรื่องช่วยเหลือ (Admin Support)</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          <p className="text-[11px] sm:text-sm text-slate-500 mt-0.5">
             จัดการและตอบกลับข้อความสอบถามจากลูกค้าและร้านค้าในระบบ
           </p>
         </div>
       </div>
 
       {/* Main Container */}
-      <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col md:flex-row min-h-0">
+      <div className="flex-1 bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col md:flex-row min-h-0">
         
-        {/* 👈 ฝั่งซ้าย: รายชื่อผู้ติดต่อ */}
-        <div className="w-full md:w-80 lg:w-96 border-r border-slate-200 flex flex-col bg-slate-50/50 shrink-0 h-full min-h-0">
-          
+        {/* 👈 ฝั่งซ้าย: รายชื่อผู้ติดต่อ (แสดงบนมือถือเมื่อยังไม่ได้เลือกห้อง) */}
+        <div 
+          className={`w-full md:w-80 lg:w-96 border-r border-slate-200 flex-col bg-slate-50/50 shrink-0 h-full min-h-0 ${
+            selectedRoom ? "hidden md:flex" : "flex"
+          }`}
+        >
           {/* ค้นหา & ตัวกรอง */}
-          <div className="p-4 border-b border-slate-200 space-y-3 bg-white shrink-0">
+          <div className="p-3 sm:p-4 border-b border-slate-200 space-y-2.5 sm:space-y-3 bg-white shrink-0">
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -265,7 +264,7 @@ export default function AdminSupportPage() {
             </div>
           </div>
 
-          {/* รายชื่อเลื่อนสโครลแยกฝั่งซ้าย */}
+          {/* รายชื่อเลื่อนสโครล */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100 min-h-0">
             {loading ? (
               <div className="p-8 text-center text-xs text-slate-400">กำลังโหลดรายการ...</div>
@@ -280,17 +279,17 @@ export default function AdminSupportPage() {
                   <button
                     key={room.roomId}
                     onClick={() => handleSelectRoom(room)}
-                    className={`w-full p-3.5 text-left flex items-start justify-between gap-3 transition cursor-pointer hover:bg-slate-100/80 ${
+                    className={`w-full p-3 sm:p-3.5 text-left flex items-start justify-between gap-2.5 transition cursor-pointer hover:bg-slate-100/80 ${
                       isSelected ? "bg-white border-l-4 border-[#0F2942] shadow-xs" : ""
                     }`}
                   >
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
                       <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold text-white ${
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 font-bold text-white ${
                           isShop ? "bg-amber-500" : "bg-[#0F2942]"
                         }`}
                       >
-                        {isShop ? <Store size={18} /> : <User size={18} />}
+                        {isShop ? <Store size={16} className="sm:w-[18px] sm:h-[18px]" /> : <User size={16} className="sm:w-[18px] sm:h-[18px]" />}
                       </div>
 
                       <div className="flex-1 min-w-0">
@@ -300,12 +299,12 @@ export default function AdminSupportPage() {
                           </span>
                         </div>
 
-                        <p className="text-xs text-slate-400 truncate mt-1">
+                        <p className="text-[11px] sm:text-xs text-slate-400 truncate mt-0.5">
                           {room.lastMessage}
                         </p>
 
                         <span
-                          className={`inline-block text-[10px] px-2 py-0.5 rounded-md mt-1.5 font-medium ${
+                          className={`inline-block text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md mt-1 font-medium ${
                             isShop
                               ? "bg-amber-50 text-amber-700 border border-amber-200"
                               : "bg-blue-50 text-blue-700 border border-blue-200"
@@ -316,9 +315,9 @@ export default function AdminSupportPage() {
                       </div>
                     </div>
 
-                    {/* 🟢 Unread Badge สีเขียวแบบ LINE */}
+                    {/* Unread Badge สีเขียว */}
                     {!!room.unreadCount && room.unreadCount > 0 && (
-                      <span className="min-w-[20px] h-[20px] px-1.5 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0 shadow-xs animate-pulse mt-1">
+                      <span className="min-w-[18px] h-[18px] sm:min-w-[20px] sm:h-[20px] px-1 bg-emerald-500 text-white text-[9px] sm:text-[10px] font-bold rounded-full flex items-center justify-center shrink-0 shadow-xs animate-pulse mt-0.5">
                         {room.unreadCount > 99 ? "99+" : room.unreadCount}
                       </span>
                     )}
@@ -329,25 +328,38 @@ export default function AdminSupportPage() {
           </div>
         </div>
 
-        {/* 👉 ฝั่งขวา: กล่องแชต (แสดงหน้าว่างไว้ในตอนแรก) */}
-        <div className="flex-1 flex flex-col bg-white h-full min-w-0 overflow-hidden">
+        {/* 👉 ฝั่งขวา: กล่องแชต (แสดงเมื่อเลือกห้องแชตแล้ว หรือบนจอใหญ่) */}
+        <div 
+          className={`flex-1 flex-col bg-white h-full min-w-0 overflow-hidden ${
+            selectedRoom ? "flex" : "hidden md:flex"
+          }`}
+        >
           {selectedRoom ? (
             <>
-              {/* Header ฝั่งขวา */}
-              <div className="px-6 py-3.5 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
-                <div className="flex items-center gap-3">
+              {/* Header ฝั่งขวาพร้อมปุ่มย้อนกลับบนมือถือ */}
+              <div className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  {/* ปุ่มย้อนกลับสำหรับจอมือถือ */}
+                  <button
+                    onClick={() => setSelectedRoom(null)}
+                    className="md:hidden p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                    title="ย้อนกลับ"
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
+
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
+                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-bold shrink-0 ${
                       selectedRoom.senderType === "shop" ? "bg-amber-500" : "bg-[#0F2942]"
                     }`}
                   >
-                    {selectedRoom.senderType === "shop" ? <Store size={20} /> : <User size={20} />}
+                    {selectedRoom.senderType === "shop" ? <Store size={18} /> : <User size={18} />}
                   </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-sm sm:text-base leading-tight">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-slate-800 text-xs sm:text-base leading-tight truncate">
                       {selectedRoom.senderName}
                     </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">
                       {selectedRoom.senderType === "shop" ? "บัญชีร้านค้า" : "บัญชีลูกค้าทั่วไป"}
                     </p>
                   </div>
@@ -365,14 +377,14 @@ export default function AdminSupportPage() {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-2 p-8 text-center">
-              <div className="p-4 rounded-full bg-slate-50 text-slate-300 mb-1">
-                <MessageSquare size={36} />
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-2 p-6 text-center">
+              <div className="p-3.5 sm:p-4 rounded-full bg-slate-50 text-slate-300 mb-1">
+                <MessageSquare size={32} className="sm:w-[36px] sm:h-[36px]" />
               </div>
-              <p className="font-medium text-slate-600 text-base">
+              <p className="font-medium text-slate-600 text-sm sm:text-base">
                 เลือกรายการผู้ติดต่อเพื่อเริ่มสนทนา
               </p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 max-w-xs">
                 กรุณาคลิกเลือกรายการลูกค้าหรือร้านค้าจากแถบด้านซ้ายมือเพื่อดูข้อความ
               </p>
             </div>

@@ -38,19 +38,22 @@ export default function BankRequestsTab({
 
   if (dataList.length === 0) {
     return (
-      <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
-        <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-          <CheckCircle2 size={32} />
+      <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-dashed border-slate-300 shadow-2xs font-sans">
+        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+          <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8" />
         </div>
-        <h3 className="text-lg font-semibold text-slate-700">
+        <h3 className="text-base sm:text-lg font-bold text-slate-700">
           ไม่มีคำขอแก้ไขบัญชีธนาคาร
         </h3>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          คำขอเปลี่ยนบัญชีธนาคารทั้งหมดได้รับการตรวจสอบเรียบร้อยแล้ว
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 sm:gap-4 font-sans">
       {dataList.map((req) => (
         <BankRequestCard
           key={req.id}
