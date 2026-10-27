@@ -11,6 +11,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Store, Clock, ChevronDown, Trash2, ArrowRight, Paperclip, Loader2 } from "lucide-react";
 import { formatOpenDays, isEveryDay } from "./shopOpenDays";
+import { pageSelectionTags } from "./pageSelection";
 
 interface CartGroupedShop {
   shop_id: string;
@@ -216,6 +217,7 @@ export default function CustomerCartCard({
               item?.color_type,
               item?.paper_type,
               item?.finishing_option,
+              ...pageSelectionTags(item?.page_selection),
             ].filter((s) => s && String(s).trim() && String(s).trim() !== "ไม่มี"); // ไม่แสดง "ไม่มี"
 
             const fileUrls = String(item?.file_url || "")
@@ -301,7 +303,10 @@ export default function CustomerCartCard({
                             className="inline-flex items-center gap-1 max-w-[240px] px-2 py-1 rounded-lg border border-blue-100 bg-blue-50/60 hover:bg-blue-100 text-[11px] font-medium text-blue-700 transition"
                           >
                             <Paperclip className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{fileNameFromUrl(url, `ไฟล์ที่ ${fIdx + 1}`)}</span>
+                            <span className="truncate">
+                              {fileUrls.length > 1 && <span className="font-bold">ไฟล์ {fIdx + 1}: </span>}
+                              {fileNameFromUrl(url, `ไฟล์ที่ ${fIdx + 1}`)}
+                            </span>
                           </a>
                         ))}
                       </div>

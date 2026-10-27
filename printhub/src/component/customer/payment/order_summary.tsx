@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { splitSpecText } from '../pageSelection';
 
 export interface OrderItem {
   id?: string;
@@ -27,16 +28,10 @@ export interface OrderDetails {
   smallOrderFee?: number; // ค่าธรรมเนียมสั่งซื้อขนาดเล็ก
 }
 
-// ค่าที่ไม่มีความหมายสำหรับลูกค้า (ค่าตั้งต้น / ไม่ได้เลือก) ไม่ต้องแสดงในสเปก
-const HIDDEN_SPEC_VALUES = ["มาตรฐาน", "ไม่มี", "SINGLE", "DOUBLE", "สี/ขาวดำ", "ขาว-ดำ / สี"];
-
-// รวมสเปกของรายการเป็นบรรทัดเดียว เช่น "A4 | ขาว-ดำ | เย็บมุม"
+// รวมสเปกของรายการเป็นบรรทัดเดียว เช่น "A4 | ขาว-ดำ | ไฟล์ 1: พิมพ์หน้า 2-3"
+// (ตัดค่าที่ไม่มีความหมาย เช่น "มาตรฐาน", "ไม่มี" และแปลงข้อความเลือกหน้าแบบเก่า)
 const formatSpecs = (item: OrderItem) =>
-  [item.paperSize, item.colorType, item.printSide]
-    .flatMap((v) => String(v || "").split("|"))
-    .map((v) => v.trim())
-    .filter((v) => v && !HIDDEN_SPEC_VALUES.includes(v))
-    .join(" | ");
+  splitSpecText([item.paperSize, item.colorType, item.printSide].filter(Boolean).join(" | ")).join(" | ");
 
 interface OrderSummaryProps {
   orderData: OrderDetails | null;

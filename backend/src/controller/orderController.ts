@@ -20,6 +20,24 @@ const todayWeekdayBangkok = () =>
 export const upload = multer({ storage: multer.memoryStorage() });
 
 // Helper Function คำนวณราคา
+// หน้าที่ลูกค้าเลือกพิมพ์ (cart_item.page_selection เป็น JSON) -> ข้อความใน describe ให้ร้านเห็น
+// เช่น "พิมพ์เฉพาะหน้า 1-3, 5" หรือ "ไฟล์ 1: พิมพ์หน้า 1-3 | ไฟล์ 2: พิมพ์หน้า 5"
+const formatPageSelectionText = (raw: any): string => {
+  try {
+    const list = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!Array.isArray(list)) return "";
+    const custom = list
+      .map((s: any, idx: number) => ({ ...s, idx }))
+      .filter((s: any) => s && s.print_all === false && s.range);
+    if (custom.length === 0) return "";
+    if (list.length === 1) return `พิมพ์เฉพาะหน้า ${custom[0].range}`;
+    // หลายไฟล์: แยกทีละไฟล์ด้วย " | " (หน้าร้านจะเห็นเป็นคนละแท็ก/คนละช่วง)
+    return custom.map((s: any) => `ไฟล์ ${s.idx + 1}: พิมพ์หน้า ${s.range}`).join(" | ");
+  } catch {
+    return "";
+  }
+};
+
 export const calculateOrderPricing = (items: Array<any>) => {
   const subtotal = items.reduce((sum, item) => {
     let itemSubtotal = 0;
@@ -263,6 +281,7 @@ export const createOrder = async (req: Request, res: Response) => {
         item.color_type,
         item.paper_type,
         item.finishing_option,
+        formatPageSelectionText(item.page_selection),
       ].filter(Boolean).join(" | ") || null,
     }));
 
@@ -284,7 +303,8 @@ export const createOrder = async (req: Request, res: Response) => {
         filesToInsert.push({
           order_id: newOrder.id,
           item_id: correspondingItemId,
-          filename: urls.length > 1 ? `${item.category || "เอกสาร"}_ไฟล์ที่_${fileIdx + 1}` : fileNameFromUrl,
+          // ใช้ชื่อไฟล์จริงจากลิงก์ ให้ตรงกับที่ลูกค้าเห็นในตะกร้า
+          filename: fileNameFromUrl,
           file_url: url,
           file_size_mb: 0,
           page_count: Number(item.page_count || item.total_pages) || 1,

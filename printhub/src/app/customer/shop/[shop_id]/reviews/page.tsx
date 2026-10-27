@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Star, Loader2, ArrowLeft, MessageSquare, AlertCircle, User, Printer } from "lucide-react";
+import { splitSpecText } from "../../../../../component/customer/pageSelection";
 
 interface OrderItem {
     id?: string | number;
@@ -141,11 +142,7 @@ export default function ShopReviewsPage() {
 
     const cleanDescription = (text?: string) => {
         if (!text) return "";
-        return text
-            .replace(/\|\s*(SINGLE|ไม่มี)/gi, "")
-            .replace(/(SINGLE|ไม่มี)/gi, "")
-            .replace(/\|\s*$/g, "")
-            .trim();
+        return splitSpecText(text).join(" | ");
     };
 
     const renderOrderItemsDetail = (rev: ReviewItem) => {

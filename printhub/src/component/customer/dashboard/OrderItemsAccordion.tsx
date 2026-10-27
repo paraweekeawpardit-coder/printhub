@@ -10,6 +10,7 @@
 
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { splitSpecText } from "../pageSelection";
 import { FileText, Paperclip, X, Store, CalendarDays } from "lucide-react";
 
 type AttachedFile = { name: string; url: string };
@@ -32,7 +33,8 @@ const getItemFiles = (item: any, files: any[], itemCount: number): AttachedFile[
   if (fromTable.length > 0) {
     return fromTable.map((f, i) => ({
       url: f.file_url,
-      name: f.filename || fileNameFromUrl(f.file_url, `ไฟล์ที่ ${i + 1}`),
+      // ใช้ชื่อจากลิงก์ไฟล์ก่อน (ให้ตรงกับในตะกร้า) ข้อมูลเก่าเคยตั้งชื่อเป็น "เอกสาร_ไฟล์ที่_1"
+      name: fileNameFromUrl(f.file_url, f.filename || `ไฟล์ที่ ${i + 1}`),
     }));
   }
   const urls = String(item?.file_url || "")
@@ -43,14 +45,7 @@ const getItemFiles = (item: any, files: any[], itemCount: number): AttachedFile[
 };
 
 // สเปกจากคอลัมน์ describe (คั่นด้วย |) ตัดค่าที่ไม่มีความหมายสำหรับลูกค้าออก
-const getSpecs = (item: any): string[] =>
-  item?.describe
-    ? String(item.describe)
-        .split("|")
-        .map((s: string) => s.trim())
-        // SINGLE/DOUBLE = side_type ที่เลิกใช้แล้ว (ข้อมูลเก่า), "ไม่มี" = ลูกค้าไม่ได้เลือกตัวเลือกนั้น
-        .filter((s: string) => s && !/^(SINGLE|DOUBLE|ไม่มี)$/i.test(s))
-    : [];
+const getSpecs = (item: any): string[] => splitSpecText(item?.describe);
 
 interface OrderItemsAccordionProps {
   isExpanded: boolean;
@@ -110,7 +105,10 @@ function ItemRow({ item, idx, files, itemCount }: { item: any; idx: number; file
               className="inline-flex items-center gap-1 max-w-[260px] px-2 py-1 rounded-lg bg-slate-50 hover:bg-blue-50 border border-slate-100 hover:border-blue-200 text-[11px] text-slate-600 hover:text-blue-700 transition"
             >
               <Paperclip className="w-3 h-3 shrink-0" />
-              <span className="truncate">{file.name}</span>
+              <span className="truncate">
+                {attachedFiles.length > 1 && <span className="font-semibold">ไฟล์ {fIdx + 1}: </span>}
+                {file.name}
+              </span>
             </a>
           ))}
         </div>
