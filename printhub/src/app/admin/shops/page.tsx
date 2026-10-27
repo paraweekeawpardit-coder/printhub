@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { RotateCw } from "lucide-react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 
+// 🟢 Import Shop type จาก ShopCard
 import { Shop } from "@/component/admin/ShopCard";
 import ShopDetailModal from "@/component/admin/ShopDetailModal";
 import { BankChangeRequest } from "@/component/admin/BankRequestCard";
@@ -86,7 +87,6 @@ function ShopsContent() {
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Filters & Pagination for All Shops Tab
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "APPROVED" | "SUSPENDED">("ALL");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "name_asc" | "name_desc">("newest");
@@ -338,10 +338,14 @@ function ShopsContent() {
   const pendingAppealsCount = appeals.filter((a) => a.status === "pending").length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 font-['Prompt',sans-serif] text-slate-900">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">ศูนย์จัดการร้านค้า (Admin Panel)</h2>
-        <p className="text-sm text-slate-500 mt-1">ตรวจสอบคำขอใหม่ บัญชีธนาคาร และจัดการสถานะร้านค้าในระบบ</p>
+    <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-3 sm:py-6 font-sans text-slate-900 space-y-4 sm:space-y-6">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight leading-snug">
+          ศูนย์จัดการร้านค้า (Admin Panel)
+        </h2>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          ตรวจสอบคำขอใหม่ บัญชีธนาคาร และจัดการสถานะร้านค้าในระบบ
+        </p>
       </div>
 
       <ShopTabsNavigation
@@ -354,9 +358,9 @@ function ShopsContent() {
       />
 
       {loading ? (
-        <div className="text-center py-16 text-slate-500 flex flex-col items-center gap-3">
-          <RotateCw size={28} className="animate-spin text-sky-600" />
-          <p>กำลังเชื่อมต่อข้อมูล...</p>
+        <div className="text-center py-12 sm:py-16 text-slate-500 flex flex-col items-center gap-2.5 sm:gap-3 bg-white rounded-2xl border border-slate-200">
+          <RotateCw size={26} className="animate-spin text-sky-600" />
+          <p className="text-xs sm:text-sm font-medium">กำลังเชื่อมต่อข้อมูล...</p>
         </div>
       ) : (
         <>
@@ -379,7 +383,7 @@ function ShopsContent() {
           )}
 
           {activeTab === "all" && (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               <ShopFilterControls
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
@@ -390,13 +394,13 @@ function ShopsContent() {
                 onResetFilters={handleResetFilters}
               />
 
-              <div className="text-xs md:text-sm text-slate-500">
-                แสดงผล <strong>{paginatedShops.length}</strong> จาก <strong>{totalItems}</strong> รายการ (ร้านค้าในระบบทั้งหมด {allShops.length} รายการ)
+              <div className="text-xs sm:text-sm text-slate-500 leading-relaxed px-1">
+                แสดงผล <strong className="text-slate-800">{paginatedShops.length}</strong> จาก <strong className="text-slate-800">{totalItems}</strong> รายการ (ร้านค้าในระบบทั้งหมด {allShops.length} รายการ)
               </div>
 
               {paginatedShops.length === 0 ? (
-                <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
-                  <h3 className="text-base font-semibold text-slate-700">ไม่พบข้อมูลร้านค้าที่ค้นหา</h3>
+                <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-dashed border-slate-300 shadow-2xs">
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-700">ไม่พบข้อมูลร้านค้าที่ค้นหา</h3>
                 </div>
               ) : (
                 <>
@@ -427,9 +431,9 @@ export default function ShopsPage() {
   return (
     <Suspense
       fallback={
-        <div className="text-center py-16 text-slate-500 flex flex-col items-center gap-3">
-          <RotateCw size={28} className="animate-spin text-sky-600" />
-          <p>กำลังโหลด...</p>
+        <div className="text-center py-12 sm:py-16 text-slate-500 flex flex-col items-center gap-2.5 sm:gap-3">
+          <RotateCw size={26} className="animate-spin text-sky-600" />
+          <p className="text-xs sm:text-sm font-medium">กำลังโหลด...</p>
         </div>
       }
     >

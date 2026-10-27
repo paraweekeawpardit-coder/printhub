@@ -50,7 +50,7 @@ export default function PayoutsAdminPage() {
     return item.shop?.shop_name || "ไม่ระบุชื่อร้านค้า";
   };
 
-  // 🟢 ปรับปรุงให้แปลงเวลา +7 ผ่าน formatThaiDate
+  // แปลงเวลา +7 ผ่าน formatThaiDate
   const getPayoutDate = (item?: PayoutItem | string) => {
     const rawDate = typeof item === "string" ? item : item?.payment_date || item?.created_at;
     if (!rawDate) return "-";
@@ -143,25 +143,25 @@ export default function PayoutsAdminPage() {
   const pendingCount = payouts.length - paidCount;
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 sm:p-8 font-sans text-slate-800">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="space-y-4 sm:space-y-6 font-sans text-slate-800 p-2 sm:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Header Section */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-snug">
               ระบบโอนเงินให้ร้านค้า (Shop Payouts)
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
               จัดการรายการโอนเงินค่าบริการให้ร้านค้า เมื่อออเดอร์เสร็จสมบูรณ์หรือเสร็จสิ้นกระบวนการพิจารณา
             </p>
           </div>
 
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto">
             <button
               onClick={() => setActiveTab("PENDING")}
-              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer text-center ${
                 activeTab === "PENDING"
-                  ? "bg-white text-slate-900 shadow-sm"
+                  ? "bg-white text-slate-900 shadow-2xs"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
@@ -169,9 +169,9 @@ export default function PayoutsAdminPage() {
             </button>
             <button
               onClick={() => setActiveTab("PAID")}
-              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer text-center ${
                 activeTab === "PAID"
-                  ? "bg-white text-emerald-700 shadow-sm"
+                  ? "bg-white text-emerald-700 shadow-2xs"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
@@ -181,7 +181,7 @@ export default function PayoutsAdminPage() {
         </div>
 
         {/* Payout Table Component */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
           <PayoutsTable
             payouts={filteredPayouts}
             activeTab={activeTab}
@@ -218,6 +218,6 @@ export default function PayoutsAdminPage() {
           onSubmit={handleProcessPayout}
         />
       )}
-    </main>
+    </div>
   );
 }

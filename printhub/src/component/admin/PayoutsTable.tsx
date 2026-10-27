@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import PaginationBar from "./PaginationBar"; // 🟢 Import PaginationBar Component
+import PaginationBar from "./PaginationBar";
 
 export interface PayoutItem {
   id: string; // payment_id
@@ -37,7 +37,7 @@ interface PayoutsTableProps {
   itemsPerPage?: number;
 }
 
-// 🟢 พาร์สวันเวลา รองรับทั้ง ค.ศ. และ พ.ศ. ป้องกันปีเพี้ยน
+// พาร์สวันเวลา รองรับทั้ง ค.ศ. และ พ.ศ. ป้องกันปีเพี้ยน
 export const parseThaiDate = (dateString?: string | null): Date | null => {
   if (!dateString) return null;
 
@@ -59,7 +59,7 @@ export const parseThaiDate = (dateString?: string | null): Date | null => {
   return isNaN(d.getTime()) ? null : d;
 };
 
-// 🟢 Helper Function แปลงเวลาเป็น Thai Local Time (Asia/Bangkok +7)
+// Helper Function แปลงเวลาเป็น Thai Local Time (Asia/Bangkok +7)
 export const formatThaiDate = (dateString?: string | null) => {
   const date = parseThaiDate(dateString);
   if (!date) return "-";
@@ -82,7 +82,7 @@ export default function PayoutsTable({
   onSelectPayout,
   onViewSlip,
   formatDate: propFormatDate,
-  itemsPerPage = 10, // 🟢 กำหนดให้แสดงผลหน้าละ 10 รายการ
+  itemsPerPage = 10,
 }: PayoutsTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -90,7 +90,7 @@ export default function PayoutsTable({
   // State สลับมุมมอง: "SINGLE" = รายออเดอร์, "GROUPED" = รวมตามร้านค้า
   const [viewMode, setViewMode] = useState<"SINGLE" | "GROUPED">("GROUPED");
 
-  // 🟢 State สำหรับ Pagination
+  // State สำหรับ Pagination
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   // ใช้ formatThaiDate บังคับ +7 เป็นหลัก
@@ -101,10 +101,10 @@ export default function PayoutsTable({
 
   // คำนวณ SLA ความเร่งด่วน
   const getPayoutUrgency = (dateString?: string) => {
-    if (!dateString) return { label: "ปกติ", color: "text-slate-500 bg-slate-100" };
+    if (!dateString) return { label: "ปกติ", color: "text-slate-500 bg-slate-100 border-slate-200" };
 
     const parsed = parseThaiDate(dateString);
-    if (!parsed) return { label: "ปกติ", color: "text-slate-500 bg-slate-100" };
+    if (!parsed) return { label: "ปกติ", color: "text-slate-500 bg-slate-100 border-slate-200" };
 
     const payoutDate = parsed.getTime();
     const now = Date.now();
@@ -180,22 +180,22 @@ export default function PayoutsTable({
     return Object.values(groups);
   }, [filteredPayouts]);
 
-  // 🟢 คำนวณจำนวนไอเทมและจำนวนหน้าตามโหมดที่เลือก
+  // คำนวณจำนวนไอเทมและจำนวนหน้าตามโหมดที่เลือก
   const totalItems = viewMode === "GROUPED" ? groupedPayouts.length : filteredPayouts.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
 
-  // 🟢 รีเซ็ตกลับหน้า 1 เมื่อเปลี่ยนแท็บ เปลี่ยนโหมด หรือเปลี่ยนคำค้นหา
+  // รีเซ็ตกลับหน้า 1 เมื่อเปลี่ยนแท็บ เปลี่ยนโหมด หรือเปลี่ยนคำค้นหา
   useEffect(() => {
     setCurrentPage(1);
   }, [payouts.length, activeTab, viewMode, searchTerm]);
 
-  // 🟢 ตัดแบ่งข้อมูลของหน้าปัจจุบันสำหรับโหมด GROUPED
+  // ตัดแบ่งข้อมูลของหน้าปัจจุบันสำหรับโหมด GROUPED
   const paginatedGroupedPayouts = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return groupedPayouts.slice(startIndex, startIndex + itemsPerPage);
   }, [groupedPayouts, currentPage, itemsPerPage]);
 
-  // 🟢 ตัดแบ่งข้อมูลของหน้าปัจจุบันสำหรับโหมด SINGLE
+  // ตัดแบ่งข้อมูลของหน้าปัจจุบันสำหรับโหมด SINGLE
   const paginatedSinglePayouts = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredPayouts.slice(startIndex, startIndex + itemsPerPage);
@@ -204,7 +204,7 @@ export default function PayoutsTable({
   return (
     <div className="space-y-4 font-sans">
       {/* Search Bar & View Mode Toggle */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs">
         <div className="relative w-full sm:w-80">
           <svg
             className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -218,8 +218,8 @@ export default function PayoutsTable({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="ค้นหา Order ID (#198), ชื่อร้านค้า, หรือเลขบัญชี..."
-            className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-800"
+            placeholder="ค้นหา Order ID (#198), ร้านค้า, หรือเลขบัญชี..."
+            className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-800 placeholder:text-slate-400"
           />
           {searchTerm && (
             <button
@@ -232,323 +232,530 @@ export default function PayoutsTable({
         </div>
 
         {/* ปุ่มสลับรูปแบบการแสดงผล */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500 font-medium">รูปแบบแสดงผล:</span>
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+        <div className="flex items-center justify-between sm:justify-end gap-2">
+          <span className="text-xs text-slate-500 font-medium whitespace-nowrap">รูปแบบ:</span>
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto">
             <button
               onClick={() => setViewMode("GROUPED")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+              className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer text-center whitespace-nowrap ${
                 viewMode === "GROUPED"
-                  ? "bg-white text-blue-600 shadow-xs"
+                  ? "bg-white text-blue-600 shadow-2xs"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              รวมตามร้านค้า ({groupedPayouts.length} ร้าน)
+              รวมร้านค้า ({groupedPayouts.length})
             </button>
             <button
               onClick={() => setViewMode("SINGLE")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+              className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer text-center whitespace-nowrap ${
                 viewMode === "SINGLE"
-                  ? "bg-white text-blue-600 shadow-xs"
+                  ? "bg-white text-blue-600 shadow-2xs"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              แยกรายออเดอร์ ({filteredPayouts.length} รายการ)
+              รายออเดอร์ ({filteredPayouts.length})
             </button>
           </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          {viewMode === "GROUPED" ? (
-            /* ================= โหมด 1: รวมตามร้านค้า (Grouped Payout) ================= */
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  <th className="py-4 px-4 whitespace-nowrap min-w-[280px]">ร้านค้า / บัญชีโอนเงิน</th>
-                  <th className="py-4 px-4 whitespace-nowrap min-w-[130px]">จำนวนออเดอร์</th>
-                  <th className="py-4 px-4 min-w-[250px]">รายการออเดอร์</th>
-                  <th className="py-4 px-4 whitespace-nowrap min-w-[160px]">ยอดเงินรวมที่ต้องโอน</th>
-                  {activeTab === "PAID" ? (
-                    <>
-                      <th className="py-4 px-4 whitespace-nowrap min-w-[160px]">วันที่โอนเงินสำเร็จ</th>
-                      <th className="py-4 px-4 text-center whitespace-nowrap min-w-[120px]">สถานะ</th>
-                      <th className="py-4 px-4 text-center whitespace-nowrap min-w-[120px]">จัดการ</th>
-                    </>
-                  ) : (
-                    <th className="py-4 px-4 text-center whitespace-nowrap min-w-[180px]">จัดการ</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td colSpan={activeTab === "PAID" ? 7 : 5} className="py-12 text-center text-slate-400">
-                      กำลังโหลดข้อมูลการโอนเงิน...
-                    </td>
-                  </tr>
-                ) : paginatedGroupedPayouts.length > 0 ? (
-                  paginatedGroupedPayouts.map((group, idx) => {
-                    const bankAcc = getBankDetail(group.shop);
-                    const orderNos = group.items
-                      .map((i) => `#${String(i.order_no || i.id.slice(0, 8)).replace(/^#+/, "")}`)
-                      .join(", ");
+      {/* Content Section */}
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 text-xs sm:text-sm font-medium">
+          กำลังโหลดข้อมูลการโอนเงิน...
+        </div>
+      ) : (
+        <>
+          {/* 📱 Mobile Card View (สำหรับจอมือถือ) */}
+          <div className="block md:hidden space-y-3">
+            {viewMode === "GROUPED" ? (
+              /* Mobile Grouped Cards */
+              paginatedGroupedPayouts.length > 0 ? (
+                paginatedGroupedPayouts.map((group, idx) => {
+                  const bankAcc = getBankDetail(group.shop);
+                  const orderNos = group.items
+                    .map((i) => `#${String(i.order_no || i.id.slice(0, 8)).replace(/^#+/, "")}`)
+                    .join(", ");
 
-                    const aggregatedItem: PayoutItem = {
-                      ...group.items[0],
-                      id: group.items[0].id,
-                      shop_income: group.totalAmount,
-                      amount: group.totalAmount,
-                    };
+                  const aggregatedItem: PayoutItem = {
+                    ...group.items[0],
+                    id: group.items[0].id,
+                    shop_income: group.totalAmount,
+                    amount: group.totalAmount,
+                  };
 
-                    const completedPayoutDate = group.items[0]?.payout_date || group.items[0]?.payment_date;
-                    const slipUrl = group.items.find((i) => i.payout_slip_url)?.payout_slip_url;
+                  const completedPayoutDate = group.items[0]?.payout_date || group.items[0]?.payment_date;
+                  const slipUrl = group.items.find((i) => i.payout_slip_url)?.payout_slip_url;
 
-                    return (
-                      <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                        {/* ร้านค้า & ข้อมูลบัญชีธนาคาร */}
-                        <td className="py-4 px-4">
-                          <div className="font-bold text-slate-900 text-sm mb-1">
-                            {group.shopName}
-                          </div>
-                          {bankAcc ? (
-                            <div className="space-y-1 text-xs text-slate-600">
-                              <div className="flex items-center gap-2 whitespace-nowrap">
-                                <span className="font-semibold text-slate-700">{bankAcc.bank_name}:</span>
-                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 font-bold">
-                                  {bankAcc.account_number}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyBankAcc(bankAcc.account_number, `group-${idx}`)}
-                                  className="text-[10px] text-blue-600 hover:bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 transition-all cursor-pointer font-medium shrink-0"
-                                >
-                                  {copiedId === `group-${idx}` ? "คัดลอกแล้ว!" : "คัดลอก"}
-                                </button>
-                              </div>
-                              {bankAcc.account_name && (
-                                <div className="text-slate-500 text-[11px] whitespace-nowrap">
-                                  <span className="font-medium text-slate-600">ชื่อบัญชี:</span> {bankAcc.account_name}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-rose-500 italic mt-0.5">ยังไม่ผูกบัญชีธนาคาร</div>
-                          )}
-                        </td>
-
-                        {/* จำนวนออเดอร์ */}
-                        <td className="py-4 px-4 whitespace-nowrap">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                  return (
+                    <div key={idx} className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3 text-xs">
+                      <div className="flex justify-between items-start border-b border-slate-100 pb-2.5">
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-sm">{group.shopName}</h4>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 mt-1">
                             {group.items.length} ออเดอร์
                           </span>
-                        </td>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block">ยอดรวมโอน</span>
+                          <span className="text-base font-bold text-emerald-600">
+                            ฿{group.totalAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
 
-                        {/* รายชื่อเลขออเดอร์ */}
-                        <td className="py-4 px-4 font-mono text-xs text-slate-600 leading-relaxed break-words max-w-md">
-                          {orderNos}
-                        </td>
-
-                        {/* ยอดเงินรวม */}
-                        <td className="py-4 px-4 whitespace-nowrap font-bold text-emerald-600 text-base">
-                          ฿{group.totalAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })}
-                        </td>
-
-                        {/* แท็บ PAID: แยกแสดง วันที่สำเร็จ + สถานะ + ปุ่มจัดการ */}
-                        {activeTab === "PAID" ? (
-                          <>
-                            <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600 font-medium">
-                              {formatDate(completedPayoutDate)}
-                            </td>
-                            <td className="py-4 px-4 whitespace-nowrap text-center">
-                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                                โอนเงินสำเร็จ
+                      {/* Bank Account Info */}
+                      {bankAcc ? (
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-slate-700">{bankAcc.bank_name}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-900 font-bold">
+                                {bankAcc.account_number}
                               </span>
-                            </td>
-                            <td className="py-4 px-4 whitespace-nowrap text-center">
-                              {slipUrl && onViewSlip ? (
-                                <button
-                                  onClick={() => onViewSlip(slipUrl)}
-                                  className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-all cursor-pointer"
-                                >
-                                  ดูสลิปโอน
-                                </button>
-                              ) : (
-                                <span className="text-slate-400 text-xs">-</span>
-                              )}
-                            </td>
-                          </>
-                        ) : (
-                          /* แท็บ PENDING: คอลัมน์จัดการอย่างเดียว */
-                          <td className="py-4 px-4 whitespace-nowrap text-center">
-                            <button
-                              onClick={() => onSelectPayout(aggregatedItem)}
-                              className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all active:scale-95 cursor-pointer"
-                            >
-                              โอนเงินให้ร้านนี้ (฿{group.totalAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })})
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={activeTab === "PAID" ? 7 : 5} className="py-12 text-center text-slate-400">
-                      {searchTerm
-                        ? `ไม่พบรายการโอนเงินที่ตรงกับ "${searchTerm}"`
-                        : "ไม่มีรายการที่รอโอนเงินในขณะนี้"}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          ) : (
-            /* ================= โหมด 2: แยกรายออเดอร์ (Single View) ================= */
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  <th className="py-4 px-4 whitespace-nowrap">เลขที่ออเดอร์</th>
-                  <th className="py-4 px-4 whitespace-nowrap min-w-[280px]">ร้านค้า / บัญชีโอนเงิน</th>
-                  <th className="py-4 px-4 whitespace-nowrap">จำนวนเงินที่ต้องโอน</th>
-                  <th className="py-4 px-4 whitespace-nowrap">วันที่พร้อมโอน</th>
-                  {activeTab === "PAID" ? (
-                    <>
-                      <th className="py-4 px-4 whitespace-nowrap">วันที่โอนเงินสำเร็จ</th>
-                      <th className="py-4 px-4 text-center whitespace-nowrap">สถานะ</th>
-                      <th className="py-4 px-4 text-center whitespace-nowrap">จัดการ</th>
-                    </>
-                  ) : (
-                    <>
-                      <th className="py-4 px-4 whitespace-nowrap">สถานะกำหนดการ</th>
-                      <th className="py-4 px-4 text-center whitespace-nowrap">จัดการ</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td colSpan={activeTab === "PAID" ? 7 : 6} className="py-12 text-center text-slate-400">
-                      กำลังโหลดข้อมูลการโอนเงิน...
-                    </td>
-                  </tr>
-                ) : paginatedSinglePayouts.length > 0 ? (
-                  paginatedSinglePayouts.map((item) => {
-                    const displayOrderNo = item.order_no
-                      ? `#${String(item.order_no).replace(/^#+/, "")}`
-                      : "-";
-
-                    const urgency = getPayoutUrgency(item.payment_date || item.created_at);
-                    const bankAcc = getBankDetail(item.shop);
-
-                    const readyDate = item.payment_date || item.created_at;
-                    const completedPayoutDate = item.payout_date || item.payment_date;
-
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-4 px-4 font-mono font-bold text-blue-600 text-xs whitespace-nowrap">
-                          {displayOrderNo}
-                        </td>
-
-                        <td className="py-4 px-4">
-                          <div className="font-bold text-slate-800 text-xs mb-1">
-                            {item.shop?.shop_name || "-"}
-                          </div>
-                          {bankAcc ? (
-                            <div className="space-y-1 text-xs text-slate-600">
-                              <div className="flex items-center gap-2 whitespace-nowrap">
-                                <span className="font-semibold">{bankAcc.bank_name}:</span>
-                                <span className="font-mono bg-slate-100 px-1 py-0.5 rounded font-bold">{bankAcc.account_number}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyBankAcc(bankAcc.account_number, item.id)}
-                                  className="text-[10px] text-blue-600 hover:bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 transition-all cursor-pointer font-medium shrink-0"
-                                >
-                                  {copiedId === item.id ? "คัดลอกแล้ว!" : "คัดลอก"}
-                                </button>
-                              </div>
-                              {bankAcc.account_name && (
-                                <div className="text-slate-500 text-[11px] whitespace-nowrap">
-                                  <span className="font-medium text-slate-600">ชื่อบัญชี:</span> {bankAcc.account_name}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-rose-500 italic">ยังไม่ผูกบัญชีธนาคาร</div>
-                          )}
-                        </td>
-
-                        <td className="py-4 px-4 whitespace-nowrap font-bold text-emerald-600 text-base">
-                          ฿{Number(item.shop_income || item.amount || 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })}
-                        </td>
-
-                        <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-500">
-                          {formatDate(readyDate)}
-                        </td>
-
-                        {/* แท็บ PAID vs PENDING ใน Single View */}
-                        {activeTab === "PAID" ? (
-                          <>
-                            <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600 font-medium">
-                              {formatDate(completedPayoutDate)}
-                            </td>
-                            <td className="py-4 px-4 whitespace-nowrap text-center">
-                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                                โอนเงินสำเร็จ
-                              </span>
-                            </td>
-                            <td className="py-4 px-4 whitespace-nowrap text-center">
-                              {item.payout_slip_url && onViewSlip ? (
-                                <button
-                                  onClick={() => onViewSlip(item.payout_slip_url!)}
-                                  className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-all cursor-pointer"
-                                >
-                                  ดูสลิปโอน
-                                </button>
-                              ) : (
-                                <span className="text-slate-400 text-xs">-</span>
-                              )}
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="py-4 px-4 whitespace-nowrap">
-                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${urgency.color}`}>
-                                {urgency.label}
-                              </span>
-                            </td>
-                            <td className="py-4 px-4 whitespace-nowrap text-center">
                               <button
-                                onClick={() => onSelectPayout(item)}
-                                className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all active:scale-95 cursor-pointer"
+                                type="button"
+                                onClick={() => handleCopyBankAcc(bankAcc.account_number, `m-group-${idx}`)}
+                                className="text-[10px] text-blue-600 hover:bg-blue-100 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 font-medium shrink-0"
                               >
-                                โอนเงินให้ร้าน
+                                {copiedId === `m-group-${idx}` ? "คัดลอกแล้ว!" : "คัดลอก"}
                               </button>
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={activeTab === "PAID" ? 7 : 6} className="py-12 text-center text-slate-400">
-                      {searchTerm
-                        ? `ไม่พบรายการโอนเงินที่ตรงกับ "${searchTerm}"`
-                        : "ไม่มีรายการที่รอโอนเงินในขณะนี้"}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+                            </div>
+                          </div>
+                          {bankAcc.account_name && (
+                            <div className="text-[11px] text-slate-500">
+                              ชื่อบัญชี: <span className="font-medium text-slate-700">{bankAcc.account_name}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-rose-500 italic bg-rose-50 p-2 rounded-xl border border-rose-100">
+                          ยังไม่ผูกบัญชีธนาคาร
+                        </div>
+                      )}
 
-      {/* 🟢 แสดงปุ่มเปลี่ยนหน้า Pagination ด้านล่างตารางเมื่อรายการมากกว่า 1 หน้า */}
+                      {/* Orders list */}
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-0.5">รายการออเดอร์:</span>
+                        <p className="font-mono text-[11px] text-slate-700 leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100 break-words">
+                          {orderNos}
+                        </p>
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        {activeTab === "PAID" ? (
+                          <>
+                            <div className="text-[11px] text-slate-500">
+                              โอนเมื่อ: <span className="font-medium text-slate-700">{formatDate(completedPayoutDate)}</span>
+                            </div>
+                            {slipUrl && onViewSlip ? (
+                              <button
+                                onClick={() => onViewSlip(slipUrl)}
+                                className="px-3 py-1 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg"
+                              >
+                                ดูสลิปโอน
+                              </button>
+                            ) : (
+                              <span className="text-xs text-emerald-700 font-semibold">โอนสำเร็จ</span>
+                            )}
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => onSelectPayout(aggregatedItem)}
+                            className="w-full py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-2xs text-center"
+                          >
+                            โอนเงินให้ร้านนี้ (฿{group.totalAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })})
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs">
+                  {searchTerm ? `ไม่พบรายการที่ตรงกับ "${searchTerm}"` : "ไม่มีรายการที่รอโอนเงินในขณะนี้"}
+                </div>
+              )
+            ) : (
+              /* Mobile Single Order Cards */
+              paginatedSinglePayouts.length > 0 ? (
+                paginatedSinglePayouts.map((item) => {
+                  const displayOrderNo = item.order_no
+                    ? `#${String(item.order_no).replace(/^#+/, "")}`
+                    : "-";
+
+                  const urgency = getPayoutUrgency(item.payment_date || item.created_at);
+                  const bankAcc = getBankDetail(item.shop);
+                  const readyDate = item.payment_date || item.created_at;
+                  const completedPayoutDate = item.payout_date || item.payment_date;
+
+                  return (
+                    <div key={item.id} className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 text-xs">
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                        <span className="font-mono font-bold text-blue-600 text-xs">{displayOrderNo}</span>
+                        {activeTab === "PENDING" ? (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${urgency.color}`}>
+                            {urgency.label}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                            โอนเงินสำเร็จ
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">ร้านค้า</span>
+                          <span className="font-bold text-slate-800 text-xs">{item.shop?.shop_name || "-"}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block">ยอดโอน</span>
+                          <span className="text-sm font-bold text-emerald-600">
+                            ฿{Number(item.shop_income || item.amount || 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Bank Info */}
+                      {bankAcc ? (
+                        <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 text-[11px] flex justify-between items-center">
+                          <div>
+                            <span className="font-semibold text-slate-700">{bankAcc.bank_name}: </span>
+                            <span className="font-mono font-bold text-slate-900">{bankAcc.account_number}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyBankAcc(bankAcc.account_number, item.id)}
+                            className="text-[10px] text-blue-600 bg-white px-1.5 py-0.5 rounded border border-blue-200 font-medium"
+                          >
+                            {copiedId === item.id ? "คัดลอกแล้ว!" : "คัดลอก"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-rose-500 italic">ยังไม่ผูกบัญชีธนาคาร</div>
+                      )}
+
+                      <div className="flex justify-between items-center text-[11px] text-slate-500 pt-1">
+                        <span>วันที่พร้อมโอน: {formatDate(readyDate)}</span>
+                        {activeTab === "PAID" && (
+                          <span>โอนเมื่อ: {formatDate(completedPayoutDate)}</span>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 flex justify-end">
+                        {activeTab === "PAID" ? (
+                          item.payout_slip_url && onViewSlip ? (
+                            <button
+                              onClick={() => onViewSlip(item.payout_slip_url!)}
+                              className="px-3 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-xl"
+                            >
+                              ดูสลิปโอน
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">-</span>
+                          )
+                        ) : (
+                          <button
+                            onClick={() => onSelectPayout(item)}
+                            className="w-full py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-2xs text-center"
+                          >
+                            โอนเงินให้ร้าน
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs">
+                  {searchTerm ? `ไม่พบรายการที่ตรงกับ "${searchTerm}"` : "ไม่มีรายการที่รอโอนเงินในขณะนี้"}
+                </div>
+              )
+            )}
+          </div>
+
+          {/* 💻 Desktop Table View (สำหรับจอใหญ่) */}
+          <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              {viewMode === "GROUPED" ? (
+                /* โหมด 1: รวมตามร้านค้า (Grouped Payout) */
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      <th className="py-4 px-4 whitespace-nowrap min-w-[280px]">ร้านค้า / บัญชีโอนเงิน</th>
+                      <th className="py-4 px-4 whitespace-nowrap min-w-[130px]">จำนวนออเดอร์</th>
+                      <th className="py-4 px-4 min-w-[250px]">รายการออเดอร์</th>
+                      <th className="py-4 px-4 whitespace-nowrap min-w-[160px]">ยอดเงินรวมที่ต้องโอน</th>
+                      {activeTab === "PAID" ? (
+                        <>
+                          <th className="py-4 px-4 whitespace-nowrap min-w-[160px]">วันที่โอนเงินสำเร็จ</th>
+                          <th className="py-4 px-4 text-center whitespace-nowrap min-w-[120px]">สถานะ</th>
+                          <th className="py-4 px-4 text-center whitespace-nowrap min-w-[120px]">จัดการ</th>
+                        </>
+                      ) : (
+                        <th className="py-4 px-4 text-center whitespace-nowrap min-w-[180px]">จัดการ</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedGroupedPayouts.length > 0 ? (
+                      paginatedGroupedPayouts.map((group, idx) => {
+                        const bankAcc = getBankDetail(group.shop);
+                        const orderNos = group.items
+                          .map((i) => `#${String(i.order_no || i.id.slice(0, 8)).replace(/^#+/, "")}`)
+                          .join(", ");
+
+                        const aggregatedItem: PayoutItem = {
+                          ...group.items[0],
+                          id: group.items[0].id,
+                          shop_income: group.totalAmount,
+                          amount: group.totalAmount,
+                        };
+
+                        const completedPayoutDate = group.items[0]?.payout_date || group.items[0]?.payment_date;
+                        const slipUrl = group.items.find((i) => i.payout_slip_url)?.payout_slip_url;
+
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                            {/* ร้านค้า & ข้อมูลบัญชีธนาคาร */}
+                            <td className="py-4 px-4">
+                              <div className="font-bold text-slate-900 text-sm mb-1">
+                                {group.shopName}
+                              </div>
+                              {bankAcc ? (
+                                <div className="space-y-1 text-xs text-slate-600">
+                                  <div className="flex items-center gap-2 whitespace-nowrap">
+                                    <span className="font-semibold text-slate-700">{bankAcc.bank_name}:</span>
+                                    <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 font-bold">
+                                      {bankAcc.account_number}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyBankAcc(bankAcc.account_number, `group-${idx}`)}
+                                      className="text-[10px] text-blue-600 hover:bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 transition-all cursor-pointer font-medium shrink-0"
+                                    >
+                                      {copiedId === `group-${idx}` ? "คัดลอกแล้ว!" : "คัดลอก"}
+                                    </button>
+                                  </div>
+                                  {bankAcc.account_name && (
+                                    <div className="text-slate-500 text-[11px] whitespace-nowrap">
+                                      <span className="font-medium text-slate-600">ชื่อบัญชี:</span> {bankAcc.account_name}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-rose-500 italic mt-0.5">ยังไม่ผูกบัญชีธนาคาร</div>
+                              )}
+                            </td>
+
+                            {/* จำนวนออเดอร์ */}
+                            <td className="py-4 px-4 whitespace-nowrap">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                {group.items.length} ออเดอร์
+                              </span>
+                            </td>
+
+                            {/* รายชื่อเลขออเดอร์ */}
+                            <td className="py-4 px-4 font-mono text-xs text-slate-600 leading-relaxed break-words max-w-md">
+                              {orderNos}
+                            </td>
+
+                            {/* ยอดเงินรวม */}
+                            <td className="py-4 px-4 whitespace-nowrap font-bold text-emerald-600 text-base">
+                              ฿{group.totalAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })}
+                            </td>
+
+                            {/* แท็บ PAID */}
+                            {activeTab === "PAID" ? (
+                              <>
+                                <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600 font-medium">
+                                  {formatDate(completedPayoutDate)}
+                                </td>
+                                <td className="py-4 px-4 whitespace-nowrap text-center">
+                                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                                    โอนเงินสำเร็จ
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4 whitespace-nowrap text-center">
+                                  {slipUrl && onViewSlip ? (
+                                    <button
+                                      onClick={() => onViewSlip(slipUrl)}
+                                      className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-all cursor-pointer"
+                                    >
+                                      ดูสลิปโอน
+                                    </button>
+                                  ) : (
+                                    <span className="text-slate-400 text-xs">-</span>
+                                  )}
+                                </td>
+                              </>
+                            ) : (
+                              /* แท็บ PENDING */
+                              <td className="py-4 px-4 whitespace-nowrap text-center">
+                                <button
+                                  onClick={() => onSelectPayout(aggregatedItem)}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                                >
+                                  โอนเงินให้ร้านนี้ (฿{group.totalAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })})
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={activeTab === "PAID" ? 7 : 5} className="py-12 text-center text-slate-400">
+                          {searchTerm
+                            ? `ไม่พบรายการโอนเงินที่ตรงกับ "${searchTerm}"`
+                            : "ไม่มีรายการที่รอโอนเงินในขณะนี้"}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                /* โหมด 2: แยกรายออเดอร์ (Single View) */
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      <th className="py-4 px-4 whitespace-nowrap">เลขที่ออเดอร์</th>
+                      <th className="py-4 px-4 whitespace-nowrap min-w-[280px]">ร้านค้า / บัญชีโอนเงิน</th>
+                      <th className="py-4 px-4 whitespace-nowrap">จำนวนเงินที่ต้องโอน</th>
+                      <th className="py-4 px-4 whitespace-nowrap">วันที่พร้อมโอน</th>
+                      {activeTab === "PAID" ? (
+                        <>
+                          <th className="py-4 px-4 whitespace-nowrap">วันที่โอนเงินสำเร็จ</th>
+                          <th className="py-4 px-4 text-center whitespace-nowrap">สถานะ</th>
+                          <th className="py-4 px-4 text-center whitespace-nowrap">จัดการ</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="py-4 px-4 whitespace-nowrap">สถานะกำหนดการ</th>
+                          <th className="py-4 px-4 text-center whitespace-nowrap">จัดการ</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedSinglePayouts.length > 0 ? (
+                      paginatedSinglePayouts.map((item) => {
+                        const displayOrderNo = item.order_no
+                          ? `#${String(item.order_no).replace(/^#+/, "")}`
+                          : "-";
+
+                        const urgency = getPayoutUrgency(item.payment_date || item.created_at);
+                        const bankAcc = getBankDetail(item.shop);
+
+                        const readyDate = item.payment_date || item.created_at;
+                        const completedPayoutDate = item.payout_date || item.payment_date;
+
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-4 px-4 font-mono font-bold text-blue-600 text-xs whitespace-nowrap">
+                              {displayOrderNo}
+                            </td>
+
+                            <td className="py-4 px-4">
+                              <div className="font-bold text-slate-800 text-xs mb-1">
+                                {item.shop?.shop_name || "-"}
+                              </div>
+                              {bankAcc ? (
+                                <div className="space-y-1 text-xs text-slate-600">
+                                  <div className="flex items-center gap-2 whitespace-nowrap">
+                                    <span className="font-semibold">{bankAcc.bank_name}:</span>
+                                    <span className="font-mono bg-slate-100 px-1 py-0.5 rounded font-bold">{bankAcc.account_number}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyBankAcc(bankAcc.account_number, item.id)}
+                                      className="text-[10px] text-blue-600 hover:bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 transition-all cursor-pointer font-medium shrink-0"
+                                    >
+                                      {copiedId === item.id ? "คัดลอกแล้ว!" : "คัดลอก"}
+                                    </button>
+                                  </div>
+                                  {bankAcc.account_name && (
+                                    <div className="text-slate-500 text-[11px] whitespace-nowrap">
+                                      <span className="font-medium text-slate-600">ชื่อบัญชี:</span> {bankAcc.account_name}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-rose-500 italic">ยังไม่ผูกบัญชีธนาคาร</div>
+                              )}
+                            </td>
+
+                            <td className="py-4 px-4 whitespace-nowrap font-bold text-emerald-600 text-base">
+                              ฿{Number(item.shop_income || item.amount || 0).toLocaleString("th-TH", { minimumFractionDigits: 2 })}
+                            </td>
+
+                            <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-500">
+                              {formatDate(readyDate)}
+                            </td>
+
+                            {/* แท็บ PAID vs PENDING ใน Single View */}
+                            {activeTab === "PAID" ? (
+                              <>
+                                <td className="py-4 px-4 whitespace-nowrap text-xs text-slate-600 font-medium">
+                                  {formatDate(completedPayoutDate)}
+                                </td>
+                                <td className="py-4 px-4 whitespace-nowrap text-center">
+                                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                                    โอนเงินสำเร็จ
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4 whitespace-nowrap text-center">
+                                  {item.payout_slip_url && onViewSlip ? (
+                                    <button
+                                      onClick={() => onViewSlip(item.payout_slip_url!)}
+                                      className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-all cursor-pointer"
+                                    >
+                                      ดูสลิปโอน
+                                    </button>
+                                  ) : (
+                                    <span className="text-slate-400 text-xs">-</span>
+                                  )}
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="py-4 px-4 whitespace-nowrap">
+                                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${urgency.color}`}>
+                                    {urgency.label}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4 whitespace-nowrap text-center">
+                                  <button
+                                    onClick={() => onSelectPayout(item)}
+                                    className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                                  >
+                                    โอนเงินให้ร้าน
+                                  </button>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={activeTab === "PAID" ? 7 : 6} className="py-12 text-center text-slate-400">
+                          {searchTerm
+                            ? `ไม่พบรายการโอนเงินที่ตรงกับ "${searchTerm}"`
+                            : "ไม่มีรายการที่รอโอนเงินในขณะนี้"}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* แสดงปุ่มเปลี่ยนหน้า Pagination ด้านล่างตารางเมื่อรายการมากกว่า 1 หน้า */}
       {totalPages > 1 && (
         <div className="pt-2">
           <PaginationBar

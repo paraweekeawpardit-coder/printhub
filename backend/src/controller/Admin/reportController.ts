@@ -28,14 +28,18 @@ export const getAllReports = async (
     const orderIds = [
       ...new Set(reports.map((r: any) => r.order_id).filter(Boolean)),
     ];
+    const reviewIds = [
+      ...new Set(reports.map((r: any) => r.review_id).filter(Boolean)),
+    ];
 
-    // 🟢 ดึงข้อมูล customer, print_shop, print_order, print_order_item และ print_file ร่วมกัน
     const [
       { data: customers },
       { data: shops },
       { data: orders },
       { data: orderItems },
       { data: orderFiles },
+      { data: reviewsByReviewId },
+      { data: reviewsByOrderId },
     ] = await Promise.all([
       customerIds.length > 0
         ? supabase
@@ -46,14 +50,14 @@ export const getAllReports = async (
       shopIds.length > 0
         ? supabase
             .from("print_shop")
-            .select("id, shop_name, email, phone")
+            .select("id, shop_name, email, phone, open_time, close_time")
             .in("id", shopIds)
         : Promise.resolve({ data: [] }),
       orderIds.length > 0
         ? supabase
             .from("print_order")
             .select(
-              "id, order_no, total_price, total_amount, platform_fee, small_order_fee, description"
+              "id, order_no, total_price, total_amount, platform_fee, small_order_fee, description, appointment_time, order_date"
             )
             .in("id", orderIds)
         : Promise.resolve({ data: [] }),
@@ -63,13 +67,27 @@ export const getAllReports = async (
       orderIds.length > 0
         ? supabase.from("print_file").select("*").in("order_id", orderIds)
         : Promise.resolve({ data: [] }),
+      reviewIds.length > 0
+        ? supabase
+            .from("review")
+            .select("id, order_id, comment, score, image_url, is_hidden")
+            .in("id", reviewIds)
+        : Promise.resolve({ data: [] }),
+      orderIds.length > 0
+        ? supabase
+            .from("review")
+            .select("id, order_id, comment, score, image_url, is_hidden")
+            .in("order_id", orderIds)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const customerMap = new Map((customers || []).map((c: any) => [c.id, c]));
     const shopMap = new Map((shops || []).map((s: any) => [s.id, s]));
     const orderMap = new Map((orders || []).map((o: any) => [o.id, o]));
+    
+    const reviewIdMap = new Map((reviewsByReviewId || []).map((rv: any) => [rv.id, rv]));
+    const reviewOrderMap = new Map((reviewsByOrderId || []).map((rv: any) => [rv.order_id, rv]));
 
-    // จัดกลุ่มรายการสั่งพิมพ์ (Order Items) ตาม order_id
     const orderItemsMap = new Map<string, any[]>();
     (orderItems || []).forEach((item: any) => {
       const oid = String(item.order_id);
@@ -88,7 +106,6 @@ export const getAllReports = async (
       });
     });
 
-    // 🟢 จัดกลุ่มไฟล์งานต้นฉบับ (Print Files) ตาม order_id
     const orderFilesMap = new Map<string, any[]>();
     (orderFiles || []).forEach((file: any) => {
       const oid = String(file.order_id);
@@ -109,6 +126,8 @@ export const getAllReports = async (
       const cust: any = customerMap.get(item.customer_id);
       const shp: any = shopMap.get(item.shop_id);
       const ord: any = orderMap.get(item.order_id);
+      
+      const rvw: any = reviewIdMap.get(item.review_id) || reviewOrderMap.get(item.order_id);
       const itemsInOrder = orderItemsMap.get(String(item.order_id)) || [];
       const filesInOrder = orderFilesMap.get(String(item.order_id)) || [];
 
@@ -135,15 +154,23 @@ export const getAllReports = async (
         order_no: displayOrderNo,
         order_id_display: displayOrderNo,
         total_price: ord?.total_amount || ord?.total_price || 0,
-        order_description: ord?.description || null, // 🟢 หมายเหตุออเดอร์จากลูกค้า
+        order_description: ord?.description || null,
         customer_name: custName,
         customer_phone: cust?.contact || "-",
         shop_name: shp?.shop_name || "-",
         shop_phone: shp?.phone || "-",
         updated_at: item.updated_at || null,
-        admin_image_url: item.admin_image_url || null, // 🟢 รูปหลักฐานการตัดสินจากแอดมิน
+        admin_image_url: item.admin_image_url || null,
         order_items: itemsInOrder,
         order_files: filesInOrder,
+        review_comment: rvw?.comment || null,
+        review_rating: rvw?.score || 0,
+        review_is_hidden: Boolean(rvw?.is_hidden),
+        
+        open_time: shp?.open_time || null,
+        close_time: shp?.close_time || null,
+        appointment_time: ord?.appointment_time || null,
+        order_date: ord?.order_date || null,
       };
     });
 
@@ -203,7 +230,7 @@ export const resolveReport = async (
   res: Response
 ): Promise<Response> => {
   try {
-    const { report_id, decision, admin_note, admin_image_url, admin_id } = req.body;
+    const { report_id, decision, admin_note, admin_image_url, admin_id, review_id } = req.body;
 
     if (!report_id || !decision || !admin_note?.trim()) {
       return res
@@ -212,7 +239,10 @@ export const resolveReport = async (
     }
 
     const statusValue =
-      decision === "approved" ? "resolved_refund" : "rejected";
+      decision === "approved" || decision === "hide_review" || decision === "resolved"
+        ? "resolved"
+        : "rejected";
+        
     const nowIso = new Date().toISOString();
 
     const { data: report } = await supabase
@@ -224,7 +254,7 @@ export const resolveReport = async (
     const updatePayload: any = {
       status: statusValue,
       admin_note: admin_note.trim(),
-      admin_image_url: admin_image_url || null, // 🟢 รองรับการบันทึก URL รูปภาพหลักฐานการตัดสิน
+      admin_image_url: admin_image_url || null,
       is_verified: true,
       updated_at: nowIso,
     };
@@ -233,6 +263,7 @@ export const resolveReport = async (
       updatePayload.admin_id = admin_id;
     }
 
+    // 1. อัปเดตสถานะของใบรายงานในตาราง report
     const { data: updatedReport, error } = await supabase
       .from("report")
       .update(updatePayload)
@@ -240,11 +271,39 @@ export const resolveReport = async (
       .select()
       .single();
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) {
+      console.error("Update report status failed:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
 
+    // 2. 🟢 กรณีซ่อนรีวิว (hide_review): เคลียร์คอมเมนต์/รูปภาพ และตั้งค่า is_hidden = true
+    if (decision === "hide_review") {
+      const targetReviewId = review_id || report?.review_id;
+
+      const reviewUpdatePayload = {
+        comment: null,
+        image_url: null,
+        is_hidden: true,
+      };
+      
+      if (targetReviewId) {
+        await supabase
+          .from("review")
+          .update(reviewUpdatePayload)
+          .eq("id", targetReviewId);
+      }
+      
+      if (report?.order_id) {
+        await supabase
+          .from("review")
+          .update(reviewUpdatePayload)
+          .eq("order_id", report.order_id);
+      }
+    }
+
+    // 3. ปรับสถานะสำหรับรายงานประเภทออเดอร์/ขอคืนเงิน
     if (report?.order_id) {
       if (decision === "approved") {
-        // กรณีอนุมัติคืนเงิน: เปลี่ยนสถานะเป็น "ยกเลิกการพิมพ์" เพื่อเข้าสู่ตารางคืนเงินลูกค้า
         const { data: statusObj } = await supabase
           .from("status")
           .select("id")
@@ -257,8 +316,7 @@ export const resolveReport = async (
             .update({ current_status_id: statusObj.id })
             .eq("id", report.order_id);
         }
-      } else if (decision === "rejected") {
-        // กรณีปฏิเสธคำร้อง: คิดค่าธรรมเนียมรวม (small_order_fee + platform_fee)
+      } else if (decision === "rejected" && report.issue_type !== "รายงานรีวิวที่ไม่เหมาะสม") {
         const { data: order } = await supabase
           .from("print_order")
           .select("total_amount, total_price, platform_fee, small_order_fee")
@@ -294,11 +352,11 @@ export const resolveReport = async (
       }
     }
 
-    // 🟢 ยิง Notification แจ้งเตือนไปยัง Customer และ Shop เมื่อผลการพิจารณาออก
+    // 4. ส่ง การแจ้งเตือน (Notifications)
     const notificationsToInsert = [];
     const decisionText =
-      decision === "approved"
-        ? "อนุมัติคำร้องเรียน (คืนเงิน)"
+      decision === "approved" || decision === "hide_review"
+        ? "อนุมัติคำร้องเรียน"
         : "ปฏิเสธคำร้องเรียน";
 
     if (report?.customer_id) {
@@ -317,7 +375,7 @@ export const resolveReport = async (
         shop_id: report.shop_id,
         order_id: report.order_id || null,
         title: "ผลการพิจารณารายงานปัญหา",
-        message: `รายงานปัญหาจากคำสั่งซื้อได้รับการพิจารณาแล้ว: ${decisionText}`,
+        message: `รายงานปัญหาได้รับการพิจารณาแล้ว: ${decisionText}`,
         type: "report_result",
         is_read: false,
       });

@@ -213,6 +213,7 @@ export default function ShopPage() {
           });
         }
 
+        // 🟢 4. กรองรีวิวที่ถูกซ่อน (is_hidden === true) ออกจาก reviewData ก่อนบันทึกลง State
         if (reviewRes?.data) {
           const revs = reviewRes.data.data || reviewRes.data.reviews || [];
           const comps = reviewRes.data.complaints || [];

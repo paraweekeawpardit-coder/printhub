@@ -121,33 +121,33 @@ export default function AdminSlipsPage() {
     );
   });
 
-  // 🟢 แปลงเวลาด้วย formatThaiDate (+7)
+  // แปลงเวลาด้วย formatThaiDate (+7)
   const formatDate = (dateString?: string | null) => {
     return formatThaiDate(dateString);
   };
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-4 sm:space-y-6 font-sans p-3 sm:p-6 lg:p-8">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-snug">
             ประวัติการชำระเงิน & ค่าธรรมเนียมระบบ (Payment Transactions)
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
             ศูนย์รวมข้อมูลสลิปหลักฐานการชำระเงินของลูกค้า และประวัติธุรกรรมในระบบ
           </p>
         </div>
 
-        {/* 🔍 ช่องค้นหาปรับขนาดและดีไซน์ให้ตรงตามภาพตัวอย่าง */}
-        <div className="w-full sm:w-96 relative">
+        {/* 🔍 ช่องค้นหา */}
+        <div className="w-full md:w-80 lg:w-96 relative shrink-0">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           <input
             type="text"
-            placeholder="ค้นหา Order ID (#197), ชื่อลูกค้า, เลขบัญชี หรือร้านค้า..."
+            placeholder="ค้นหา Order ID, ลูกค้า, หรือร้านค้า..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-9 py-2 rounded-2xl border border-slate-200 bg-slate-50/60 text-xs text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/80 transition-all shadow-2xs"
+            className="w-full pl-9 pr-9 py-2 rounded-xl border border-slate-200 bg-slate-50/60 text-xs sm:text-sm text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/80 transition-all shadow-2xs"
           />
           {search && (
             <button
@@ -162,38 +162,44 @@ export default function AdminSlipsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
-          <span className="text-xs font-medium text-slate-500">รายการรับชำระทั้งหมด</span>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+          <span className="text-[11px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            รายการรับชำระทั้งหมด
+          </span>
           <div className="flex items-baseline justify-between pt-1">
-            <span className="text-2xl font-extrabold text-slate-900">{summaryCounts.total}</span>
+            <span className="text-xl sm:text-2xl font-extrabold text-slate-900">{summaryCounts.total}</span>
             <span className="text-xs text-slate-400 font-medium">รายการ</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-emerald-200/80 bg-emerald-50/30 shadow-2xs space-y-1">
-          <span className="text-xs font-semibold text-emerald-700">ชำระเงินสำเร็จปกติ</span>
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-emerald-200/80 bg-emerald-50/30 shadow-2xs space-y-1">
+          <span className="text-[11px] sm:text-xs font-semibold text-emerald-700 uppercase tracking-wider">
+            ชำระเงินสำเร็จปกติ
+          </span>
           <div className="flex items-baseline justify-between pt-1">
-            <span className="text-2xl font-extrabold text-emerald-900">{summaryCounts.paid}</span>
+            <span className="text-xl sm:text-2xl font-extrabold text-emerald-900">{summaryCounts.paid}</span>
             <span className="text-xs text-emerald-600 font-medium">รายการ</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-amber-200/80 bg-amber-50/30 shadow-2xs space-y-1">
-          <span className="text-xs font-semibold text-amber-700">รายการที่โอนเงินคืนแล้ว (Refunded)</span>
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200/80 bg-amber-50/30 shadow-2xs space-y-1">
+          <span className="text-[11px] sm:text-xs font-semibold text-amber-700 uppercase tracking-wider">
+            โอนเงินคืนแล้ว (Refunded)
+          </span>
           <div className="flex items-baseline justify-between pt-1">
-            <span className="text-2xl font-extrabold text-amber-900">{summaryCounts.refunded}</span>
+            <span className="text-xl sm:text-2xl font-extrabold text-amber-900">{summaryCounts.refunded}</span>
             <span className="text-xs text-amber-600 font-medium">รายการ</span>
           </div>
         </div>
       </div>
 
       {/* Filter Tabs & Table Container */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden space-y-4 p-4">
-        <div className="flex items-center gap-2 border-b border-slate-100 pb-3 overflow-x-auto">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden space-y-4 p-3.5 sm:p-5">
+        <div className="flex items-center gap-1.5 sm:gap-2 border-b border-slate-100 pb-3 overflow-x-auto scrollbar-none">
           <button
             onClick={() => handleTabChange("all")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               statusFilter === "all"
                 ? "bg-slate-900 text-white shadow-2xs"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -203,7 +209,7 @@ export default function AdminSlipsPage() {
           </button>
           <button
             onClick={() => handleTabChange("paid")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               statusFilter === "paid"
                 ? "bg-emerald-600 text-white shadow-2xs"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -213,7 +219,7 @@ export default function AdminSlipsPage() {
           </button>
           <button
             onClick={() => handleTabChange("refunded")}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               statusFilter === "refunded"
                 ? "bg-amber-600 text-white shadow-2xs"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -232,22 +238,22 @@ export default function AdminSlipsPage() {
 
         {/* Pagination Controls */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100 px-2 text-xs">
-            <span className="text-slate-500 font-medium">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 sm:pt-4 border-t border-slate-100 px-1 text-xs">
+            <span className="text-slate-500 font-medium text-center sm:text-left">
               หน้า {page} จากทั้งหมด {totalPages} หน้า
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
               <button
                 disabled={page <= 1 || loading}
                 onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-medium cursor-pointer"
+                className="flex-1 sm:flex-initial px-4 py-2 sm:py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-medium cursor-pointer text-center"
               >
                 ย้อนกลับ
               </button>
               <button
                 disabled={page >= totalPages || loading}
                 onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-medium cursor-pointer"
+                className="flex-1 sm:flex-initial px-4 py-2 sm:py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-medium cursor-pointer text-center"
               >
                 ถัดไป
               </button>
