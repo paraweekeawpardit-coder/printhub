@@ -111,6 +111,8 @@ async function resolveResetToken(token: unknown): Promise<ResolvedReset> {
   try {
     payload = jwt.verify(token, getResetSecret());
   } catch (err) {
+    // log สาเหตุจริง: invalid signature = secret ไม่ตรงกัน, jwt malformed = token เพี้ยน/ถูกตัด
+    console.warn("[resolveResetToken] verify failed:", (err as Error).name, "-", (err as Error).message);
     if (err instanceof jwt.TokenExpiredError) {
       return { ok: false, error: "ลิงก์หมดอายุแล้ว กรุณาขอลิงก์รีเซ็ตรหัสผ่านใหม่" };
     }
