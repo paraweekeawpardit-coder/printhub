@@ -1,9 +1,3 @@
-/**
-- Component: CustomerDashboardView
-- Path: src/component/customer/dashboard/CustomerDashboardView.tsx
-- หน้าที่: ควบคุม State, การกรองสถานะคำสั่งซื้อ และ Modal ทั้งหมด (ใช้ร่วมกันทั้งหน้า Dashboard และ Orders)
- */
-
 "use client";
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
@@ -29,9 +23,9 @@ const STATUS_FILTERS = [
 ];
 
 interface CustomerDashboardViewProps {
-  showBanner?: boolean; // เปิด/ปิด Banner ต้อนรับ
-  showStats?: boolean;  // เปิด/ปิด การ์ดสถิติ 4 ช่อง
-  pageTitle?: string;   // กำหนดหัวข้อหน้า (กรณีเป็นหน้าคำสั่งซื้อของฉัน)
+  showBanner?: boolean;
+  showStats?: boolean;
+  pageTitle?: string;
 }
 
 export default function CustomerDashboardView({
@@ -62,9 +56,10 @@ export default function CustomerDashboardView({
 
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
-    type: "cancel" | "received";
+    type: "cancel" | "received" | "cancel-report";
     orderId: string;
     orderNo: string;
+    reportId?: string;
   }>({ isOpen: false, type: "cancel", orderId: "", orderNo: "" });
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -84,7 +79,6 @@ export default function CustomerDashboardView({
     return isNaN(parsed) ? null : parsed;
   };
 
-  // เวลานัดรับเก็บเป็นเวลาไทยแบบไม่มี timezone -> ตีความเป็น +07:00
   const parseBangkokTime = (dateStr?: string | null) => {
     if (!dateStr) return null;
     let cleaned = String(dateStr).trim().replace(" ", "T");
@@ -94,7 +88,6 @@ export default function CustomerDashboardView({
     return isNaN(parsed) ? null : parsed;
   };
 
-  // 🌟 ฟังก์ชันคำนวณสถานะจริงของออเดอร์ (แก้ไขไม่ให้เหมารวมออเดอร์ที่ดำเนินงานไปแล้วเป็นยกเลิก)
   const getRealOrderState = (o: any) => {
     if (!o) return "รอการดำเนินงาน";
 
@@ -105,8 +98,6 @@ export default function CustomerDashboardView({
       (typeof o.status === "string" ? o.status : null) ||
       "";
 
-    // 1. ถ้าระบุชัดเจนใน DB ว่ายกเลิก ให้ยึดเป็นยกเลิกการพิมพ์ทันที
-    // แอดมินอนุมัติคืนเงินจากคำร้อง -> ใน DB เป็นยกเลิก แต่ฝั่งลูกค้านับเป็น "รายการเสร็จสิ้น"
     const reportStatus = String(o?.report?.status || "").toLowerCase();
     if (
       reportStatus === "resolved_refund" &&
@@ -119,7 +110,6 @@ export default function CustomerDashboardView({
       return "ยกเลิกการพิมพ์";
     }
 
-    // 2. ถ้าเป็นสถานะที่ดำเนินงานไปแล้วหรือเสร็จสิ้น ไม่ต้องเช็กเรื่องหมดเวลาชำระเงิน
     if (
       dbState === "รอการดำเนินงาน" ||
       dbState === "กำลังพิมพ์" ||
@@ -127,7 +117,6 @@ export default function CustomerDashboardView({
       dbState === "รายการเสร็จสิ้น" ||
       dbState === "รับงานแล้ว"
     ) {
-      // ตรวจสอบเฉพาะกรณีเลยเวลานัดรับงาน และงานยังค้างอยู่ที่รอดำเนินงาน/กำลังพิมพ์ (S2G7 Auto-Cancel)
       const now = Date.now();
       const appointmentMs = parseBangkokTime(o?.appointment_time);
       if (appointmentMs && now >= appointmentMs && (dbState === "รอการดำเนินงาน" || dbState === "กำลังพิมพ์")) {
@@ -136,18 +125,17 @@ export default function CustomerDashboardView({
       return dbState;
     }
 
-    // 3. ตรวจสอบเฉพาะออเดอร์ที่ยังอยู่ในสถานะ "รอการชำระเงิน"
+    const paymentStatus = String(o?.payment?.status || "").toLowerCase();
+
     const now = Date.now();
     const paymentData = Array.isArray(o?.payment) ? o.payment[0] : o?.payment;
-    const isSlipRejected = paymentData?.is_verified === false || paymentData?.status === "rejected";
+    const isSlipRejected = paymentData?.is_verified === false || paymentStatus === "rejected";
     const hasPaidSlip = Boolean(paymentData?.slip_url) && !isSlipRejected;
 
-    // ถ้ามีการแนบสลิปแล้ว หรือชำระเงินแล้ว ไม่ถือว่าหมดเวลาชำระเงิน
     if (hasPaidSlip) {
       return dbState || "รอการดำเนินงาน";
     }
 
-    // เช็กหมดเวลาชำระเงินเฉพาะออเดอร์ที่ยังไม่ได้ชำระเงิน
     let isExpired = false;
     const expiresAtMs = parseSafeTime(o?.expires_at);
     if (expiresAtMs) {
@@ -195,7 +183,6 @@ export default function CustomerDashboardView({
     fetchDashboardData(cid);
   }, [router, fetchDashboardData]);
 
-  // ปรับกรอบไฮไลต์เมื่อมี highlightOrderId เข้ามา
   useEffect(() => {
     if (!loading && highlightOrderId && orders.length > 0) {
       const targetOrder = orders.find((o) => String(o.id) === String(highlightOrderId));
@@ -204,7 +191,6 @@ export default function CustomerDashboardView({
           const element = document.getElementById(`order-${highlightOrderId}`);
           if (element) {
             element.scrollIntoView({ behavior: "smooth", block: "center" });
-
             element.classList.add(
               "ring-2",
               "ring-blue-600",
@@ -213,7 +199,6 @@ export default function CustomerDashboardView({
               "transition-all",
               "duration-300"
             );
-
             setTimeout(() => {
               element.classList.remove(
                 "ring-2",
@@ -228,7 +213,14 @@ export default function CustomerDashboardView({
     }
   }, [loading, highlightOrderId, orders]);
 
-  // คำนวณจำนวนออเดอร์ในแต่ละสถานะสำหรับตัวเลข Badge
+  // 🌟 กรองรายการข้อร้องเรียน (เอาตัวที่ยกเลิก 'cancelled' ออกไป)
+  const activeReports = useMemo(() => {
+    return reports.filter((rep: any) => {
+      const st = String(rep?.status || "").toLowerCase().trim();
+      return st !== "cancelled";
+    });
+  }, [reports]);
+
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       ทั้งหมด: orders.length,
@@ -252,7 +244,6 @@ export default function CustomerDashboardView({
     return counts;
   }, [orders]);
 
-  // กรองรายการคำสั่งซื้อตามแท็บที่เลือก
   const filteredOrders = useMemo(() => {
     return orders.filter((o: any) => {
       const state = getRealOrderState(o);
@@ -266,7 +257,7 @@ export default function CustomerDashboardView({
 
   const handleExecuteAction = async () => {
     const cid = localStorage.getItem("customer_id") || localStorage.getItem("id");
-    const { type, orderId } = confirmModal;
+    const { type, orderId, reportId } = confirmModal;
 
     try {
       if (type === "cancel") {
@@ -290,6 +281,19 @@ export default function CustomerDashboardView({
           if (cid) fetchDashboardData(cid);
         } else {
           showToast(data.message || data.error || "เกิดข้อผิดพลาดในการยืนยันรับงาน");
+        }
+      } else if (type === "cancel-report") {
+        const targetReportId = reportId || orderId;
+        const res = await fetch(`http://localhost:5000/api/customer/report/${targetReportId}/cancel`, {
+          method: "PUT",
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast("ยกเลิกคำขอคืนเงินเรียบร้อยแล้ว");
+          // 🟢 เมื่อยกเลิกสำเร็จ ให้โหลดข้อมูลใหม่ทันที
+          if (cid) fetchDashboardData(cid);
+        } else {
+          showToast(data.message || data.error || "ไม่สามารถยกเลิกคำขอคืนเงินได้");
         }
       }
     } catch (err) {
@@ -370,8 +374,8 @@ export default function CustomerDashboardView({
             type="button"
             onClick={() => setActiveTab("orders")}
             className={`pb-3 transition relative cursor-pointer ${activeTab === "orders"
-              ? "text-[#0F2942] border-b-2 border-[#0F2942]"
-              : "text-slate-400 hover:text-slate-600"
+                ? "text-[#0F2942] border-b-2 border-[#0F2942]"
+                : "text-slate-400 hover:text-slate-600"
               }`}
           >
             รายการสั่งซื้อของฉัน ({orders.length})
@@ -380,14 +384,14 @@ export default function CustomerDashboardView({
             type="button"
             onClick={() => setActiveTab("reports")}
             className={`pb-3 transition relative flex items-center gap-1.5 cursor-pointer ${activeTab === "reports"
-              ? "text-[#0F2942] border-b-2 border-[#0F2942]"
-              : "text-slate-400 hover:text-slate-600"
+                ? "text-[#0F2942] border-b-2 border-[#0F2942]"
+                : "text-slate-400 hover:text-slate-600"
               }`}
           >
             <span>ข้อร้องเรียน / ขอคืนเงิน</span>
-            {reports.length > 0 && (
+            {activeReports.length > 0 && (
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-rose-100 text-rose-600 font-bold">
-                {reports.length}
+                {activeReports.length}
               </span>
             )}
           </button>
@@ -438,17 +442,25 @@ export default function CustomerDashboardView({
                         orderNo,
                       })
                     }
-                    // 🌟 เปลี่ยนเส้นทางปุ่มรายงานปัญหาให้วิ่งไปที่หน้า /customer/orders/[order_id]/report
                     onReportClick={(ord) => {
                       router.push(`/customer/orders/${ord.id}/report`);
                     }}
+                    onCancelReportClick={(reportId, orderNo) =>
+                      setConfirmModal({
+                        isOpen: true,
+                        type: "cancel-report",
+                        orderId: order.id,
+                        orderNo: orderNo || order.order_no || order.id.slice(0, 8),
+                        reportId: reportId,
+                      })
+                    }
                     onShowToast={showToast}
                   />
                 </div>
               ))}
             </div>
           )
-        ) : reports.length === 0 ? (
+        ) : activeReports.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-3xl border border-slate-200/80 text-slate-400 space-y-2">
             <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-400" />
             <p className="text-sm font-bold text-slate-700">ไม่มีรายการข้อร้องเรียนหรือคำขอคืนเงิน</p>
@@ -456,8 +468,30 @@ export default function CustomerDashboardView({
           </div>
         ) : (
           <div className="space-y-3">
-            {reports.map((rep) => (
-              <CustomerReportCard key={rep.id} report={rep} />
+            {activeReports.map((rep) => (
+              <div key={rep.id} className="relative bg-white rounded-3xl border border-slate-200/80 p-4 shadow-sm flex flex-col gap-3">
+                <CustomerReportCard report={rep} />
+
+                {(!rep.status || rep.status === "pending" || rep.status === "investigating") && (
+                  <div className="flex justify-end pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setConfirmModal({
+                          isOpen: true,
+                          type: "cancel-report",
+                          orderId: rep.order_id || "",
+                          orderNo: rep.order_no || rep.id.slice(0, 8),
+                          reportId: rep.id,
+                        })
+                      }
+                      className="px-4 py-1.5 rounded-xl border border-rose-200 text-rose-600 bg-rose-50/50 hover:bg-rose-100/60 text-xs font-semibold transition"
+                    >
+                      ยกเลิกการขอคืนเงิน
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -465,7 +499,7 @@ export default function CustomerDashboardView({
 
       <ConfirmActionModal
         isOpen={confirmModal.isOpen}
-        type={confirmModal.type}
+        type={confirmModal.type === "cancel-report" ? "cancel" : confirmModal.type}
         orderNo={confirmModal.orderNo}
         onClose={() => setConfirmModal({ isOpen: false, type: "cancel", orderId: "", orderNo: "" })}
         onConfirm={handleExecuteAction}
