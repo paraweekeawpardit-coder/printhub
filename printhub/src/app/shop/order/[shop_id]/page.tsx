@@ -388,7 +388,7 @@ export default function OrderPage() {
                   {/* 3. ปฏิทินเลือกวัน (Modern Calendar Input) */}
                   <div>
                     <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400 flex items-center gap-1.5">
-                      <CalendarIcon size={13} /> เลือกวันที่ต้องการ (ปฏิทิน)
+                      <CalendarIcon size={13} /> เลือกวันที่ต้องการนัดรับ (ปฏิทิน)
                     </p>
                     <div className="relative">
                       <input
