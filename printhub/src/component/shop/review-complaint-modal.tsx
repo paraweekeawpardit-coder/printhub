@@ -187,7 +187,7 @@ type Props = {
   ratingCounts?: Record<number, number>;
   onOrderClick?: (id: string) => void;
   onReplyReview?: (reviewId: string, replyText: string) => Promise<void>;
-  onReportReview?: (reviewId: string, reason: string) => Promise<void>;
+  onReportReview?: (reviewId: string, reason: string, orderId?: string) => Promise<void>;
 };
 
 export default function ReviewComplaintModal({
@@ -264,16 +264,22 @@ export default function ReviewComplaintModal({
     }
   };
 
-  // 🟢 เมื่อกดส่งรายงานสำเร็จ ให้บันทึกไอดีลง State ทันที
   const handleSendReport = async () => {
-    if (!reportingReviewId || !reportReason.trim() || !onReportReview) return;
+    const reason = reportReason.trim();
+    if (!reportingReviewId || !reason || !onReportReview) {
+      alert("กรุณาระบุเหตุผลการรายงาน");
+      return;
+    }
+
+    const reviewId = reportingReviewId; // เก็บค่าไว้ก่อน กัน state เปลี่ยนระหว่าง await
+    const orderId = reviews.find((r) => r.id === reviewId)?.print_order?.id;
+
     try {
       setIsSubmittingReport(true);
-      await onReportReview(reportingReviewId, reportReason.trim());
+      await onReportReview(reviewId, reason, orderId);
 
-      // บันทึกว่ารีวิวนี้ถูกรายงานแล้ว
-      setReportedIds((prev) => new Set(prev).add(reportingReviewId));
-
+      // ธงเป็นสีแดงทันที ไม่ต้องรอ backend
+      setReportedIds((prev) => new Set(prev).add(reviewId));
       setReportingReviewId(null);
       setReportReason("");
       alert("ส่งรายงานรีวิวที่ไม่เหมาะสมเรียบร้อยแล้ว");
@@ -536,13 +542,13 @@ export default function ReviewComplaintModal({
                               setReportingReviewId(r.id);
                               setReportReason("");
                             }}
-                            className={`rounded p-1 transition ${isAlreadyReported(r.id) // 🟢 เปลี่ยนมาเช็คผ่านฟังก์ชันเช็คร่วมกับ state ที่กดรายงานแล้ว
-                              ? "text-rose-600 bg-rose-50 hover:bg-rose-100" // 🔴 สีแดงเมื่อรายงานแล้ว
-                              : "text-slate-400 hover:bg-rose-50 hover:text-rose-600" // ⚪ สีปกติ
+                            className={`rounded p-1 transition ${reported
+                                ? "bg-rose-50 text-rose-600 hover:bg-rose-100"
+                                : "text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                               }`}
-                            title={isAlreadyReported(r.id) ? "คุณได้รายงานรีวิวนี้แล้ว" : "รายงานรีวิวนี้"}
+                            title={reported ? "คุณได้รายงานรีวิวนี้แล้ว" : "รายงานรีวิวนี้"}
                           >
-                            <Flag className="h-3.5 w-3.5" />
+                            <Flag className={`h-3.5 w-3.5 ${reported ? "fill-rose-500" : ""}`} />
                           </button>
                         )}
                       </div>
@@ -820,7 +826,7 @@ export default function ReviewComplaintModal({
                   </button>
                   <button
                     type="button"
-                    disabled={isSubmittingReport || !reportReason.trim()}
+                    disabled={isSubmittingReport || !reportReason || reportReason.trim() === ""}
                     onClick={handleSendReport}
                     className="rounded-lg bg-rose-600 px-4 py-1.5 text-xs text-white hover:bg-rose-700 disabled:opacity-50"
                   >

@@ -296,18 +296,29 @@ export default function ShopPage() {
     }
   };
 
-  // 🟢 🟢 ปรับแก้การยิง API รายงานรีวิวให้ตรงกับที่ Backend รอรับ
-  const handleReportReview = async (reviewId: string, reason: string) => {
+
+
+  const handleReportReview = async (
+    reviewId: string,
+    reason: string,
+    orderId?: string
+  ) => {
     if (isSuspended) throw new Error("บัญชีนี้ถูกระงับการใช้งาน");
 
-    const token = localStorage.getItem("token");
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const cleanReason = reason.trim();
+
     try {
       await axios.post(
-        `${API_URL}/shop/report-review`, // ยิงไปยัง endpoint รายงานรีวิว
+        `${API_URL}/shop/reviews/${reviewId}/report`,
         {
-          review_id: reviewId,
           shop_id: shopId,
-          description: reason,
+          review_id: reviewId,
+          order_id: orderId || null,
+          reason: cleanReason,
+          description: cleanReason,
+          report_reason: cleanReason,
         },
         {
           headers: {
@@ -317,14 +328,18 @@ export default function ShopPage() {
         }
       );
 
-      // โหลดข้อมูลรีวิวใหม่เพื่อให้สถานะ has_reported: true แสดงขึ้นมา
       await fetchDashboardData({ silent: true });
     } catch (err: any) {
+      console.error("Report Review API Error:", err?.response?.data || err);
+
       throw new Error(
-        err?.response?.data?.message || err?.response?.data?.error || "ไม่สามารถส่งรายงานได้ กรุณาลองใหม่อีกครั้ง"
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        "ไม่สามารถส่งรายงานได้ กรุณาลองใหม่อีกครั้ง"
       );
     }
   };
+
 
   return (
     <div className="min-h-screen bg-slate-50/50 font-['Prompt',sans-serif]">
