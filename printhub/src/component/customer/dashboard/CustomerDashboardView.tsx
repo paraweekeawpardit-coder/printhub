@@ -184,6 +184,27 @@ export default function CustomerDashboardView({
     fetchDashboardData(cid);
   }, [router, fetchDashboardData]);
 
+  // อัปเดตสถานะอัตโนมัติ: ดึงใหม่ทุก 20 วินาที (เฉพาะตอนเปิดแท็บนี้อยู่) และทันทีที่กลับมาที่แท็บ
+  useEffect(() => {
+    const cid = localStorage.getItem("customer_id") || localStorage.getItem("id");
+    if (!cid || cid.startsWith("customer_")) return;
+
+    const refresh = () => {
+      if (document.visibilityState === "visible") fetchDashboardData(cid, true);
+    };
+    const timer = window.setInterval(refresh, 20000);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [fetchDashboardData]);
+
+  // ไฮไลต์ออเดอร์แค่ครั้งแรก (ไม่ให้เลื่อนหน้าซ้ำทุกครั้งที่ข้อมูลอัปเดต)
+  const highlightDoneRef = useRef(false);
+
   useEffect(() => {
     if (!loading && highlightOrderId && orders.length > 0 && !highlightDoneRef.current) {
       const targetOrder = orders.find((o) => String(o.id) === String(highlightOrderId));
