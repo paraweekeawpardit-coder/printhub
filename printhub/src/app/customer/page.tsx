@@ -105,11 +105,24 @@ export default function CustomerHomePage() {
     if (typeof window !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          setLocationName("ตำแหน่งปัจจุบันของคุณ (GPS)");
+          const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          const name = "ตำแหน่งปัจจุบันของคุณ (GPS)";
+          setUserCoords(coords);
+          setLocationName(name);
+          // จำไว้ว่าลูกค้าเลือกใช้ GPS (กลับมาหน้านี้จะหาตำแหน่งปัจจุบันใหม่ ไม่ใช้หมุดเก่า)
+          try {
+            localStorage.setItem("user_location_mode", "gps");
+            localStorage.setItem("user_coords", JSON.stringify(coords));
+            localStorage.setItem("user_location_name", name);
+          } catch {}
         },
         () => {
-          setLocationName("แตะเพื่อปักหมุดตำแหน่งบนแผนที่");
+          // ถ้าไม่อนุญาต / หาไม่เจอ: ใช้ตำแหน่งที่จำไว้ล่าสุด (ถ้ามี) ไม่ให้ตำแหน่งหาย
+          let saved: string | null = null;
+          try {
+            saved = localStorage.getItem("user_coords");
+          } catch {}
+          if (!saved) setLocationName("แตะเพื่อปักหมุดตำแหน่งบนแผนที่");
         },
         { enableHighAccuracy: true, timeout: 8000 }
       );
@@ -122,14 +135,20 @@ export default function CustomerHomePage() {
     const savedCoords = localStorage.getItem("user_coords");
     const savedName = localStorage.getItem("user_location_name");
 
+    const savedMode = localStorage.getItem("user_location_mode"); // "gps" | "pin"
+
     if (savedName) setLocationName(savedName);
 
     if (savedCoords) {
       try {
+        // แสดงตำแหน่งที่จำไว้ก่อน (ไม่ต้องรอ GPS)
         setUserCoords(JSON.parse(savedCoords));
       } catch {
         fetchCurrentGps();
+        return;
       }
+      // ถ้าเลือกใช้ GPS ไว้ ให้หาตำแหน่งปัจจุบันล่าสุดอีกรอบ
+      if (savedMode === "gps") fetchCurrentGps();
     } else {
       fetchCurrentGps();
     }
@@ -377,6 +396,7 @@ export default function CustomerHomePage() {
           setIsMapModalOpen(false);
 
           if (typeof window !== "undefined") {
+            localStorage.setItem("user_location_mode", "pin"); // ลูกค้าปักหมุดเอง: ใช้ตำแหน่งนี้ตลอดจนกว่าจะเปลี่ยน
             localStorage.setItem("user_coords", JSON.stringify(coords));
             localStorage.setItem("user_location_name", finalName);
           }
