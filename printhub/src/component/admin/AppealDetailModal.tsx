@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   X,
   Store,
@@ -12,6 +12,7 @@ import {
   FileText,
   Paperclip,
   AlertCircle,
+  MessageSquare,
 } from "lucide-react";
 import { ShopAppeal } from "@/app/admin/shops/page";
 
@@ -19,7 +20,8 @@ interface AppealDetailModalProps {
   appeal: ShopAppeal | null;
   onClose: () => void;
   onApprove?: (shopId: string | number) => void;
-  onReject?: (appealId: string | number) => void;
+  // 🟢 อัปเดต signature ให้รับ adminNote เป็น parameter ตัวที่ 2
+  onReject?: (appealId: string | number, adminNote?: string) => void;
 }
 
 export default function AppealDetailModal({
@@ -28,6 +30,10 @@ export default function AppealDetailModal({
   onApprove,
   onReject,
 }: AppealDetailModalProps) {
+  // 🟢 State สำหรับจัดการการแสดงฟอร์มระบุเหตุผลการปฏิเสธ
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [adminNote, setAdminNote] = useState("");
+
   if (!appeal) return null;
 
   const shopName = appeal.shop?.shop_name || `ร้านค้า ID: ${appeal.shop_id}`;
@@ -51,6 +57,13 @@ export default function AppealDetailModal({
     hour: "2-digit",
     minute: "2-digit",
   });
+
+  const handleConfirmReject = () => {
+    if (onReject) {
+      onReject(appeal.id, adminNote.trim() || undefined);
+    }
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200 font-sans">
@@ -99,7 +112,7 @@ export default function AppealDetailModal({
             </div>
           </div>
 
-          {/* เหตุผลที่ถูกระงับเดิม (ถ้ามี) */}
+          {/* สาเหตุที่ถูกระงับเดิม (ถ้ามี) */}
           {suspendReason && suspendReason !== "-" && (
             <div className="rounded-xl bg-rose-50 p-3.5 sm:p-4 border border-rose-200/60 text-xs text-rose-800 space-y-1">
               <div className="flex items-center gap-1.5 font-bold text-rose-900">
@@ -136,6 +149,17 @@ export default function AppealDetailModal({
             </div>
           </div>
 
+          {/* แสดงเหตุผลการปฏิเสธย้อนหลัง (ถ้าคำขอนี้เคยถูกปฏิเสธไปแล้ว) */}
+          {appeal.admin_note && (
+            <div className="rounded-xl bg-amber-50 p-3.5 sm:p-4 border border-amber-200 text-xs text-amber-900 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                <MessageSquare size={15} className="shrink-0 text-amber-700" />
+                <span>หมายเหตุ / เหตุผลที่แอดมินปฏิเสธคำขอ:</span>
+              </div>
+              <p className="pl-5 leading-relaxed">{appeal.admin_note}</p>
+            </div>
+          )}
+
           {/* รูปภาพ/ไฟล์แนบอุทธรณ์ (ถ้ามี) */}
           {attachments.length > 0 && (
             <div className="space-y-2 pt-2 border-t border-slate-100">
@@ -165,6 +189,22 @@ export default function AppealDetailModal({
               </div>
             </div>
           )}
+
+          {/* 🟢 ส่วนช่องกรอกเหตุผลการปฏิเสธ (แสดงเมื่อคลิกปุ่มปฏิเสธคำขอ) */}
+          {showRejectInput && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-2 animate-in fade-in duration-150">
+              <label className="block text-xs font-bold text-rose-900">
+                ระบุเหตุผลในการปฏิเสธคำขอ (เพื่อส่งแจ้งให้ร้านค้ารู้):
+              </label>
+              <textarea
+                value={adminNote}
+                onChange={(e) => setAdminNote(e.target.value)}
+                placeholder="เช่น ข้อความอุทธรณ์ไม่เพียงพอ, ยังไม่ได้ชำระค่าปรับตามที่กำหนด ฯลฯ"
+                className="w-full p-2.5 bg-white border border-rose-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-400 placeholder:text-slate-400"
+                rows={2}
+              />
+            </div>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -180,20 +220,39 @@ export default function AppealDetailModal({
           {appeal.status === "pending" && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               {onReject && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onReject(appeal.id);
-                    onClose();
-                  }}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 border border-rose-200 transition cursor-pointer text-center"
-                >
-                  <ShieldAlert size={15} />
-                  ปฏิเสธคำขอ
-                </button>
+                <>
+                  {showRejectInput ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowRejectInput(false)}
+                        className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-200 transition"
+                      >
+                        ยกเลิก
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmReject}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-rose-700 active:scale-95 transition cursor-pointer text-center"
+                      >
+                        <ShieldAlert size={15} />
+                        ยืนยันปฏิเสธคำขอ
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowRejectInput(true)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 border border-rose-200 transition cursor-pointer text-center"
+                    >
+                      <ShieldAlert size={15} />
+                      ปฏิเสธคำขอ
+                    </button>
+                  )}
+                </>
               )}
 
-              {onApprove && (
+              {onApprove && !showRejectInput && (
                 <button
                   type="button"
                   onClick={() => {

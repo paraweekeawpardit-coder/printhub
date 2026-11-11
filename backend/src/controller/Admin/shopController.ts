@@ -10,8 +10,6 @@ export const getPendingShops = async (
   res: Response
 ): Promise<Response> => {
   try {
-    // 🟢 กรองเฉพาะร้านค้าที่สถานะเป็น 'pending' จริงๆ
-    // 🟢 แก้ไข: กรองเฉพาะร้านค้าที่สถานะเป็น 'pending' จริงๆ (ไม่ดึงร้านที่โดนแบน suspended)
     const { data: shops, error: shopError } = await supabase
       .from("print_shop")
       .select("*, address:address_id(*)")
@@ -130,7 +128,8 @@ export const verifyShop = async (
     }
 
     const isApproved = action === "approve";
-    let adminId = (req as any).user?.id || admin_id || verified_by || null;
+    // 🟢 ดึง admin_id จาก Auth Context หรือ Body
+    let adminId = (req as any).user?.id || (req as any).admin?.id || admin_id || verified_by || null;
 
     if (isApproved && !adminId) {
       const { data: adminData } = await supabase
@@ -147,7 +146,7 @@ export const verifyShop = async (
     const updatePayload = {
       is_verify: isApproved,
       status: isApproved ? "approved" : "rejected",
-      verified_by: isApproved ? adminId : null,
+      verified_by: isApproved ? adminId : null, // 🟢 บันทึกแอดมินผู้อนุมัติร้านค้า
     };
 
     const { data: updatedShop, error } = await supabase
@@ -191,17 +190,29 @@ export const toggleSuspendShop = async (
 ): Promise<Response> => {
   try {
     const shop_id = req.body.shop_id || req.body.shopId || req.body.id;
-    const { suspend, reason } = req.body;
+    const { suspend, reason, admin_id, reviewed_by } = req.body;
 
     if (!shop_id) {
       return res.status(400).json({ error: "shop_id is required" });
     }
 
+    // 🟢 1. พยายามดึง admin_id จากทุกช่องทาง
+    let adminId = (req as any).user?.id || (req as any).admin?.id || admin_id || reviewed_by || null;
+
+    // 🟢 2. Fallback: ถ้ายังไม่มี ให้ดึง ID ของแอดมินคนแรกใน DB มาใช้ เพื่อไม่ให้ค่าเป็น NULL
+    if (!adminId) {
+      const { data: adminData } = await supabase
+        .from("admin")
+        .select("id")
+        .limit(1)
+        .maybeSingle();
+
+      if (adminData) adminId = adminData.id;
+    }
+
     const isSuspend = suspend === true || suspend === "true";
     const newStatus = isSuspend ? "suspended" : "approved";
 
-    // 🟢 แก้ไข: ร้านค้าที่ผ่านการอนุมัติแล้ว แม้โดนระงับใช้งาน (suspended) ค่า is_verify ยังคงเป็น true
-    // เพื่อไม่ให้หลุดไปโผล่ในหน้า "คำขอสมัครใหม่"
     const { data: updatedShop, error } = await supabase
       .from("print_shop")
       .update({
@@ -219,14 +230,20 @@ export const toggleSuspendShop = async (
       return res.status(400).json({ error: error.message });
     }
 
-    // 🟢 เมื่อปลดการระงับสำเร็จ ให้เคลียร์สถานะคำขอปลดระงับที่ค้างอยู่เป็น 'approved'
+    // 🟢 เมื่อปลดการระงับสำเร็จ ให้เปลี่ยนสถานะคำร้องอุทธรณ์เป็น 'approved' พร้อมบันทึก reviewed_by
     if (!isSuspend) {
+      const appealUpdatePayload: any = {
+        status: "approved",
+        updated_at: new Date().toISOString(),
+      };
+      
+      if (adminId) {
+        appealUpdatePayload.reviewed_by = adminId; // 🟢 บันทึกแอดมินผู้พิจารณาคำร้อง
+      }
+
       await supabase
         .from("shop_appeals")
-        .update({
-          status: "approved",
-          updated_at: new Date().toISOString(),
-        })
+        .update(appealUpdatePayload)
         .eq("shop_id", shop_id)
         .eq("status", "pending");
     }
@@ -542,17 +559,17 @@ export const getShopAppealStatus = async (
 
 /**
  * GET /api/admin/appeals
- * ดึงรายการคำขอปลดระงับทั้งหมด (พร้อมข้อมูล phone และ suspend_reason จาก print_shop)
+ * ดึงรายการคำขอปลดระงับทั้งหมด (พร้อมข้อมูลร้านค้า และ แอดมินผู้พิจารณา)
  */
 export const getShopAppeals = async (
   _req: Request,
   res: Response
 ): Promise<Response> => {
   try {
-    // 🟢 แก้ไข: ระบุ phone และ suspend_reason เข้าไปใน select query ของร้านค้า
+    // 🟢 ดึงข้อมูลร้านค้า (shop) และแอดมินผู้พิจารณา (reviewer)
     const { data: appeals, error } = await supabase
       .from("shop_appeals")
-      .select("*, shop:shop_id(shop_name, profile_image, email, phone, suspend_reason)")
+      .select("*, shop:shop_id(shop_name, profile_image, email, phone, suspend_reason), reviewer:reviewed_by(name)")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -569,7 +586,7 @@ export const getShopAppeals = async (
 
 /**
  * PATCH /api/admin/appeals/reject
- * ปฏิเสธคำขอปลดระงับร้านค้า
+ * ปฏิเสธคำขอปลดระงับร้านค้า พร้อมบันทึกเหตุผลการปฏิเสธ
  */
 export const rejectShopAppeal = async (
   req: Request,
@@ -577,17 +594,39 @@ export const rejectShopAppeal = async (
 ): Promise<Response> => {
   try {
     const appealId = req.body.appeal_id || req.body.appealId || req.body.id;
+    const { admin_id, reviewed_by, admin_note } = req.body;
 
     if (!appealId) {
       return res.status(400).json({ error: "appeal_id is required" });
     }
 
+    // 🟢 1. พยายามดึง admin_id ของคนที่กดปฏิเสธ
+    let adminId = (req as any).user?.id || (req as any).admin?.id || admin_id || reviewed_by || null;
+
+    // 🟢 2. Fallback: ถ้ายังไม่มี ให้ดึง ID แอดมินคนแรกมาใส่กันหลุด
+    if (!adminId) {
+      const { data: adminData } = await supabase
+        .from("admin")
+        .select("id")
+        .limit(1)
+        .maybeSingle();
+
+      if (adminData) adminId = adminData.id;
+    }
+
+    const updatePayload: any = {
+      status: "rejected",
+      updated_at: new Date().toISOString(),
+      admin_note: admin_note || null, // 🟢 บันทึกเหตุผลการปฏิเสธลง DB
+    };
+
+    if (adminId) {
+      updatePayload.reviewed_by = adminId; // 🟢 บันทึกแอดมินผู้ปฏิเสธคำร้อง
+    }
+
     const { data, error } = await supabase
       .from("shop_appeals")
-      .update({
-        status: "rejected",
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", appealId)
       .select()
       .single();
