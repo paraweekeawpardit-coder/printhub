@@ -34,7 +34,7 @@ export default function PaymentPage() {
     try {
       let cleaned = String(dateStr).trim();
       if (!cleaned.includes("Z") && !cleaned.includes("+") && !cleaned.includes("-", 10)) {
-        cleaned = `${cleaned.replace(" ", "T")}+07:00`; // 👈 รองรับเวลาไทย GMT+7
+        cleaned = `${cleaned.replace(" ", "T")}Z`;
       }
       const parsed = new Date(cleaned).getTime();
       return isNaN(parsed) ? null : parsed;
@@ -194,9 +194,9 @@ export default function PaymentPage() {
 
               return {
                 fileName: item.category || 'งานพิมพ์เอกสาร',
-                paperSize: item.describe || '', // สเปกรวม เช่น "A4 | ขาว-ดำ | เย็บมุม"
-                colorType: '',
-                printSide: '',
+                paperSize: item.describe || 'A4',
+                colorType: 'มาตรฐาน',
+                printSide: 'ไม่มี',
                 pagesPerSet: item.page_count || 1,
                 pricePerPage: Number(item.unit_price) || 0,
                 quantity: qty,
