@@ -56,7 +56,7 @@ export default function FilterPillButtonList({
   const openMenu = () => {
     const rect = ratingBtnRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const menuWidth = 300;
+    const menuWidth = 320;
     setMenuPos({
       top: rect.bottom + 6,
       left: Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8)),
@@ -160,7 +160,7 @@ export default function FilterPillButtonList({
             ref={menuRef}
             role="menu"
             style={{ top: menuPos!.top, left: menuPos!.left }}
-            className="fixed z-[90] w-[300px] bg-white rounded-2xl border border-slate-200 shadow-xl p-3 space-y-3 text-xs animate-in fade-in zoom-in-95 duration-100"
+            className="fixed z-[90] w-[320px] bg-white rounded-2xl border border-slate-200 shadow-xl p-3 space-y-3 text-xs animate-in fade-in zoom-in-95 duration-100"
           >
             {/* เรียงตามคะแนน (กดซ้ำเพื่อยกเลิก) */}
             <div className="space-y-1.5">
@@ -190,11 +190,11 @@ export default function FilterPillButtonList({
             {onChangeMinRating && (
               <div className="space-y-1.5 pt-3 border-t border-slate-100">
                 <p className="text-[11px] font-semibold text-slate-500">กรองตามดาว</p>
-                <div className="flex items-center gap-1">
+                <div className="grid grid-cols-[1.7fr_repeat(5,1fr)] gap-1">
                   <button
                     type="button"
                     onClick={() => onChangeMinRating(0)}
-                    className={`${chipClass(minRating === 0)} flex-1`}
+                    className={`${chipClass(minRating === 0)} min-w-0 whitespace-nowrap`}
                   >
                     ทั้งหมด
                   </button>
@@ -204,7 +204,7 @@ export default function FilterPillButtonList({
                       type="button"
                       title={ratingLabel(n)}
                       onClick={() => onChangeMinRating(minRating === n ? 0 : n)}
-                      className={`${chipClass(minRating === n)} px-2`}
+                      className={`${chipClass(minRating === n)} min-w-0 !px-1 whitespace-nowrap`}
                     >
                       <Star
                         className={`w-3 h-3 ${minRating === n ? "fill-white text-white" : "fill-amber-400 text-amber-400"}`}
