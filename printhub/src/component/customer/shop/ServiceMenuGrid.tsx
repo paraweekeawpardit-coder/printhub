@@ -12,6 +12,7 @@ export interface OptionItem {
   price?: number | null; // รองรับคอลัมน์ price จาก service_detail
   category?: string;
   is_required?: boolean;
+  price_type?: string;
 }
 
 export interface ServiceType {
