@@ -110,11 +110,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         `}</style>
       )}
 
-      {/* 🚫 Read-Only Mode (Tailwind ล้วน):
-          - ไม่เบลอแล้ว คมชัดปกติ
-          - pointer-events-none: ห้ามกดปุ่ม/ลิงก์ย่อย
-          - cursor-not-allowed: ชี้ตรงไหนขึ้นไอคอนห้าม (Blocked Cursor)
-          - select-none: ป้องกันการคลุมดำก๊อปปี้ข้อความ */}
+      {/* 🚫 Read-Only Mode */}
       <div
         className={`transition-all duration-200 ${
           ban ? "pointer-events-none cursor-not-allowed select-none" : ""

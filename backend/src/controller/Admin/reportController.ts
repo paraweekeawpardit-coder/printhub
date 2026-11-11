@@ -31,6 +31,10 @@ export const getAllReports = async (
     const reviewIds = [
       ...new Set(reports.map((r: any) => r.review_id).filter(Boolean)),
     ];
+    // 🟢 1. ดึง admin_id ของคนที่รับเรื่อง/จัดการเคส
+    const adminIds = [
+      ...new Set(reports.map((r: any) => r.admin_id).filter(Boolean)),
+    ];
 
     const [
       { data: customers },
@@ -40,6 +44,7 @@ export const getAllReports = async (
       { data: orderFiles },
       { data: reviewsByReviewId },
       { data: reviewsByOrderId },
+      { data: admins }, // 🟢 2. ดึงข้อมูล Admin
     ] = await Promise.all([
       customerIds.length > 0
         ? supabase
@@ -79,12 +84,19 @@ export const getAllReports = async (
             .select("id, order_id, comment, score, image_url, is_hidden")
             .in("order_id", orderIds)
         : Promise.resolve({ data: [] }),
+      adminIds.length > 0
+        ? supabase
+            .from("admin")
+            .select("id, name, avatar")
+            .in("id", adminIds)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const customerMap = new Map((customers || []).map((c: any) => [c.id, c]));
     const shopMap = new Map((shops || []).map((s: any) => [s.id, s]));
     const orderMap = new Map((orders || []).map((o: any) => [o.id, o]));
-    
+    const adminMap = new Map((admins || []).map((a: any) => [a.id, a]));
+
     const reviewIdMap = new Map((reviewsByReviewId || []).map((rv: any) => [rv.id, rv]));
     const reviewOrderMap = new Map((reviewsByOrderId || []).map((rv: any) => [rv.order_id, rv]));
 
@@ -126,7 +138,8 @@ export const getAllReports = async (
       const cust: any = customerMap.get(item.customer_id);
       const shp: any = shopMap.get(item.shop_id);
       const ord: any = orderMap.get(item.order_id);
-      
+      const adm: any = adminMap.get(item.admin_id);
+
       const rvw: any = reviewIdMap.get(item.review_id) || reviewOrderMap.get(item.order_id);
       const itemsInOrder = orderItemsMap.get(String(item.order_id)) || [];
       const filesInOrder = orderFilesMap.get(String(item.order_id)) || [];
@@ -159,6 +172,8 @@ export const getAllReports = async (
         customer_phone: cust?.contact || "-",
         shop_name: shp?.shop_name || "-",
         shop_phone: shp?.phone || "-",
+        admin_name: adm?.name || null, // 🟢 ชื่อแอดมินผู้รับผิดชอบ
+        admin_avatar: adm?.avatar || null,
         updated_at: item.updated_at || null,
         admin_image_url: item.admin_image_url || null,
         order_items: itemsInOrder,
@@ -166,7 +181,7 @@ export const getAllReports = async (
         review_comment: rvw?.comment || null,
         review_rating: rvw?.score || 0,
         review_is_hidden: Boolean(rvw?.is_hidden),
-        
+
         open_time: shp?.open_time || null,
         close_time: shp?.close_time || null,
         appointment_time: ord?.appointment_time || null,
@@ -189,9 +204,40 @@ export const verifyReport = async (
   res: Response
 ): Promise<Response> => {
   try {
-    const { report_id, admin_id } = req.body;
+    // 🟢 รับ admin_id (สามารถแนบมาจาก Middleware req.user.id หรือ req.body ได้)
+    const adminId = req.body.admin_id || (req as any).user?.id;
+    const { report_id } = req.body;
+
     if (!report_id)
       return res.status(400).json({ error: "report_id is required" });
+
+    // 🟢 1. ตรวจสอบสถานะและ Conflict การทำงานของแอดมิน
+    const { data: currentReport, error: fetchErr } = await supabase
+      .from("report")
+      .select("status, admin_id")
+      .eq("id", report_id)
+      .single();
+
+    if (fetchErr || !currentReport) {
+      return res.status(444).json({ error: "ไม่พบข้อมูลรายงานปัญหานี้" });
+    }
+
+    if (currentReport.status === "cancelled") {
+      return res
+        .status(400)
+        .json({ error: "ไม่สามารถรับเรื่องได้ เนื่องจากลูกค้ายกเลิกคำร้องแล้ว" });
+    }
+
+    // 🟢 ป้องกันแอดมินคนอื่นกดรับงานซ้ำซ้อน
+    if (
+      currentReport.admin_id &&
+      adminId &&
+      currentReport.admin_id !== adminId
+    ) {
+      return res
+        .status(409)
+        .json({ error: "เคสนี้มีแอดมินท่านอื่นรับเรื่องพิจารณาไปแล้ว" });
+    }
 
     const nowIso = new Date().toISOString();
 
@@ -201,8 +247,8 @@ export const verifyReport = async (
       updated_at: nowIso,
     };
 
-    if (admin_id) {
-      updateData.admin_id = admin_id;
+    if (adminId) {
+      updateData.admin_id = adminId;
     }
 
     const { data, error } = await supabase
@@ -230,7 +276,9 @@ export const resolveReport = async (
   res: Response
 ): Promise<Response> => {
   try {
-    const { report_id, decision, admin_note, admin_image_url, admin_id, review_id } = req.body;
+    // 🟢 1. ดึง admin_id จาก Token (req.user) หรือ Body (req.body.admin_id)
+    const adminId = req.body.admin_id || (req as any).user?.id || (req as any).admin?.id;
+    const { report_id, decision, admin_note, admin_image_url, review_id } = req.body;
 
     if (!report_id || !decision || !admin_note?.trim()) {
       return res
@@ -238,18 +286,37 @@ export const resolveReport = async (
         .json({ error: "report_id, decision, and admin_note are required" });
     }
 
-    const statusValue =
-      decision === "approved" || decision === "hide_review" || decision === "resolved"
-        ? "resolved"
-        : "rejected";
-        
+    // 🟢 2. ปรับ statusValue ให้ตรงตาม CHECK Constraint ใน Database (resolved_refund / resolved / rejected)
+    let statusValue = "resolved";
+    if (decision === "approved") {
+      statusValue = "resolved_refund"; // 👈 แก้ให้ตรงกับ DB constraint
+    } else if (decision === "rejected") {
+      statusValue = "rejected";
+    } else if (decision === "hide_review" || decision === "resolved") {
+      statusValue = "resolved";
+    }
+
     const nowIso = new Date().toISOString();
 
-    const { data: report } = await supabase
+    const { data: report, error: fetchErr } = await supabase
       .from("report")
       .select("*")
       .eq("id", report_id)
       .single();
+
+    if (fetchErr || !report) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลรายงานปัญหา" });
+    }
+
+    // ป้องกันแอดมินคนอื่นตัดสินซ้ำ
+    if (
+      report.status !== "pending" &&
+      report.status !== "investigating"
+    ) {
+      return res
+        .status(409)
+        .json({ error: "เคสนี้ได้รับการตัดสินหรือถูกยกเลิกไปแล้ว" });
+    }
 
     const updatePayload: any = {
       status: statusValue,
@@ -259,8 +326,11 @@ export const resolveReport = async (
       updated_at: nowIso,
     };
 
-    if (admin_id) {
-      updatePayload.admin_id = admin_id;
+    // 🟢 3. บันทึก admin_id (ถ้ายังไม่มี admin_id ในเคสเดิม ให้ใช้ admin_id คนปัจจุบัน)
+    if (adminId) {
+      updatePayload.admin_id = adminId;
+    } else if (report.admin_id) {
+      updatePayload.admin_id = report.admin_id;
     }
 
     // 1. อัปเดตสถานะของใบรายงานในตาราง report
@@ -276,7 +346,7 @@ export const resolveReport = async (
       return res.status(400).json({ error: error.message });
     }
 
-    // 2. 🟢 กรณีซ่อนรีวิว (hide_review): เคลียร์คอมเมนต์/รูปภาพ และตั้งค่า is_hidden = true
+    // 2. กรณีซ่อนรีวิว (hide_review)
     if (decision === "hide_review") {
       const targetReviewId = review_id || report?.review_id;
 
@@ -285,14 +355,14 @@ export const resolveReport = async (
         image_url: null,
         is_hidden: true,
       };
-      
+
       if (targetReviewId) {
         await supabase
           .from("review")
           .update(reviewUpdatePayload)
           .eq("id", targetReviewId);
       }
-      
+
       if (report?.order_id) {
         await supabase
           .from("review")
@@ -352,7 +422,7 @@ export const resolveReport = async (
       }
     }
 
-    // 4. ส่ง การแจ้งเตือน (Notifications)
+    // 4. ส่งการแจ้งเตือน (Notifications)
     const notificationsToInsert = [];
     const decisionText =
       decision === "approved" || decision === "hide_review"
@@ -362,6 +432,7 @@ export const resolveReport = async (
     if (report?.customer_id) {
       notificationsToInsert.push({
         customer_id: report.customer_id,
+        admin_id: updatePayload.admin_id || null,
         order_id: report.order_id || null,
         title: "ผลการพิจารณารายงานปัญหา",
         message: `รายงานปัญหาของคุณได้รับการพิจารณาแล้ว: ${decisionText} - ${admin_note}`,
@@ -373,6 +444,7 @@ export const resolveReport = async (
     if (report?.shop_id) {
       notificationsToInsert.push({
         shop_id: report.shop_id,
+        admin_id: updatePayload.admin_id || null,
         order_id: report.order_id || null,
         title: "ผลการพิจารณารายงานปัญหา",
         message: `รายงานปัญหาได้รับการพิจารณาแล้ว: ${decisionText}`,

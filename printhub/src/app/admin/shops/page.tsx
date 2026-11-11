@@ -25,6 +25,11 @@ export interface ShopAppeal {
   status: string;
   created_at: string;
   attachment_urls?: string[];
+  reviewed_by?: string;
+  admin_note?: string; // 🟢 เพิ่มรองรับเหตุผลที่แอดมินปฏิเสธคำขอ
+  reviewer?: {
+    name?: string;
+  };
   shop?: {
     shop_name?: string;
     profile_image?: string;
@@ -53,6 +58,24 @@ const getAuthHeaders = (): Record<string, string> => {
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
   return headers;
+};
+
+// 🟢 Helper Function สำหรับดึง admin_id ของผู้ใช้ปัจจุบัน
+const getAdminId = (): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const directId = localStorage.getItem("admin_id");
+    if (directId) return directId;
+
+    const adminData = localStorage.getItem("admin_user") || localStorage.getItem("user") || localStorage.getItem("admin");
+    if (adminData) {
+      const parsed = JSON.parse(adminData);
+      return parsed.id || parsed.admin_id || null;
+    }
+  } catch (e) {
+    console.error("Error parsing admin ID from localStorage:", e);
+  }
+  return null;
 };
 
 function ShopsContent() {
@@ -231,7 +254,7 @@ function ShopsContent() {
       type: action === "approve" ? "approve" : "reject",
       onConfirm: async () => {
         try {
-          const adminId = typeof window !== "undefined" ? localStorage.getItem("admin_id") : null;
+          const adminId = getAdminId();
           const res = await fetch(`${API_URL}/shops/verify`, {
             method: "PATCH",
             headers: getAuthHeaders(),
@@ -279,10 +302,18 @@ function ShopsContent() {
       try {
         const normalizedStatus = (currentStatus || "").toLowerCase();
         const isSuspending = normalizedStatus !== "suspended" && normalizedStatus !== "banned";
+        const adminId = getAdminId();
+
         const res = await fetch(`${API_URL}/shops/suspend`, {
           method: "PATCH",
           headers: getAuthHeaders(),
-          body: JSON.stringify({ shop_id, suspend: isSuspending, reason }),
+          body: JSON.stringify({ 
+            shop_id, 
+            suspend: isSuspending, 
+            reason,
+            admin_id: adminId,
+            reviewed_by: adminId
+          }),
         });
         if (!res.ok) throw new Error("การเปลี่ยนสถานะล้มเหลว");
         fetchAllInitialData();
@@ -311,7 +342,8 @@ function ShopsContent() {
     });
   };
 
-  const handleRejectAppeal = (appealId: string | number) => {
+  // 🟢 อัปเดตให้รับ adminNote และแนบ admin_note ส่งไปที่ Backend
+  const handleRejectAppeal = (appealId: string | number, adminNote?: string) => {
     setConfirmModal({
       isOpen: true,
       title: "ยืนยันการปฏิเสธคำขอปลดระงับ",
@@ -319,10 +351,16 @@ function ShopsContent() {
       type: "reject",
       onConfirm: async () => {
         try {
+          const adminId = getAdminId();
           const res = await fetch(`${API_URL}/appeals/reject`, {
             method: "PATCH",
             headers: getAuthHeaders(),
-            body: JSON.stringify({ appeal_id: appealId }),
+            body: JSON.stringify({ 
+              appeal_id: appealId,
+              admin_id: adminId,
+              reviewed_by: adminId,
+              admin_note: adminNote || null // 🟢 แนบเหตุผลปฏิเสธส่งไปที่ API
+            }),
           });
           if (!res.ok) throw new Error("การปฏิเสธคำขอล้มเหลว");
           fetchAllInitialData();

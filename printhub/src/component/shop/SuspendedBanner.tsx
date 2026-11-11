@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import ContactAdminModal from "./ContactAdminModal";
-import { Clock, ShieldAlert, AlertTriangle, BellRing, MessageCircle } from "lucide-react";
+import { Clock, ShieldAlert, AlertTriangle, BellRing, MessageCircle, AlertCircle } from "lucide-react";
 
 interface SuspendedBannerProps {
   reason?: string;
@@ -14,6 +14,7 @@ interface AppealData {
   id: string;
   status: "pending" | "approved" | "rejected";
   created_at: string;
+  admin_note?: string; // 🟢 เพิ่มรองรับเหตุผลปฏิเสธจากแอดมิน
   is_overdue?: boolean;
   days_pending?: number;
   is_nudge?: boolean;
@@ -138,7 +139,7 @@ export default function SuspendedBanner({ reason, shopId, onOpenChat }: Suspende
 
   return (
     <>
-      {/* 📌 เปลี่ยนจาก relative เป็น sticky top-0 z-[9999] pointer-events-auto เพื่อให้ลอยติดขอบบนสุดเสมอ และกดปุ่มบนแบนเนอร์ได้ปกติ */}
+      {/* 📌 Sticky Banner ด้านบนสุด */}
       <div className="sticky top-0 z-[9999] w-full bg-rose-600 px-4 py-3 text-white shadow-md pointer-events-auto">
         <div className="mx-auto flex max-w-7xl flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           
@@ -159,7 +160,7 @@ export default function SuspendedBanner({ reason, shopId, onOpenChat }: Suspende
           <div className="w-full lg:w-auto flex flex-col sm:flex-row items-start sm:items-center justify-end gap-3">
             {appeal?.status === "pending" ? (
               isOverdue() ? (
-                /* 🔴 สถานะที่ 3: เกินกำหนด 3 วัน -> ขึ้นแจ้งเตือน + ปุ่มเร่งติดตาม */
+                /* 🔴 คำร้องเกินกำหนด 3 วัน -> แสดงปุ่มเร่งติดตาม */
                 <div className="w-full lg:w-auto flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-lg bg-amber-500/25 border border-amber-300/50 p-2.5 text-xs text-amber-100">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-amber-300 shrink-0 animate-bounce" />
@@ -192,7 +193,7 @@ export default function SuspendedBanner({ reason, shopId, onOpenChat }: Suspende
                   </button>
                 </div>
               ) : (
-                /* 🟡 สถานะที่ 2: ยื่นเรื่องแล้ว (อยู่ในระยะเวลา 1-3 วัน) -> แสดงเวลานับถอยหลัง + ปุ่มแชท */
+                /* 🟡 ยื่นเรื่องแล้ว (รอ 1-3 วัน) */
                 <div className="flex flex-wrap items-center gap-2.5">
                   <div className="flex items-center gap-2.5 rounded-lg bg-amber-500/20 border border-amber-300/40 px-3.5 py-2 text-xs text-amber-100">
                     <Clock className="h-4 w-4 text-amber-300 animate-pulse shrink-0" />
@@ -219,14 +220,26 @@ export default function SuspendedBanner({ reason, shopId, onOpenChat }: Suspende
                 </div>
               )
             ) : (
-              /* ⚪ สถานะที่ 1: ยังไม่ได้ยื่นเรื่อง -> ปุ่มยื่นเรื่องปลดระงับ */
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(true)}
-                className="shrink-0 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 active:scale-95 cursor-pointer"
-              >
-                ยื่นเรื่องปลดระงับ
-              </button>
+              /* ⚪ ยังไม่ได้ยื่น หรือ โดนปฏิเสธคำขอเดิม */
+              <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                {/* 🔴 แจ้งกล่องเตือนเหตุผลการปฏิเสธของแอดมิน ถ้าคำขอเดิมถูก rejected */}
+                {appeal?.status === "rejected" && (
+                  <div className="flex items-center gap-2 bg-black/30 border border-amber-300/40 rounded-lg px-3 py-1.5 text-xs text-amber-200">
+                    <AlertCircle size={15} className="text-amber-300 shrink-0" />
+                    <span>
+                      คำร้องเดิมถูกปฏิเสธ: <strong className="text-white">{appeal.admin_note || "โปรดระบุข้อมูลเพิ่มเติม"}</strong>
+                    </span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(true)}
+                  className="shrink-0 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 active:scale-95 cursor-pointer whitespace-nowrap"
+                >
+                  {appeal?.status === "rejected" ? "ยื่นเรื่องปลดระงับใหม่" : "ยื่นเรื่องปลดระงับ"}
+                </button>
+              </div>
             )}
           </div>
 
@@ -236,6 +249,7 @@ export default function SuspendedBanner({ reason, shopId, onOpenChat }: Suspende
       <ContactAdminModal
         isOpen={isModalOpen}
         reason={reason}
+        lastAdminNote={appeal?.status === "rejected" ? appeal?.admin_note : undefined} // 🟢 ส่งเหตุผลปฏิเสธไปที่ Modal
         onClose={() => {
           setIsModalOpen(false);
           fetchAppealStatus();

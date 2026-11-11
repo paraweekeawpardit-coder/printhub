@@ -12,6 +12,7 @@ import {
   X,
   History,
   ShieldAlert,
+  UserCheck,
 } from "lucide-react";
 import { ShopAppeal } from "@/app/admin/shops/page";
 import AppealDetailModal from "@/component/admin/AppealDetailModal";
@@ -23,8 +24,9 @@ interface AppealsTabProps {
   appeals: ShopAppeal[];
   appealSlaFilter?: AppealSlaFilterType;
   setAppealSlaFilter?: React.Dispatch<React.SetStateAction<AppealSlaFilterType>>;
-  onApproveUnsuspend?: (shopId: string | number) => void;
-  onRejectAppeal?: (appealId: string | number) => void;
+  onApproveUnsuspend?: (shopId: string | number, appealId?: string | number) => void;
+  // 🟢 ปรับ Signature ให้รับ adminNote ด้วย
+  onRejectAppeal?: (appealId: string | number, adminNote?: string) => void;
   onToggleSuspend?: (
     shopId: string | number,
     currentStatus: string,
@@ -107,9 +109,9 @@ export default function AppealsTab({
     setCurrentPage(1);
   }, [statusTab, searchTerm, slaFilter]);
 
-  const handleApproveAction = (shopId: string | number) => {
+  const handleApproveAction = (shopId: string | number, appealId?: string | number) => {
     if (onApproveUnsuspend) {
-      onApproveUnsuspend(shopId);
+      onApproveUnsuspend(shopId, appealId);
     } else if (onToggleSuspend) {
       onToggleSuspend(shopId, "suspended");
     }
@@ -322,17 +324,27 @@ export default function AppealsTab({
                   <div className="rounded-xl bg-slate-50 p-2.5 text-xs text-slate-600 border border-slate-100 line-clamp-2 leading-relaxed">
                     {appeal.message}
                   </div>
-                  <p className="text-[11px] text-slate-400 pt-0.5">
-                    วันที่ยื่นเรื่อง:{" "}
-                    {new Date(appeal.created_at).toLocaleString("th-TH", {
-                      timeZone: "Asia/Bangkok",
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
+                    <span>
+                      วันที่ยื่นเรื่อง:{" "}
+                      {new Date(appeal.created_at).toLocaleString("th-TH", {
+                        timeZone: "Asia/Bangkok",
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+
+                    {/* แสดงผู้พิจารณาคำร้อง */}
+                    {appeal.reviewer?.name && (
+                      <span className="inline-flex items-center gap-1 font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                        <UserCheck size={12} className="text-sky-600" />
+                        {appeal.reviewer.name}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -370,11 +382,12 @@ export default function AppealsTab({
         appeal={selectedAppeal}
         onClose={() => setSelectedAppeal(null)}
         onApprove={(shopId) => {
-          handleApproveAction(shopId);
+          handleApproveAction(shopId, selectedAppeal?.id);
           setSelectedAppeal(null);
         }}
-        onReject={(appealId) => {
-          if (onRejectAppeal) onRejectAppeal(appealId);
+        // 🟢 ส่ง adminNote ไปที่ Handler
+        onReject={(appealId, adminNote) => {
+          if (onRejectAppeal) onRejectAppeal(appealId, adminNote);
           setSelectedAppeal(null);
         }}
       />

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import supabase from "@/config/supabase";
 import {
@@ -13,12 +13,15 @@ import {
   Trash2,
   AlertCircle,
   Info,
+  MessageSquare,
 } from "lucide-react";
 
+// 🟢 เพิ่ม lastAdminNote ใน Props
 interface ContactAdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   reason?: string;
+  lastAdminNote?: string;
 }
 
 const MAX_FILES = 3;
@@ -28,6 +31,7 @@ export default function ContactAdminModal({
   isOpen,
   onClose,
   reason,
+  lastAdminNote,
 }: ContactAdminModalProps) {
   const [subject, setSubject] = useState("ขอปลดการระงับใช้งานร้านค้า");
   const [message, setMessage] = useState("");
@@ -35,6 +39,16 @@ export default function ContactAdminModal({
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // 🟢 รีเซ็ตค่าใน Form ทุกครั้งที่เปิด Modal ขึ้นมาใหม่
+  useEffect(() => {
+    if (isOpen) {
+      setMessage("");
+      setFiles([]);
+      setErrorMessage(null);
+      setSuccess(false);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -146,8 +160,7 @@ export default function ContactAdminModal({
   };
 
   return (
-    // 🟢 กำหนด z-index เป็น z-[9999] พร้อมจัดตำแหน่ง Center และสั่ง overflow-y-auto ให้เลื่อนดูส่วนบนได้
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto pointer-events-auto">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto pointer-events-auto font-sans">
       <div className="w-full max-w-lg my-auto rounded-2xl bg-white p-6 shadow-2xl transition-all relative max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 sticky top-0 bg-white z-10 pt-1">
@@ -191,6 +204,19 @@ export default function ContactAdminModal({
             "{reason || "เนื่องจากตรวจพบกิจกรรมที่เข้าข่ายผิดเงื่อนไขระบบ"}"
           </p>
         </div>
+
+        {/* 🟢 แสดงเหตุผลที่แอดมินปฏิเสธคำขอก่อนหน้า (ถ้ามี) */}
+        {lastAdminNote && (
+          <div className="mt-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
+            <div className="flex items-center gap-1.5 font-bold text-amber-800">
+              <MessageSquare size={15} className="shrink-0 text-amber-600" />
+              <span>เหตุผลที่แอดมินปฏิเสธคำขอก่อนหน้า:</span>
+            </div>
+            <p className="pl-5 leading-relaxed text-slate-700">
+              {lastAdminNote}
+            </p>
+          </div>
+        )}
 
         {/* คำแนะนำเบื้องต้น */}
         <div className="mt-2.5 flex items-start gap-2 rounded-xl bg-slate-50 border border-slate-200/80 p-3 text-[11px] text-slate-600 leading-relaxed">

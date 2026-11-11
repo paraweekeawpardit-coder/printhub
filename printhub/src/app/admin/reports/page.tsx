@@ -29,6 +29,21 @@ export default function ReportsAdminPage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/admin";
 
+  // 🟢 Helper Function: ดึง admin_id ของคนที่ล็อกอินอยู่ออกมาจาก localStorage
+  const getAdminId = (): string | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      const adminData = localStorage.getItem("admin_user") || localStorage.getItem("user") || localStorage.getItem("admin");
+      if (adminData) {
+        const parsed = JSON.parse(adminData);
+        return parsed.id || parsed.admin_id || null;
+      }
+    } catch (e) {
+      console.error("Error parsing admin user from localStorage:", e);
+    }
+    return null;
+  };
+
   // 🟢 ฟังก์ชันสำหรับอัปเดต URL เมื่อมีการเปลี่ยน Category หรือ Filter
   const updateQueryParams = (newCategory: "refund" | "review", newFilter: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -107,13 +122,22 @@ export default function ReportsAdminPage() {
     }
 
     try {
+      const adminId = getAdminId(); // 🟢 ดึง admin_id
+
       const res = await fetch(`${API_URL}/reports/verify`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ report_id: id }),
+        body: JSON.stringify({ 
+          report_id: id,
+          admin_id: adminId // 🟢 แนบ admin_id ส่งไปด้วย
+        }),
       });
 
-      if (!res.ok) throw new Error("Accept report failed");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || errData.message || "เกิดข้อผิดพลาดในการรับเรื่อง");
+        return;
+      }
 
       if (selectedDetailReport && selectedDetailReport.id === id) {
         setSelectedDetailReport((prev) => (prev ? { ...prev, status: "investigating" } : null));
@@ -135,6 +159,8 @@ export default function ReportsAdminPage() {
     refundAmount: number
   ) => {
     try {
+      const adminId = getAdminId(); // 🟢 ดึง admin_id
+
       const res = await fetch(`${API_URL}/reports/resolve`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -143,10 +169,15 @@ export default function ReportsAdminPage() {
           decision,
           admin_note: adminNote,
           refund_amount: refundAmount,
+          admin_id: adminId // 🟢 แนบ admin_id ส่งไปด้วย
         }),
       });
 
-      if (!res.ok) throw new Error("Resolve report failed");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || errData.message || "เกิดข้อผิดพลาดในการยืนยันการตัดสิน");
+        return;
+      }
 
       setSelectedDetailReport(null);
       fetchReports();
@@ -163,6 +194,7 @@ export default function ReportsAdminPage() {
     try {
       const currentReport = reports.find((r) => r.id === reportId) as any;
       const resolveDecision = decision === "hide_review" ? "hide_review" : "rejected";
+      const adminId = getAdminId(); // 🟢 ดึง admin_id
 
       const res = await fetch(`${API_URL}/reports/resolve`, {
         method: "PATCH",
@@ -173,13 +205,15 @@ export default function ReportsAdminPage() {
           admin_note: adminNote,
           refund_amount: 0,
           review_id: currentReport?.review_id || currentReport?.review?.id,
+          admin_id: adminId // 🟢 แนบ admin_id ส่งไปด้วย
         }),
       });
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         console.error("Backend Error Response:", errorData);
-        throw new Error(errorData.message || "Resolve review report failed");
+        alert(errorData.error || errorData.message || "เกิดข้อผิดพลาดในการตัดสินเคสรีวิว");
+        return;
       }
 
       setSelectedReviewReport(null);
