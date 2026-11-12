@@ -69,25 +69,12 @@ app.get("/", (req: Request, res: Response) => {
   res.send("PrintHub Backend is running!");
 });
 
-// Authentication
 app.use("/auth", Authroute);
-
-// Shop
 app.use("/api/shop", ShopRoute);
-
-// Admin
 app.use("/api/admin", adminRoutes);
-
-// Customer
 app.use("/api/customer", customerRoute);
-
-// Notifications
 app.use("/api/notification", notificationRoute);
-
-// Owner
 app.use("/api/owner", ownerRoute);
-
-// Chat System REST API
 app.use("/api/chat", chatRoute);
 
 // ==========================================
@@ -120,12 +107,11 @@ export interface IMessage {
   time?: string;
   is_read?: boolean;
   isRead?: boolean;
-  is_unsent?: boolean; // 🟢 เพิ่ม type รองรับ snake_case
-  isUnsent?: boolean;  // 🟢 เพิ่ม type รองรับ camelCase
+  is_unsent?: boolean;
+  isUnsent?: boolean;
   createdAt?: Date;
 }
 
-// 🎯 Schema บังคับชี้ตรงไปยัง collection "messages" ใน Database "test"
 const MessageSchema = new Schema(
   {
     chatType: {
@@ -133,22 +119,25 @@ const MessageSchema = new Schema(
       enum: ["order", "support_customer", "support_shop"],
       default: "order",
     },
+    room_id: { type: String, index: true },
     roomId: { type: String, index: true },
     orderId: { type: String, required: true, index: true },
     orderNo: { type: String, default: null, index: true },
     customerId: { type: String, default: null },
     shopId: { type: String, default: null },
     senderId: { type: String, default: null },
+    sender_role: { type: String, default: "customer" },
     sender: {
       type: String,
       required: true,
       enum: ["customer", "shop", "admin"],
     },
+    message: { type: String, default: "" },
     text: { type: String, default: "" },
     images: { type: [String], default: [] },
     time: { type: String, required: true },
+    is_read: { type: Boolean, default: false },
     isRead: { type: Boolean, default: false },
-    // 🟢 บันทึกทั้งสองฟิลด์ใน DB เพื่อไม่ให้หลุดตอนโหลดประวัติใหม่หลัง F5
     isUnsent: { type: Boolean, default: false },
     is_unsent: { type: Boolean, default: false },
   },
@@ -158,7 +147,6 @@ const MessageSchema = new Schema(
 const Message =
   mongoose.models.Message || mongoose.model("Message", MessageSchema);
 
-// 🟢 Helper Function ส่ง Notification และ บรอดแคสต์ให้ Admin
 export async function sendAdminNotification(data: {
   title: string;
   message: string;
@@ -202,7 +190,6 @@ export async function sendAdminNotification(data: {
   }
 }
 
-// 🟢 Helper function ตรวจสอบสิทธิ์การส่งข้อความ
 async function checkCanSendMessage(roomId: string, chatType: string): Promise<boolean> {
   if (chatType === "support_customer" || chatType === "support_shop" || roomId.startsWith("support_")) {
     return true;
@@ -275,12 +262,11 @@ io.on("connection", (socket) => {
         }
       }
 
-      const queryConditions: any[] = [{ orderId: targetRoomId }, { roomId: targetRoomId }];
-      if (orderUuid) queryConditions.push({ orderId: orderUuid }, { roomId: orderUuid });
+      const queryConditions: any[] = [{ orderId: targetRoomId }, { roomId: targetRoomId }, { room_id: targetRoomId }];
+      if (orderUuid) queryConditions.push({ orderId: orderUuid }, { roomId: orderUuid }, { room_id: orderUuid });
       if (orderNoStr) queryConditions.push({ orderNo: orderNoStr }, { orderId: orderNoStr });
 
       const history = await Message.find({ $or: queryConditions }).sort({ createdAt: 1 });
-      console.log(`📥 Loaded ${history.length} messages for room: ${targetRoomId}`);
       socket.emit("load_chat_history", history);
     } catch (error) {
       console.error("❌ Error fetching chat history:", error);
@@ -292,7 +278,7 @@ io.on("connection", (socket) => {
     socket.emit("join_chat_room", { roomId: orderId });
   });
 
-  // Send Message Event
+  // 2. Send Message Event
   socket.on("send_message", async (data: IMessage) => {
     const targetRoomId = data.roomId || data.room_id || data.orderId || data.print_order_id;
     if (!targetRoomId || targetRoomId === "undefined" || targetRoomId === "null") return;
@@ -340,22 +326,27 @@ io.on("connection", (socket) => {
       const newMessage = new Message({
         chatType,
         roomId: targetRoomId,
+        room_id: targetRoomId,
         orderId: chatType === "order" ? finalOrderId : targetRoomId,
         orderNo: finalOrderNo,
         customerId: data.customerId || null,
         shopId: data.shopId || null,
         senderId: senderId,
         sender: senderRole,
+        sender_role: senderRole,
         text: messageText,
+        message: messageText,
         images: imageList,
         time: data.time || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         isRead: false,
+        is_read: false,
         isUnsent: false,
         is_unsent: false,
       });
 
       const savedMessage = await newMessage.save();
 
+      // ส่งเข้าห้องแชตที่เปิดอยู่
       io.to(targetRoomId).emit("receive_message", savedMessage);
       
       if (targetRoomId.includes("support_customer_")) {
@@ -367,18 +358,20 @@ io.on("connection", (socket) => {
       if (finalOrderId !== targetRoomId) io.to(finalOrderId).emit("receive_message", savedMessage);
       if (finalOrderNo) io.to(finalOrderNo).emit("receive_message", savedMessage);
 
+      // 🟢 ส่งแจ้งเตือนกลางให้หน้ารวมแชตร้านค้า/แอดมิน อัปเดต Badge สีเขียวและดันขึ้นบนสุดทันที
+      io.emit("new_chat_notification", savedMessage);
+
     } catch (error) {
       console.error("❌ Error saving message to DB:", error);
     }
   });
 
-  // 🟢 Unsend Message Event (ปรับการค้นหาให้อัปเดตทั้ง id จาก Date.now() และ _id จาก MongoDB)
+  // Unsend Message Event
   socket.on("unsend_message", async (data: { messageId: string; roomId: string }) => {
     const { messageId, roomId } = data;
     if (!messageId || !roomId) return;
 
     try {
-      // 🟢 ค้นหาด้วย $or ทั้ง _id ของ MongoDB หรือ id ชั่วคราวฝั่ง Frontend
       const queryConditions: any[] = [{ id: messageId }];
       if (mongoose.Types.ObjectId.isValid(messageId)) {
         queryConditions.push({ _id: messageId });
@@ -404,15 +397,13 @@ io.on("connection", (socket) => {
       } else if (roomId.includes("support_cust_")) {
         io.to(roomId.replace("support_cust_", "support_customer_")).emit("message_unsent", { messageId });
       }
-
-      console.log(`🗑️ Message ${messageId} unsent in room: ${roomId}`);
     } catch (error) {
       console.error("❌ Error unsending message in DB:", error);
       socket.emit("error_message", { message: "เกิดข้อผิดพลาดในการยกเลิกข้อความ" });
     }
   });
 
-  // 3. Mark As Read
+  // 3. Mark As Read (Socket)
   socket.on(
     "mark_as_read",
     async (data: { roomId?: string; room_id?: string; orderId?: string; reader: string }) => {
@@ -426,11 +417,13 @@ io.on("connection", (socket) => {
       try {
         await Message.updateMany(
           {
-            $or: [{ roomId: targetRoomId }, { orderId: targetRoomId }, { roomId: altRoomId }, { orderId: altRoomId }],
-            sender: { $ne: data.reader },
-            isRead: false,
+            $and: [
+              { $or: [{ roomId: targetRoomId }, { room_id: targetRoomId }, { orderId: targetRoomId }, { roomId: altRoomId }, { orderId: altRoomId }] },
+              { sender: { $ne: data.reader } },
+              { $or: [{ isRead: false }, { is_read: false }] }
+            ]
           },
-          { $set: { isRead: true } }
+          { $set: { isRead: true, is_read: true } }
         );
 
         io.to(targetRoomId).emit("messages_read", { reader: data.reader });
@@ -453,19 +446,16 @@ app.get("/api/messages/:roomId", async (req: Request, res: Response) => {
   try {
     const { roomId } = req.params;
     if (!roomId || roomId === "undefined" || roomId === "null") {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid Room ID" });
+      return res.status(400).json({ success: false, message: "Invalid Room ID" });
     }
 
     const roomStr = String(roomId);
-
     const altRoomId = roomStr.includes("support_customer_")
       ? roomStr.replace("support_customer_", "support_cust_")
       : roomStr.replace("support_cust_", "support_customer_");
 
     const messages = await Message.find({
-      $or: [{ roomId: roomStr }, { orderId: roomStr }, { orderNo: roomStr }, { roomId: altRoomId }, { orderId: altRoomId }],
+      $or: [{ roomId: roomStr }, { room_id: roomStr }, { orderId: roomStr }, { orderNo: roomStr }, { roomId: altRoomId }, { orderId: altRoomId }],
     }).sort({ createdAt: 1 });
 
     res.json({ success: true, count: messages.length, data: messages });
@@ -478,18 +468,13 @@ app.delete("/api/messages/:roomId", async (req: Request, res: Response) => {
   try {
     const { roomId } = req.params;
     if (!roomId || roomId === "undefined" || roomId === "null") {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid Room ID" });
+      return res.status(400).json({ success: false, message: "Invalid Room ID" });
     }
 
-    await Message.deleteMany({ $or: [{ roomId }, { orderId: roomId }, { orderNo: roomId }] });
+    await Message.deleteMany({ $or: [{ roomId }, { room_id: roomId }, { orderId: roomId }, { orderNo: roomId }] });
     io.to(roomId).emit("chat_cleared");
 
-    res.json({
-      success: true,
-      message: `ลบประวัติแชตของห้อง ${roomId} เรียบร้อยแล้ว`,
-    });
+    res.json({ success: true, message: `ลบประวัติแชตของห้อง ${roomId} เรียบร้อยแล้ว` });
   } catch (error) {
     res.status(500).json({ success: false, error: "Server Error" });
   }
@@ -500,18 +485,21 @@ app.get("/api/admin/chat-support/rooms", async (req: Request, res: Response) => 
   try {
     const rooms = await Message.aggregate([
       {
-        $match: {$or: [
+        $match: {
+          $or: [
             { chatType: { $in: ["support_customer", "support_shop"] } },
             { roomId: { $regex: /^support_/ } },
             { orderId: { $regex: /^support_/ } },
           ],
         },
       },
-      { $sort: { createdAt: -1 } }, {$group: {
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
           _id: {
             $cond: [
-              { $regexMatch: { input: {$ifNull: ["$roomId", "$orderId"] }, regex: /^support_cust_/ } },
-              { $replaceOne: { input: {$ifNull: ["$roomId", "$orderId"] }, find: "support_cust_", replacement: "support_customer_" } },
+              { $regexMatch: { input: { $ifNull: ["$roomId", "$orderId"] }, regex: /^support_cust_/ } },
+              { $replaceOne: { input: { $ifNull: ["$roomId", "$orderId"] }, find: "support_cust_", replacement: "support_customer_" } },
               { $ifNull: ["$roomId", "$orderId"] }
             ]
           },
@@ -522,7 +510,8 @@ app.get("/api/admin/chat-support/rooms", async (req: Request, res: Response) => 
           lastSender: { $first: "$sender" },
           updatedAt: { $first: "$createdAt" },
           unreadCount: {
-            $sum: {$cond: [
+            $sum: {
+              $cond: [
                 {
                   $and: [
                     { $eq: ["$isRead", false] },
@@ -546,73 +535,54 @@ app.get("/api/admin/chat-support/rooms", async (req: Request, res: Response) => 
   }
 });
 
-app.get(
-  "/api/orders/:orderId/status",
-  async (req: Request, res: Response) => {
-    try {
-      const { orderId } = req.params;
+app.get("/api/orders/:orderId/status", async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
 
-      if (!orderId || orderId === "undefined" || orderId === "null") {
-        return res
-          .status(400)
-          .json({ success: false, message: "ไม่พบรหัสออเดอร์ (Invalid ID)" });
-      }
-
-      const { data: workData, error } = await supabase
-        .from("work_status")
-        .select(
-          `
-        order_id,
-        updated_at,
-        status:status_id (
-          state
-        )
-      `
-        )
-        .eq("order_id", orderId)
-        .order("updated_at", { ascending: false })
-        .limit(1);
-
-      if (error) {
-        console.error("❌ Supabase Query Error:", error);
-      }
-
-      if (workData && workData.length > 0 && workData[0].status) {
-        const statusObj = workData[0].status as unknown as { state: string };
-        return res.json({
-          success: true,
-          state: statusObj.state || "กำลังพิมพ์",
-        });
-      }
-
-      return res.json({
-        success: true,
-        state: "กำลังพิมพ์",
-      });
-    } catch (error) {
-      console.error("❌ Error fetching status from Supabase:", error);
-      return res.json({ success: true, state: "กำลังพิมพ์" });
+    if (!orderId || orderId === "undefined" || orderId === "null") {
+      return res.status(400).json({ success: false, message: "ไม่พบรหัสออเดอร์ (Invalid ID)" });
     }
-  }
-);
 
-// API ดึงสรุปข้อมูลแชตฝั่งร้านค้า
+    const { data: workData, error } = await supabase
+      .from("work_status")
+      .select(`order_id, updated_at, status:status_id ( state )`)
+      .eq("order_id", orderId)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+
+    if (error) console.error("❌ Supabase Query Error:", error);
+
+    if (workData && workData.length > 0 && workData[0].status) {
+      const statusObj = workData[0].status as unknown as { state: string };
+      return res.json({ success: true, state: statusObj.state || "กำลังพิมพ์" });
+    }
+
+    return res.json({ success: true, state: "กำลังพิมพ์" });
+  } catch (error) {
+    console.error("❌ Error fetching status from Supabase:", error);
+    return res.json({ success: true, state: "กำลังพิมพ์" });
+  }
+});
+
+// 🟢 API ดึงสรุปข้อมูลแชตฝั่งร้านค้า (ตรวจทั้ง isRead และ is_read)
 app.get("/api/chat/shop-summary/:shopId", async (req: Request, res: Response) => {
   try {
-    const { shopId } = req.params;
-
     const chatSummaries = await Message.aggregate([
-      { $sort: { createdAt: -1 } }, {$group: {
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
           _id: "$orderId",
           roomId: { $first: "$roomId" },
-          latest_message: { $first: "$text" },
+          orderNo: { $first: "$orderNo" },
+          latest_message: { $first: { $ifNull: ["$text", "$message"] } },
           updated_at: { $first: "$createdAt" },
           unread_count: {
-            $sum: {$cond: [
+            $sum: {
+              $cond: [
                 {
                   $and: [
                     { $eq: ["$sender", "customer"] },
-                    { $eq: ["$isRead", false] }
+                    { $or: [{ $eq: ["$isRead", false] }, { $eq: ["$is_read", false] }] }
                   ]
                 },
                 1,
@@ -631,18 +601,20 @@ app.get("/api/chat/shop-summary/:shopId", async (req: Request, res: Response) =>
   }
 });
 
-// API เคลียร์ข้อความยังไม่อ่านฝั่งร้านค้า
+// 🟢 API เคลียร์ข้อความยังไม่อ่านฝั่งร้านค้า (อัปเดตทั้ง isRead และ is_read)
 app.put("/api/chat/read/:orderId", async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
 
     await Message.updateMany(
       {
-        $or: [{ orderId }, { roomId: orderId }],
-        sender: "customer",
-        isRead: false
+        $and: [
+          { $or: [{ orderId }, { roomId: orderId }, { room_id: orderId }] },
+          { sender: "customer" },
+          { $or: [{ isRead: false }, { is_read: false }] }
+        ]
       },
-      { $set: { isRead: true } }
+      { $set: { isRead: true, is_read: true } }
     );
 
     res.json({ success: true, message: "Marked as read successfully" });
@@ -652,7 +624,6 @@ app.put("/api/chat/read/:orderId", async (req: Request, res: Response) => {
   }
 });
 
-// API ดึงรายการออเดอร์ร้านค้า
 app.get("/api/chat/shop-orders", async (req: Request, res: Response) => {
   try {
     const shopId = req.query.shop_id as string;
@@ -672,13 +643,16 @@ app.get("/api/chat/shop-orders", async (req: Request, res: Response) => {
     }
 
     const chatSummaries = await Message.aggregate([
-      { $sort: { createdAt: -1 } }, {$group: {
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
           _id: "$orderId",
           roomId: { $first: "$roomId" },
           latestMessage: { $first: "$text" },
           updatedAt: { $first: "$createdAt" },
           unreadCount: {
-            $sum: {$cond: [
+            $sum: {
+              $cond: [
                 {
                   $and: [
                     { $eq: ["$sender", "customer"] },
@@ -701,11 +675,7 @@ app.get("/api/chat/shop-orders", async (req: Request, res: Response) => {
     });
 
     const customerIds = Array.from(
-      new Set(
-        orders
-          .map((o: any) => o.customer_id || o.user_id)
-          .filter(Boolean)
-      )
+      new Set(orders.map((o: any) => o.customer_id || o.user_id).filter(Boolean))
     );
     let customerMap: Record<string, string> = {};
 
@@ -732,8 +702,7 @@ app.get("/api/chat/shop-orders", async (req: Request, res: Response) => {
       return {
         id: orderUuid,
         order_no: displayOrderNo,
-        customerName:
-          customerMap[custId] || `ลูกค้า (#${displayOrderNo})`,
+        customerName: customerMap[custId] || `ลูกค้า (#${displayOrderNo})`,
         latestMessage: mongoInfo.latestMessage || "คลิกเพื่อดูแชต",
         updatedAt: mongoInfo.updatedAt || order.created_at,
         unreadCount: mongoInfo.unreadCount || 0,

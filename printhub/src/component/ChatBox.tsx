@@ -38,6 +38,46 @@ interface ChatBoxProps {
   isChatDisabled?: boolean;
 }
 
+// 🟢 Helper แปลงวันที่เป็นรูปแบบป้ายคั่นเหมือน LINE (วันนี้ / เมื่อวาน / พ. 11 พ.ย. 2026)
+const formatDateDivider = (dateInput?: string) => {
+  if (!dateInput) return null;
+  const msgDate = new Date(dateInput);
+  if (isNaN(msgDate.getTime())) return null;
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDayStart = new Date(msgDate.getFullYear(), msgDate.getMonth(), msgDate.getDate());
+
+  const diffDays = Math.round((todayStart.getTime() - msgDayStart.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "วันนี้";
+  if (diffDays === 1) return "เมื่อวาน";
+
+  const isSameYear = now.getFullYear() === msgDate.getFullYear();
+  return msgDate.toLocaleDateString("th-TH", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    ...(isSameYear ? {} : { year: "numeric" }),
+  });
+};
+
+// 🟢 Helper เช็กว่าข้อความ 2 อันอยู่คนละวันกันหรือไม่
+const isDifferentDay = (currentDateStr?: string, prevDateStr?: string) => {
+  if (!currentDateStr) return false;
+  if (!prevDateStr) return true; // ข้อความแรกสุดให้แสดงวันที่เสมอ
+
+  const curr = new Date(currentDateStr);
+  const prev = new Date(prevDateStr);
+  if (isNaN(curr.getTime()) || isNaN(prev.getTime())) return false;
+
+  return (
+    curr.getFullYear() !== prev.getFullYear() ||
+    curr.getMonth() !== prev.getMonth() ||
+    curr.getDate() !== prev.getDate()
+  );
+};
+
 export default function ChatBox({
   roomId: propRoomId,
   orderId,
@@ -191,10 +231,15 @@ export default function ChatBox({
     });
 
     socket.on("receive_message", (data: Message) => {
+      const msgWithDate: Message = {
+        ...data,
+        createdAt: data.createdAt || new Date().toISOString(),
+      };
+
       setMessages((prev) => {
-        const isExist = prev.some((m) => (m._id && m._id === data._id) || (m.id && m.id === data.id));
+        const isExist = prev.some((m) => (m._id && m._id === msgWithDate._id) || (m.id && m.id === msgWithDate.id));
         if (isExist) return prev;
-        return [...prev, data];
+        return [...prev, msgWithDate];
       });
 
       const senderRole = String(data.sender || data.sender_role || "").toLowerCase();
@@ -203,7 +248,6 @@ export default function ChatBox({
       }
     });
 
-    // 🟢 ดักฟังการยกเลิกข้อความ (เช็กเปรียบเทียบทั้ง _id และ id)
     socket.on("message_unsent", (data: { messageId: string }) => {
       setMessages((prev) =>
         prev.map((msg) => {
@@ -321,6 +365,7 @@ export default function ChatBox({
         text: input.trim(),
         images: imageBase64List,
         time: nowFormattedTime,
+        createdAt: new Date().toISOString(),
         is_read: false,
         isRead: false,
         is_unsent: false,
@@ -383,6 +428,10 @@ export default function ChatBox({
           </div>
         ) : (
           messages.map((msg, index) => {
+            const prevMsg = index > 0 ? messages[index - 1] : undefined;
+            const showDateDivider = isDifferentDay(msg.createdAt, prevMsg?.createdAt);
+            const dateLabel = showDateDivider ? formatDateDivider(msg.createdAt) : null;
+
             let rawRole = "";
             const sVal = String(msg.sender || "").toLowerCase();
             const sIdVal = String(msg.senderId || "").toLowerCase();
@@ -425,85 +474,93 @@ export default function ChatBox({
             const msgImages = msg.images || [];
             const isReadStatus = msg.is_read || msg.isRead;
             const isUnsent = Boolean(msg.isUnsent || msg.is_unsent);
-            
-            // 🟢 ลำดับการดึง ID สำหรับกดยกเลิกข้อความ
             const msgId = msg._id || msg.id || "";
 
             return (
-              <div
-                key={msgId || index}
-                className={`flex flex-col ${isMe ? "items-end" : "items-start"} group relative`}
-              >
-                <span className="text-[10px] text-slate-400 mb-0.5 px-1">
-                  {isMe
-                    ? "คุณ"
-                    : msgSenderRole === "admin"
-                    ? "เจ้าหน้าที่ Support"
-                    : msgSenderRole === "shop"
-                    ? "ร้านค้า"
-                    : "ลูกค้า"}
-                </span>
+              <React.Fragment key={msgId || index}>
+                {/* 🟢 ตัวคั่นวันที่ (Date Divider) เหมือน LINE */}
+                {dateLabel && (
+                  <div className="flex items-center justify-center my-4 select-none">
+                    <span className="bg-slate-200/80 text-slate-600 text-[11px] font-medium px-3.5 py-1 rounded-full shadow-2xs">
+                      {dateLabel}
+                    </span>
+                  </div>
+                )}
 
-                <div className="flex items-center gap-1.5 max-w-[80%]">
-                  {/* ปุ่มถังขยะสำหรับยกเลิกข้อความ */}
-                  {isMe && !isUnsent && (
-                    <button
-                      type="button"
-                      onClick={() => handleUnsendMessage(msgId)}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 text-slate-400 hover:text-red-500 rounded-full transition cursor-pointer"
-                      title="ยกเลิกข้อความ"
+                <div
+                  className={`flex flex-col ${isMe ? "items-end" : "items-start"} group relative`}
+                >
+                  <span className="text-[10px] text-slate-400 mb-0.5 px-1">
+                    {isMe
+                      ? "คุณ"
+                      : msgSenderRole === "admin"
+                      ? "เจ้าหน้าที่ Support"
+                      : msgSenderRole === "shop"
+                      ? "ร้านค้า"
+                      : "ลูกค้า"}
+                  </span>
+
+                  <div className="flex items-center gap-1.5 max-w-[80%]">
+                    {/* ปุ่มถังขยะสำหรับยกเลิกข้อความ */}
+                    {isMe && !isUnsent && (
+                      <button
+                        type="button"
+                        onClick={() => handleUnsendMessage(msgId)}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 text-slate-400 hover:text-red-500 rounded-full transition cursor-pointer"
+                        title="ยกเลิกข้อความ"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+
+                    {/* กล่องแสดงข้อความ */}
+                    <div
+                      className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm shadow-xs ${
+                        isUnsent
+                          ? "bg-slate-200/60 text-slate-400 italic border border-slate-200"
+                          : isMe
+                          ? "bg-[#001B3A] text-white rounded-br-none"
+                          : "bg-white text-slate-800 border border-slate-200 rounded-bl-none"
+                      }`}
                     >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+                      {isUnsent ? (
+                        <div className="flex items-center gap-1.5">
+                          <Ban size={14} className="shrink-0" />
+                          <span>ยกเลิกข้อความแล้ว</span>
+                        </div>
+                      ) : (
+                        <>
+                          {msgImages.length > 0 && (
+                            <div className={`grid gap-1.5 mb-2 ${msgImages.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                              {msgImages.map((imgUrl, imgIdx) => (
+                                <div key={imgIdx} className="relative group">
+                                  <img
+                                    src={imgUrl}
+                                    alt="Chat attachment"
+                                    onClick={() => setPreviewImage(imgUrl)}
+                                    className="w-full h-28 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-90 transition-all"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
 
-                  {/* กล่องแสดงข้อความ */}
-                  <div
-                    className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm shadow-xs ${
-                      isUnsent
-                        ? "bg-slate-200/60 text-slate-400 italic border border-slate-200"
-                        : isMe
-                        ? "bg-[#001B3A] text-white rounded-br-none"
-                        : "bg-white text-slate-800 border border-slate-200 rounded-bl-none"
-                    }`}
-                  >
-                    {isUnsent ? (
-                      <div className="flex items-center gap-1.5">
-                        <Ban size={14} className="shrink-0" />
-                        <span>ยกเลิกข้อความแล้ว</span>
-                      </div>
-                    ) : (
-                      <>
-                        {msgImages.length > 0 && (
-                          <div className={`grid gap-1.5 mb-2 ${msgImages.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-                            {msgImages.map((imgUrl, imgIdx) => (
-                              <div key={imgIdx} className="relative group">
-                                <img
-                                  src={imgUrl}
-                                  alt="Chat attachment"
-                                  onClick={() => setPreviewImage(imgUrl)}
-                                  className="w-full h-28 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-90 transition-all"
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                          {messageText && <div className="whitespace-pre-wrap break-words">{messageText}</div>}
+                        </>
+                      )}
+                    </div>
+                  </div>
 
-                        {messageText && <div className="whitespace-pre-wrap break-words">{messageText}</div>}
-                      </>
+                  <div className="flex items-center gap-1.5 mt-1 px-1 text-[10px] text-slate-400">
+                    <span>{formatMessageTime(msg)}</span>
+                    {isMe && !isUnsent && (
+                      <span className={isReadStatus ? "text-blue-600 font-semibold" : "text-slate-400"}>
+                        • {isReadStatus ? "อ่านแล้ว" : "ยังไม่อ่าน"}
+                      </span>
                     )}
                   </div>
                 </div>
-
-                <div className="flex items-center gap-1.5 mt-1 px-1 text-[10px] text-slate-400">
-                  <span>{formatMessageTime(msg)}</span>
-                  {isMe && !isUnsent && (
-                    <span className={isReadStatus ? "text-blue-600 font-semibold" : "text-slate-400"}>
-                      • {isReadStatus ? "อ่านแล้ว" : "ยังไม่อ่าน"}
-                    </span>
-                  )}
-                </div>
-              </div>
+              </React.Fragment>
             );
           })
         )}
