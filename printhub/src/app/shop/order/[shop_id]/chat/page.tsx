@@ -22,23 +22,18 @@ interface OrderChat {
   unread_count?: number;
 }
 
-// 🟢 สี Badge แต่ละสถานะ (รายการเสร็จสิ้น = สีเทา)
 const getStatusBadgeStyle = (statusName: string = "") => {
   const clean = statusName.trim();
 
   switch (clean) {
     case "กำลังพิมพ์":
       return "bg-blue-50 text-blue-700 border-blue-200";
-
     case "พิมพ์เสร็จสิ้น":
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
-
     case "รายการเสร็จสิ้น":
       return "bg-slate-100 text-slate-600 border-slate-300";
-
     case "ยกเลิกการพิมพ์":
       return "bg-rose-50 text-rose-700 border-rose-200";
-
     case "รอการดำเนินงาน":
     default:
       return "bg-amber-50 text-amber-700 border-amber-200";
@@ -50,14 +45,12 @@ export default function ShopChatPage() {
   const searchParams = useSearchParams();
   const params = useParams();
 
-  // ดึง shop_id จาก URL Parameters หรือ localStorage
-  const rawShopId = 
-    (params?.shop_id as string) || 
-    searchParams.get("shopId") || 
+  const rawShopId =
+    (params?.shop_id as string) ||
+    searchParams.get("shopId") ||
     (typeof window !== "undefined" ? localStorage.getItem("shop_id") || localStorage.getItem("user_id") : "") ||
     "";
 
-  // รองรับทั้ง orderId (camelCase) และ order_id (snake_case)
   const rawOrderId =
     searchParams.get("orderId") ||
     searchParams.get("order_id") ||
@@ -69,12 +62,9 @@ export default function ShopChatPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [statusName, setStatusName] = useState<string>("กำลังโหลดสถานะ...");
   const [isChatDisabled, setIsChatDisabled] = useState<boolean>(false);
-  
-  // State สำหรับระบบค้นหาและกรองสถานะ
+
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedStatus, setSelectedStatus] = useState<string>("ทั้งหมด");
-  
-  // State ตรวจสอบการถูกระงับใช้งานร้านค้า
   const [isSuspended, setIsSuspended] = useState<boolean>(false);
 
   // 0. ตรวจสอบสถานะการถูกระงับของร้านค้า
@@ -93,7 +83,7 @@ export default function ShopChatPage() {
     checkShopSuspended();
   }, [rawShopId]);
 
-  // 🟢 1. ดึงรายการออเดอร์เฉพาะของร้านนี้ (Supabase) + สรุปแชต MongoDB (Express API)
+  // 1. ดึงรายการออเดอร์เฉพาะของร้านนี้ (Supabase) + สรุปแชต MongoDB
   const fetchShopChats = async () => {
     if (!rawShopId) {
       setOrderChats([]);
@@ -125,11 +115,14 @@ export default function ShopChatPage() {
 
       let mongoMap: Record<string, any> = {};
       try {
-        const mongoRes = await axios.get(`${API_BASE}/api/chat/shop/rooms/${rawShopId}`);
+        // 🟢 ยิง Endpoint ที่มีอยู่ใน server.ts จริงๆ
+        const mongoRes = await axios.get(`${API_BASE}/api/chat/shop-summary/${rawShopId}`);
         const mongoList = mongoRes.data?.data || [];
+
         mongoList.forEach((m: any) => {
-          if (m._id) mongoMap[m._id] = m;
-          if (m.roomId) mongoMap[m.roomId] = m;
+          if (m._id) mongoMap[String(m._id)] = m;
+          if (m.roomId) mongoMap[String(m.roomId)] = m;
+          if (m.orderNo) mongoMap[String(m.orderNo)] = m;
         });
       } catch (e) {
         console.warn("Mongo summary fetch warning:", e);
@@ -141,7 +134,12 @@ export default function ShopChatPage() {
           const lastName = item.customer?.last_name || "";
           const fullName = `${firstName} ${lastName}`.trim();
 
-          const mongoInfo = mongoMap[item.id] || mongoMap[String(item.order_no)] || {};
+          const mongoInfo =
+            mongoMap[String(item.id)] ||
+            mongoMap[String(item.order_no)] ||
+            {};
+
+          const rawUnread = mongoInfo.unread_count ?? mongoInfo.unreadCount ?? 0;
 
           return {
             id: item.id,
@@ -150,12 +148,12 @@ export default function ShopChatPage() {
             latest_message: mongoInfo.latest_message || mongoInfo.latestMessage || item.description || "แตะเพื่อดูแชต",
             updated_at: mongoInfo.updated_at || mongoInfo.updatedAt || item.order_date,
             status_name: item.status?.state || "รอการดำเนินงาน",
-            unread_count: mongoInfo.unread_count || mongoInfo.unreadCount || 0,
+            unread_count: Number(rawUnread),
           };
         });
 
+        // เรียงลำดับแชตล่าสุดขึ้นข้างบนสุด
         list.sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
-
         setOrderChats(list);
 
         const isFromNavbar = searchParams.get("from") === "navbar";
@@ -181,16 +179,24 @@ export default function ShopChatPage() {
     fetchShopChats();
   }, [rawOrderId, searchParams, rawShopId]);
 
-  // 🟢 2. Realtime Socket.io
+  // 2. Realtime Socket.io — ดักฟัง new_chat_notification เพื่อเด้งขึ้นบนสุด + ขึ้น Badge สีเขียวทันที
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ["websocket", "polling"] });
+    const socket = io(SOCKET_URL, {
+      transports: ["polling", "websocket"],
+    });
 
-    socket.on("receive_message", (newMsg: any) => {
-      const targetOrderId = newMsg.orderId || newMsg.order_id || newMsg.roomId;
+    socket.on("new_chat_notification", (newMsg: any) => {
+      const targetOrderId = String(newMsg.orderId || newMsg.roomId || newMsg.room_id || "");
+      const targetOrderNo = String(newMsg.orderNo || "");
+      const senderRole = String(newMsg.sender_role || newMsg.sender || "").toLowerCase();
+      const isShopSender = senderRole === "shop";
 
       setOrderChats((prevChats) => {
         const chatIndex = prevChats.findIndex(
-          (c) => c.id === targetOrderId || String(c.order_no) === String(targetOrderId)
+          (c) =>
+            (targetOrderId && c.id === targetOrderId) ||
+            (targetOrderNo && String(c.order_no) === targetOrderNo) ||
+            (targetOrderId && String(c.order_no) === targetOrderId)
         );
 
         if (chatIndex !== -1) {
@@ -201,9 +207,10 @@ export default function ShopChatPage() {
             ...targetChat,
             latest_message: newMsg.text || newMsg.message || (newMsg.images?.length ? "ส่งรูปภาพ" : "ข้อความใหม่"),
             updated_at: new Date().toISOString(),
-            unread_count: isCurrentActiveRoom ? 0 : (targetChat.unread_count || 0) + 1,
+            unread_count: (isCurrentActiveRoom || isShopSender) ? 0 : (targetChat.unread_count || 0) + 1,
           };
 
+          // ย้ายห้องแชตนี้ขึ้นไปอยู่บนสุด
           const remainingChats = prevChats.filter((_, idx) => idx !== chatIndex);
           return [updatedChat, ...remainingChats];
         } else {
@@ -246,7 +253,6 @@ export default function ShopChatPage() {
         const cleanState = String(stateName).trim();
         const allowedToChatStates = ["กำลังพิมพ์", "พิมพ์เสร็จสิ้น"];
         setIsChatDisabled(!allowedToChatStates.includes(cleanState));
-
       } catch (err) {
         console.error("Fetch status error:", err);
         setStatusName("เชื่อมต่อผิดพลาด");
@@ -257,7 +263,7 @@ export default function ShopChatPage() {
     fetchOrderStatus();
   }, [selectedOrderId]);
 
-  // 🟢 4. เมื่อคลิกเลือกแชต เคลียร์ Unread Badge ทันที + ยิง API Mark Read
+  // 4. เมื่อคลิกเลือกแชต เคลียร์ Badge สีเขียวทันที + ยิง API อัปเดตใน DB
   const handleSelectChat = async (orderId: string) => {
     setSelectedOrderId(orderId);
 
@@ -278,7 +284,7 @@ export default function ShopChatPage() {
   const filteredOrderChats = useMemo(() => {
     return orderChats.filter((chat) => {
       const cleanSearch = searchQuery.trim().toLowerCase().replace("#", "");
-      
+
       const matchesSearch =
         !cleanSearch ||
         (chat.customer_name && chat.customer_name.toLowerCase().includes(cleanSearch)) ||
@@ -310,7 +316,7 @@ export default function ShopChatPage() {
       <div className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 md:p-6 flex gap-4 min-h-0 overflow-hidden">
         
         {/* ================= ฝั่งซ้าย: รายการกล่องข้อความทั้งหมด ================= */}
-        <div 
+        <div
           className={`w-full md:w-1/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex flex-col min-h-0 overflow-hidden ${
             selectedOrderId ? "hidden md:flex" : "flex"
           }`}
@@ -394,7 +400,8 @@ export default function ShopChatPage() {
                       {chat.latest_message}
                     </p>
 
-                    {!!chat.unread_count && chat.unread_count > 0 && (
+                    {/* 🟢 วงกลมสีเขียวแสดงจำนวนข้อความยังไม่ได้อ่าน */}
+                    {typeof chat.unread_count === "number" && chat.unread_count > 0 && (
                       <span className="min-w-[20px] h-[20px] px-1.5 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0 shadow-xs animate-pulse">
                         {chat.unread_count > 99 ? "99+" : chat.unread_count}
                       </span>
@@ -411,7 +418,7 @@ export default function ShopChatPage() {
         </div>
 
         {/* ================= ฝั่งขวา: ห้องแชต (ChatBox) ================= */}
-        <div 
+        <div
           className={`w-full md:w-2/3 bg-white rounded-2xl border border-slate-200/80 shadow-sm flex flex-col min-h-0 overflow-hidden ${
             selectedOrderId ? "flex" : "hidden md:flex"
           }`}
@@ -420,7 +427,6 @@ export default function ShopChatPage() {
             <>
               <div className="p-3 sm:p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                 <div className="flex items-center gap-2">
-                  {/* ปุ่มย้อนกลับสำหรับมือถือ */}
                   <button
                     onClick={() => setSelectedOrderId("")}
                     className="md:hidden p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition"
